@@ -37,7 +37,8 @@ CAM Ai machine folder (`C:\Users\Public\Documents\MAZATROL\Smooth\<machine>`) or
 - Move with the arrows, type a value and press Enter. The line under the program says what the field is and
   offers its menu choices as keys (Alt+1…9). ◆ marks fields that do not apply with the current settings.
 - The guidance box under that line (as for EIA programs) explains the line at the cursor, field by field, with the
-  field at the cursor highlighted:
+  field at the cursor highlighted (the Guide button at the right of the line above it collapses it to its title line or
+  opens it again, as does a tap on the title; it starts collapsed on a phone and remembers your choice):
   - hole-pattern lines (PT, LINE, SQUARE, GRID, CIRCLE, ARC, CHORD): what each field means for that pattern
     (Q = whether the start point is machined or only positioned; F = pitch or total; P = corner holes / chord
     side / path order; R = return level), and a drawing of the holes in order, skipped ones hollow;
@@ -47,7 +48,11 @@ CAM Ai machine folder (`C:\Users\Public\Documents\MAZATROL\Smooth\<machine>`) or
   - unit lines and the common unit: what the unit does and each of its fields;
   - MANL PRG lines: the block's G-code with each address and its value, and what its M-code does;
   - M fields (tool lines, M-CODE unit): each M-code on the line;
-  - lathes and mill-turn: the turning units (MATERIAL, BAR, CPY, CORNER, FACING, THREAD, T.GROOVE, T.DRILL, T.TAP, HEAD,
+  - drawings on mill lines too: START / END (OPEN, CLOSE) of line milling, the approach point, INITIAL-Z and the
+    multi-workpiece pitch;
+  - tool data: each field of the line (nose radius or actual diameter, wear, tool set, life …);
+  - lathes and mill-turn, with a drawing of the field at the cursor (PART, the BAR / groove / thread / drill patterns,
+    MODE of milling units, the stock sizes, the infeed point, the finishing allowances): the turning units (MATERIAL, BAR, CPY, CORNER, FACING, THREAD, T.GROOVE, T.DRILL, T.TAP, HEAD,
     TRANSFER, TOOL MES, WORK MES), their tool lines (what PAT. #0–#4 does for that unit, DEP-1/2/3, FIN-X/Z) and shape
     lines (X in diameter), the lathe common unit (OD-MAX, ID-MIN, LENGTH, WORK FACE, RPM), and MODE on milling units.
   Hard-to-read prompts are said plainly (for example OMIT SPT: "the start point (first hole): 0 = machine it,
@@ -80,20 +85,28 @@ CAM Ai machine folder (`C:\Users\Public\Documents\MAZATROL\Smooth\<machine>`) or
   the unit is shown with its parameter (TC37 …) named from the machine's parameter list. A unit without a TPC record runs
   with the machine's parameters. **TPC LINES** (program menu, ▶) shows the raw TPC records in the listing.
 
-- **PROGRAM CHECK** (soft key) lists what the control would stop on (mill-turn EIA programs also: Y past the stroke, a
+- **PROGRAM CHECK** (soft key) lists what the control would stop on, each with what to check (mill-turn EIA programs also: Y past the stroke, a
   diameter past the X travel, B outside −30°…210°, for the larger mill-turn models), with its alarm numbers: no END unit (647), priority
   clashes (461, 462), units without shapes (452), FR or NOM-D 0 (621, 635), M-codes that cannot share a block (227),
-  repeated shape points (698), SUB PRO programs not open, tools missing from the machine's tool data; for EIA programs,
-  G- and M-codes the control does not know (808, 661). Click one to go there.
+  repeated shape points (698), SUB PRO programs not open, tools missing from the machine's tool data, and tools too big
+  for the magazine (50-taper horizontal: longer than 500 mm / 19.69 in from the taper face, wider than 260 mm, or over
+  125 mm on a 43/60-tool magazine or 135 mm on an 80-tool or larger magazine, which needs the pockets next to it empty;
+  the 30 kg tool mass is not in the tool data, so it isn't checked); for EIA programs, G- and M-codes the control does not
+  know (808, 661), and macro statements: unpaired brackets, unknown functions, GOTO targets that aren't there, WHILE /
+  DO / END pairs, and called programs that aren't open. Click one to go there.
 - **CODES ALARMS** (soft key) opens the reference, searchable: G-codes and M-codes for a mill (Mazak horizontal), a lathe
   (Smooth G) or a mill-turn machine (Smooth Ai) — the program's own machine first; the same lists name the codes
   next to M fields, in MANL PRG and EIA lines, and in the program check; alarms (number, title, how it stops and clears; the cause and
   action load from the control's own alarm help file, iAlarmHelp_NC.txt); every TPC parameter with a drawing of what it
   adjusts (mill), or the machine's user parameters for programming by group (lathe, mill-turn: hole machining, line and face, EIA, system, turning; in our own words). Alarms: the control's list
-  with the model's own machine alarms (★) over it for a lathe or mill-turn. The TPC screen shows the same drawing for the field at
+  with the model's own machine alarms (★) over it for a lathe or mill-turn, and for common program alarms what to check.
+  Variables: the macro and system variables (#1–#33 arguments, #100 / #500 common, #3000 alarms, #5001 positions, #5221 work
+  offsets, tool offsets …); the guidance box names each # on an EIA line, and for the measuring macros (G65 P9010–P9020:
+  probe calibration, work zero from a face, hole, groove, projection or boss, measuring the part) it shows the macro and what each argument is. The TPC screen shows the same drawing for the field at
   the cursor, with its value.
 
-- **TOOL DEVELOP** (PROGRAM EDIT ▶) fills a DRILLING, RGH CBOR, REAMING or TAPPING unit's tool lines from its data the way
+- **TOOL DEVELOP** (PROGRAM EDIT ▶) fills a DRILLING, RGH CBOR, REAMING or TAPPING unit's tool lines (on lathes and mill-turn also
+  BAR, CPY, CORNER, FACING, THREAD, T.GROOVE, T.DRILL and T.TAP: R and F tools for the side PART cuts) from its data the way
   the control's automatic tool development does (spot drill, drills by hole size, peck cycle by depth, chamfer cutter,
   end mill, reamer, tap). The machine parameters it uses (D2, D4, D6–D15) are shown and can be set to your control's
   values; speeds and feeds are left to you.
@@ -137,9 +150,16 @@ The mill / lathe / mill-turn buttons set the machine type (lathes read X as a di
   takes its actual diameter from the tool data, or the one entered.
 - Hole patterns plot as the control machines them: F = 1 makes T1 / T2 (ARC: AN2) totals, Q = 1 leaves the start
   point out, P = 1 leaves out the four corners (SQUARE, GRID), CHORD holes sit at the chord's ends.
+- Lathe and mill-turn turning units follow the programming manual: BAR PAT. #1 pulls out at 45°, #3 / #4 stop the feed
+  every DEP-2 for the chip to break; T.DRILL #0–#4 (feed or rapid out, back off, reamer, shorter pecks); THREAD with
+  its NUM passes, standard or constant depth, LEAD as shown; T.GROOVE forms #1–#3 leave FINISH for the F tool; a
+  shape line's RGH given as a feed is the finishing feed there. Milling units on a lathe (MODE XC face holes along Z,
+  ZC holes in X, line milling along Z at C) are drawn in the turning view with their times. A C-SP under 1 is timed
+  at the common unit's top speed.
 - SUB PRO units plot the programs they call (Mazatrol or EIA) when those are open too or are in the opened
   folder, REPEAT times. Units after a program's END unit are not run, and the plot says so.
-- EIA programs: every move the program makes (rapid dashed, feed green), with subprograms and macros followed.
+- EIA programs: every move the program makes (rapid dashed, feed green), with subprograms and macros followed;
+  G68 / G68.2 (tilted frame, Euler angles I J K) and G12.1 polar interpolation (C as the face's second axis) are drawn.
   Lathes: G70/G71/G72 finishing and roughing, G73 pattern repeating, G74/G75 peck grooving and cut-off, G76 threading,
   G90/G92/G94 single cycles, G83-G85 face drilling, G87-G89 drilling along X. Mill-turn: the same as G270-G276,
   G283-G289, G290/G292/G294 (its G71.1-G89 are the milling cycles). The lathe manual's G71/G72/G73 sample programs
@@ -166,4 +186,4 @@ its parameters. Cycle times use a nominal rapid rate.
 ## Not done yet
 
 Cutting-condition and parameter files (`CUTCND`, `USRPAR`, `MAHINPAR`), older controls, converting tool data
-between Matrix and Smooth. In EIA plots: G68.2 tilted planes and polar interpolation. Converting three-digit G-format text into a MAZATROL program.
+between Matrix and Smooth. Converting three-digit G-format text into a MAZATROL program.
