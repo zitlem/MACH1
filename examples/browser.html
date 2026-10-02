@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>MACH1 in a browser</title>
+<!-- Build dist/mach1.bundle.js first (python3 build.py), then open this page. -->
+<script src="../dist/mach1.bundle.js"></script>
+<body style="font: 14px system-ui; margin: 24px">
+<h3>Bolt circle → Mazatrol</h3>
+<label>Holes <input id="n" value="6" size="4"></label>
+<label>Circle Ø <input id="d" value="4" size="6"></label>
+<label>Control <select id="c"><option>SmoothM</option><option>MatrixM</option></select></label>
+<button id="go">Download program</button>
+<pre id="out"></pre>
+<script>
+document.getElementById('go').onclick = () => {
+  const n = +document.getElementById('n').value, d = +document.getElementById('d').value;
+  const p = MACH1.program({ control: document.getElementById('c').value, name: 'BOLTCIRCLE', comment: n + ' HOLES ON ' + d + ' BC' });
+  p.common({ MAT: 'AL', 'INITIAL-Z': 1 });
+  p.unit('DRILLING', { DIA: 0.25, DEPTH: 0.5 })
+    .tool({ TOOL: 'CTR-DR', 'NOM-D': 0.5, 'C-SP': 75, FR: 0.003 })
+    .tool({ TOOL: 'DRILL', 'NOM-D': 0.25, 'HOLE-D': 0.25, 'HOLE-DEP': 0.5, 'C-SP': 60, FR: 0.004 })
+    .fig({ PTN: 'CIR', Z: 0, X: 0, Y: 0, AN1: 0, T1: d / 2, M: n });
+  document.getElementById('out').textContent = p.listing() + (p.warnings.length ? '\nwarnings:\n' + p.warnings.join('\n') : '');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([p.save()]));
+  a.download = p.fileName;
+  a.click();
+};
+</script>
