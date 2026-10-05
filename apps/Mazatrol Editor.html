@@ -391,6 +391,11 @@ body.twpop .tw-in { height: 100vh; }
 .refdlg { width: min(1100px, calc(100vw - 32px)); height: min(760px, calc(100vh - 40px)); max-width: none; background: #0d1217; color: var(--text); }
 .refdlg[open] { display: flex; flex-direction: column; }
 #refBody { flex: 1; overflow: auto; margin-top: 8px; }
+.calcdlg { width: min(560px, calc(100vw - 32px)); max-width: none; background: #0d1217; color: var(--text); }
+.calcgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 8px 0; }
+.calcgrid label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.calcout td { font-variant-numeric: tabular-nums; }
+.calcbtns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
 #refFind { flex: 1; min-width: 160px; padding: 4px 8px; background: #0b0f13; color: var(--text); border: 1px solid var(--line); border-radius: 3px; font: inherit; }
 .reft td { white-space: normal; }
 .refc { font-family: var(--mono); color: var(--addr); white-space: nowrap; width: 6em; }
@@ -545,7 +550,7 @@ html[data-theme="light"] #input:focus { outline:2px solid var(--cursor); outline
   .tpckeys { grid-template-columns:repeat(4, 1fr); max-width:none; }
   .fl .pr { grid-template-columns:minmax(0, 1fr) auto; }
   .fl .pr .cm { grid-column:1 / -1; grid-row:2; }
-  .dlg, .tpcdlg, .refdlg, .chkdlg, .devdlg, .helpdlg, .txtdlg { width:calc(100vw - 16px); max-width:none; padding:10px; }
+  .dlg, .tpcdlg, .refdlg, .calcdlg, .chkdlg, .devdlg, .helpdlg, .txtdlg { width:calc(100vw - 16px); max-width:none; padding:10px; }
   .helpcols, .tpccols, .tpcwrap, .devwrap { grid-template-columns:1fr; }
   .refparams { grid-template-columns:1fr; }
   .td-body { flex-direction:column; } .td-side { width:auto; }
@@ -703,6 +708,22 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     <input id="refFind" placeholder="search: G83, coolant, D45, clearance …" autocomplete="off"><button type="button" id="refClose">Close</button></div>
   <div id="refBody"></div>
   <input type="file" id="alarmFile" accept=".txt" hidden>
+</dialog>
+<dialog class="dlg calcdlg" id="calcDlg">
+  <div class="tpchead"><b>Calculator</b><span class="tw-dim">WPC from 2 holes</span><button type="button" id="calcClose">Close</button></div>
+  <p class="tw-dim">Probe two holes on the part's X line. Hole A is the one on the +X side. Th is counter-clockwise from the machine X axis; X and Y are the midpoint. <span id="calcUnits"></span></p>
+  <div class="calcgrid">
+    <label>Hole A X<input id="calcAx" inputmode="decimal" autocomplete="off"></label><label>Hole A Y<input id="calcAy" inputmode="decimal" autocomplete="off"></label>
+    <label>Hole B X<input id="calcBx" inputmode="decimal" autocomplete="off"></label><label>Hole B Y<input id="calcBy" inputmode="decimal" autocomplete="off"></label>
+    <label>Offset along part Y (optional)<input id="calcOff" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+  </div>
+  <table class="tt reft calcout"><tbody>
+    <tr><td class="refc">Th</td><td id="calcTh">-</td><td class="tw-dim">degrees</td></tr>
+    <tr><td class="refc">X</td><td id="calcX">-</td><td class="tw-dim">WPC X</td></tr>
+    <tr><td class="refc">Y</td><td id="calcY">-</td><td class="tw-dim">WPC Y</td></tr>
+  </tbody></table>
+  <p class="tw-dim" id="calcMsg"></p>
+  <div class="calcbtns"><button type="button" id="calcApply">Apply to WPC- at cursor</button></div>
 </dialog>
 <dialog class="dlg tpcdlg" id="tpcDlg">
   <div class="tpchead"><b id="tpcTitle">TPC</b>
@@ -8598,6 +8619,56 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     }
     $('#refBody').innerHTML = html || '<p class="tw-dim">Nothing matches.</p>';
   }
+  // WPC from two probed holes: A is the +X side hole. Th runs CCW from the machine X axis, X/Y are the midpoint
+  // (moved `off` along the part's own Y when given)
+  function wpcFromHoles(a, b, off) {
+    const th = Math.atan2(a[1] - b[1], a[0] - b[0]), s = Math.sin(th), c = Math.cos(th), o = off || 0;
+    return { th: th * 180 / Math.PI, x: (a[0] + b[0]) / 2 - s * o, y: (a[1] + b[1]) / 2 + c * o };
+  }
+  function calcRead() {
+    const v = id => { const t = $('#' + id).value.trim().replace(',', '.'); return t === '' ? NaN : Number(t); };
+    const a = [v('calcAx'), v('calcAy')], b = [v('calcBx'), v('calcBy')], offT = $('#calcOff').value.trim(), off = offT === '' ? 0 : Number(offT.replace(',', '.'));
+    const ok = [...a, ...b, off].every(isFinite) && (a[0] !== b[0] || a[1] !== b[1]);
+    return ok ? wpcFromHoles(a, b, off) : null;
+  }
+  function renderCalc() {
+    const d = doc(), metric = !!d && d.units === 'metric', dp = metric ? 4 : 5, r = calcRead();
+    $('#calcUnits').textContent = 'Values in ' + (metric ? 'mm' : 'inches') + ' (the open program\'s units).';
+    $('#calcTh').textContent = r ? r.th.toFixed(4) : '-';
+    $('#calcX').textContent = r ? r.x.toFixed(dp) : '-';
+    $('#calcY').textContent = r ? r.y.toFixed(dp) : '-';
+    const L = d && isProg(d) && d.sel.r >= 0 ? ctx(d)[d.sel.r] : null, onWpc = !!L && L.sel.code === 2 && L.lay;
+    $('#calcApply').disabled = !r || !onWpc || locked(d) || readOnly(d);
+    $('#calcMsg').textContent = !r ? 'Enter both holes (two different points).' : onWpc ? '' : 'To apply, close this, put the cursor on a WPC- unit line in Edit mode, and open CALC again.';
+  }
+  function openCalc() {
+    const dlg = $('#calcDlg');
+    if (!dlg.open) dlg.showModal();
+    renderCalc();
+    $('#calcAx').focus();
+  }
+  function calcEvents() {
+    $('#calcDlg').addEventListener('input', renderCalc);
+    $('#calcClose').onclick = () => { $('#calcDlg').close(); el.input.focus(); };
+    $('#calcApply').onclick = () => {
+      const d = doc(), r = calcRead();
+      if (!r || !d || !isProg(d) || d.sel.r < 0) return;
+      const row = d.sel.r, dp = d.units === 'metric' ? 4 : 5;
+      try {
+        edit(d => {
+          const L = ctx(d)[row], rec = L.rec.slice(), L2 = Object.assign({}, L, { rec });
+          for (const [name, val] of [['X', r.x.toFixed(dp)], ['Y', r.y.toFixed(dp)], ['Th', r.th.toFixed(4)]]) {
+            const k = L.lay.cells.findIndex((c, j) => Maz.cellLabel(L.lay, j) === name);
+            if (k < 0 || Maz.locked(L2, k)) throw new Error('This WPC- unit has no ' + name + ' field to set.');
+            Maz.enter(L2, k, val, { units: d.units });
+          }
+          d.p.recs[row] = rec;
+        });
+      } catch (e) { return note(e.message); }
+      $('#calcDlg').close();
+      note('WPC set: X ' + r.x.toFixed(dp) + '  Y ' + r.y.toFixed(dp) + '  Th ' + r.th.toFixed(4), true);
+    };
+  }
   // the control's own alarm help (cause, action), read from the user's file and kept in this browser
   let alarmHelpCache = null;
   function alarmHelp() { return alarmHelpCache || (alarmHelpCache = store.get('mazed-alarmhelp', {})); }
@@ -8824,6 +8895,7 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
   key('help', 'HELP', () => $('#helpDlg').showModal(), { title: 'The keys' });
   key('check', 'PROGRAM\nCHECK', () => openCheck(), { off: () => !isProg(doc()) && !isEia(doc()), title: 'What the control would stop on, with its alarm numbers' });
   key('codes', 'CODES\nALARMS', () => openRef(), { title: 'G-codes, M-codes, alarms, and what each TPC parameter adjusts' });
+  key('calc', 'CALC', () => openCalc(), { title: 'Calculator: WPC X, Y and Th from two probed holes' });
   key('file', 'PROGRAM\nFILE', () => (folder ? side(folderOn ? null : 'folder') : reopenFolder()), { sub: true, on: () => folderOn, title: 'The programs of an opened folder' });
   key('tools', 'TOOL\nDATA', () => ACTIONS.tools(), { on: () => toolsOn, off: notProg, title: 'The program\'s tools, checked against tool data' });
   key('compare', 'COMPARE', () => ACTIONS.compare(), { on: () => cmpOn, off: notProg, title: 'Differences from another open program' });
@@ -8845,7 +8917,7 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
   key('cut', 'CUT', () => cutSelection(), { off: () => notProg() || noEdit(), title: 'Ctrl+X' });
   key('complete', 'PROGRAM\nCOMPLETE', () => { setEditing(false); }, { title: 'Done editing: back to view only (Ctrl+E)' });
   const SK_MENUS = {
-    main: [['workno', 'search', 'edit', 'tpc', 'check', 'plot', 'time', 'layout', 'help', 'file'], ['tools', 'compare', 'tpcLines', 'codes', null, 'plot', 'time', 'layout', 'help', 'file']],
+    main: [['workno', 'search', 'edit', 'tpc', 'check', 'plot', 'time', 'layout', 'help', 'file'], ['tools', 'compare', 'tpcLines', 'codes', 'calc', 'plot', 'time', 'layout', 'help', 'file']],
     edit: [['unit-menu', 'line', 'delete', 'copy', 'paste', 'up', 'down', 'text', 'undo', 'complete'],
       ['dup', 'cut', 'redo', 'tpc', 'develop', 'plot', 'time', 'layout', 'help', 'complete']],
     search: [['unoSearch', 'unitSearch', 'lastSearch', null, null, null, null, 'codes', 'help', null]],
@@ -9944,6 +10016,7 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
   tpcEvents();
   refEvents();
   developEvents();
+  calcEvents();
   render();
   el.input.focus();
   setTheme(document.documentElement.dataset.theme === 'light' ? 'light' : 'dark');
@@ -9952,7 +10025,7 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
   // test hook
   window.MazEditor = { docs, doc, openBytes, select, enterValue, commit, insertUnit, insertLine, deleteSelection, copySelection, paste, moveSelection, undo, saveAs, listing, newProgram, render, ctx, setToolType, toolCheck, setupSheet, side, loadFolder, openFromFolder, folder: () => folder,
     plotStats: () => lastStats, playAction, playTo, gotoLine, scene: () => (doc() ? doc().scene : null), save, duplicateSelection, cutSelection, contextAction,
-    setEditing, editing: () => editing, cube: () => cubeHit, openDevelop, openTpc, openRef, parseAlarmHelp, openCheck, programCheck: () => programCheck(doc()), softKey: id => { const k = SK[id]; if (!k || (k.off && k.off())) return false; k.run(); renderSoftKeys(); return true; },
+    setEditing, editing: () => editing, cube: () => cubeHit, openDevelop, openTpc, openRef, openCalc, wpcFromHoles, parseAlarmHelp, openCheck, programCheck: () => programCheck(doc()), softKey: id => { const k = SK[id]; if (!k || (k.off && k.off())) return false; k.run(); renderSoftKeys(); return true; },
     skOn: id => !!(SK[id].on && SK[id].on()), skOff: id => !!(SK[id].off && SK[id].off()), pressSoftKey,
     guideMin: () => guideMin, setTheme, softKeys: () => skKeys.map(k => (k ? (k.choice !== undefined ? k.choice : k.id) : null)), openText, timeModel: () => timeModel(doc()), toggleTime, plotFocus: () => plotFocus };
 })();
