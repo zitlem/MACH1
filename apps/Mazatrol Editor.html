@@ -392,7 +392,7 @@ body.twpop .tw-in { height: 100vh; }
 .refdlg[open] { display: flex; flex-direction: column; }
 #refBody { flex: 1; overflow: auto; margin-top: 8px; }
 .calcdlg { width: min(560px, calc(100vw - 32px)); max-width: none; background: #0d1217; color: var(--text); }
-.calcgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 8px 0; }
+.calcgrid { align-items: end; display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin: 8px 0; }
 .calcrows input { width: 100%; box-sizing: border-box; }
 .calcgrid label { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
 .calcdlg [hidden] { display: none !important; }
@@ -713,7 +713,7 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
 </dialog>
 <dialog class="dlg calcdlg" id="calcDlg">
   <div class="tpchead"><b>Calculator</b><span class="tw-dim">WPC from probed holes</span>
-    <div class="seg"><button type="button" data-calctab="two">2 holes on X</button><button type="button" data-calctab="any">Any holes</button><button type="button" data-calctab="bolt">Bolt circle</button></div>
+    <div class="seg"><button type="button" data-calctab="two">2 holes on X</button><button type="button" data-calctab="twoY">2 holes on Y</button><button type="button" data-calctab="any">Any holes</button><button type="button" data-calctab="bolt">Bolt circle</button></div>
     <button type="button" id="calcClose">Close</button></div>
   <p class="tw-dim" id="calcHelp"></p>
   <div id="calcBolt" class="calcgrid">
@@ -724,8 +724,8 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
   <table class="tt reft calcrows"><thead id="calcHead"></thead><tbody id="calcRows"></tbody></table>
   <div class="calcbtns" id="calcRowBtns"><button type="button" id="calcAdd">Add hole</button></div>
   <div class="calcgrid">
-    <label>Offset X from the holes' centre (part frame, optional)<input id="calcOffX" inputmode="decimal" autocomplete="off" placeholder="0"></label>
-    <label>Offset Y (part frame, optional)<input id="calcOff" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+    <label>Offset X<input id="calcOffX" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+    <label>Offset Y<input id="calcOff" inputmode="decimal" autocomplete="off" placeholder="0"></label>
   </div>
   <table class="tt reft calcout"><tbody>
     <tr><td class="refc">Th</td><td id="calcTh">-</td><td class="tw-dim">degrees</td></tr>
@@ -8655,25 +8655,31 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     const h = Math.hypot(a[0] - b[0], a[1] - b[1]) / 2;
     return fitHoles([{ n: [h, 0], m: a }, { n: [-h, 0], m: b }], ox, oy);
   }
+  // two holes on the part's Y line, A on the +Y side
+  function wpcFromHolesY(a, b, ox, oy) {
+    const h = Math.hypot(a[0] - b[0], a[1] - b[1]) / 2;
+    return fitHoles([{ n: [0, h], m: a }, { n: [0, -h], m: b }], ox, oy);
+  }
   // n holes on a circle, hole 1 at a0 degrees, going counter-clockwise (as FIG pattern CIR)
   function boltCircle(cx, cy, r, a0, n) {
     return Array.from({ length: n }, (_, i) => { const a = (a0 + 360 * i / n) * Math.PI / 180; return [cx + r * Math.cos(a), cy + r * Math.sin(a)]; });
   }
   const CALC_HELP = {
-    two: 'Probe two holes on the part\'s X line. Hole A is the one on the +X side. The part zero is their midpoint.',
+    two: 'Probe two holes on the part\'s X line. Hole A is the one on the +X side. The part zero is their midpoint; the optional offsets move it in the part frame.',
+    twoY: 'Probe two holes on the part\'s Y line. Hole A is the one on the +Y side. The part zero is their midpoint; the optional offsets move it in the part frame.',
     any: 'Give each hole\'s position from the part zero (the drawing) and where you probed it. Two or more holes, any layout; more holes average out probing error.',
     bolt: 'Describe the bolt circle from the part zero, then probe two or more of its holes and give their hole numbers (hole 1 at the start angle, counter-clockwise).',
   };
-  const calcSt = { tab: 'two', rows: { two: [['', ''], ['', '']].map(() => ({})), any: [{}, {}, {}], bolt: [{}, {}, {}] } };
+  const calcSt = { tab: 'two', rows: { two: [{}, {}], twoY: [{}, {}], any: [{}, {}, {}], bolt: [{}, {}, {}] } };
   const calcNum = t => { t = String(t == null ? '' : t).trim().replace(',', '.'); return t === '' ? NaN : Number(t); };
   const calcOpt = id => { const t = $('#' + id).value.trim(); return t === '' ? 0 : calcNum(t); };
   function calcFit() {
     const tab = calcSt.tab, R = calcSt.rows[tab], ox = calcOpt('calcOffX'), oy = calcOpt('calcOff');
     if (![ox, oy].every(isFinite)) return { err: 'The offsets must be numbers.' };
-    if (tab === 'two') {
+    if (tab === 'two' || tab === 'twoY') {
       const a = [calcNum(R[0].mx), calcNum(R[0].my)], b = [calcNum(R[1].mx), calcNum(R[1].my)];
       if (![...a, ...b].every(isFinite) || (a[0] === b[0] && a[1] === b[1])) return { err: 'Enter both holes (two different points).' };
-      return { r: wpcFromHoles(a, b, ox, oy) };
+      return { r: (tab === 'two' ? wpcFromHoles : wpcFromHolesY)(a, b, ox, oy) };
     }
     let pts = null;
     if (tab === 'bolt') {
@@ -8697,12 +8703,12 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
   }
   function renderCalcRows() {
     const tab = calcSt.tab, R = calcSt.rows[tab];
-    const cols = tab === 'two' ? [['', 'Hole'], ['mx', 'Probed X'], ['my', 'Probed Y']] : tab === 'bolt' ? [['no', 'Hole no.'], ['mx', 'Probed X'], ['my', 'Probed Y']] :
+    const pair = tab === 'two' || tab === 'twoY', cols = pair ? [['', 'Hole'], ['mx', 'Probed X'], ['my', 'Probed Y']] : tab === 'bolt' ? [['no', 'Hole no.'], ['mx', 'Probed X'], ['my', 'Probed Y']] :
       [['nx', 'Part X (drawing)'], ['ny', 'Part Y (drawing)'], ['mx', 'Probed X'], ['my', 'Probed Y']];
-    $('#calcHead').innerHTML = '<tr>' + cols.map(c => `<th>${c[1]}</th>`).join('') + (tab === 'two' ? '' : '<th></th>') + '</tr>';
-    $('#calcRows').innerHTML = R.map((r, i) => '<tr>' + cols.map(([k]) => k ? `<td><input data-ci="${i}" data-ck="${k}" value="${esc(r[k] == null ? '' : r[k])}" inputmode="decimal" autocomplete="off"></td>` : `<td class="refc">${i ? 'B (-X side)' : 'A (+X side)'}</td>`).join('') +
-      (tab === 'two' ? '' : `<td><button type="button" data-cdel="${i}" title="Remove this hole">×</button></td>`) + '</tr>').join('');
-    $('#calcRowBtns').hidden = tab === 'two';
+    $('#calcHead').innerHTML = '<tr>' + cols.map(c => `<th>${c[1]}</th>`).join('') + (pair ? '' : '<th></th>') + '</tr>';
+    $('#calcRows').innerHTML = R.map((r, i) => '<tr>' + cols.map(([k]) => k ? `<td><input data-ci="${i}" data-ck="${k}" value="${esc(r[k] == null ? '' : r[k])}" inputmode="decimal" autocomplete="off"></td>` : `<td class="refc">${tab === 'two' ? (i ? 'B (-X side)' : 'A (+X side)') : (i ? 'B (-Y side)' : 'A (+Y side)')}</td>`).join('') +
+      (pair ? '' : `<td><button type="button" data-cdel="${i}" title="Remove this hole">×</button></td>`) + '</tr>').join('');
+    $('#calcRowBtns').hidden = pair;
     $('#calcBolt').hidden = tab !== 'bolt';
     $('#calcHelp').textContent = CALC_HELP[tab];
     document.querySelectorAll('#calcDlg [data-calctab]').forEach(b => b.classList.toggle('on', b.dataset.calctab === tab));
@@ -8715,7 +8721,7 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     const L = d && isProg(d) && d.sel.r >= 0 ? ctx(d)[d.sel.r] : null, onWpc = !!L && L.sel.code === 2 && L.lay;
     $('#calcApply').disabled = !r || !onWpc || locked(d) || readOnly(d);
     const unit = 'Values in ' + (metric ? 'mm' : 'inches') + ' (the open program\'s units). ';
-    $('#calcMsg').textContent = unit + (!r ? f.err : (calcSt.tab !== 'two' ? 'Worst hole misfit: ' + r.resid.toFixed(dp + 1) + '. ' : '') + (onWpc ? '' : 'To apply, close this, put the cursor on a WPC- unit line in Edit mode, and open CALC again.'));
+    $('#calcMsg').textContent = unit + (!r ? f.err : (!['two', 'twoY'].includes(calcSt.tab) ? 'Worst hole misfit: ' + r.resid.toFixed(dp + 1) + '. ' : '') + (onWpc ? '' : 'To apply, close this, put the cursor on a WPC- unit line in Edit mode, and open CALC again.'));
   }
   function openCalc() {
     const dlg = $('#calcDlg');
@@ -10112,7 +10118,7 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
   // test hook
   window.MazEditor = { docs, doc, openBytes, select, enterValue, commit, insertUnit, insertLine, deleteSelection, copySelection, paste, moveSelection, undo, saveAs, listing, newProgram, render, ctx, setToolType, toolCheck, setupSheet, side, loadFolder, openFromFolder, folder: () => folder,
     plotStats: () => lastStats, playAction, playTo, gotoLine, scene: () => (doc() ? doc().scene : null), save, duplicateSelection, cutSelection, contextAction,
-    setEditing, editing: () => editing, cube: () => cubeHit, openDevelop, openTpc, openRef, openCalc, wpcFromHoles, fitHoles, boltCircle, parseAlarmHelp, openCheck, programCheck: () => programCheck(doc()), softKey: id => { const k = SK[id]; if (!k || (k.off && k.off())) return false; k.run(); renderSoftKeys(); return true; },
+    setEditing, editing: () => editing, cube: () => cubeHit, openDevelop, openTpc, openRef, openCalc, wpcFromHoles, wpcFromHolesY, fitHoles, boltCircle, parseAlarmHelp, openCheck, programCheck: () => programCheck(doc()), softKey: id => { const k = SK[id]; if (!k || (k.off && k.off())) return false; k.run(); renderSoftKeys(); return true; },
     skOn: id => !!(SK[id].on && SK[id].on()), skOff: id => !!(SK[id].off && SK[id].off()), pressSoftKey,
     guideMin: () => guideMin, setTheme, softKeys: () => skKeys.map(k => (k ? (k.choice !== undefined ? k.choice : k.id) : null)), openText, timeModel: () => timeModel(doc()), toggleTime, plotFocus: () => plotFocus };
 })();
