@@ -1,0 +1,1439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HEM Toolpath Generator</title>
+<style>
+:root{--ink:#1d2a33;--mute:#6b7780;--line:#e3e7ea;--line2:#d5dbdf;--bg:#f6f7f8;--card:#fff;--red:#c2362b;--warnbg:#fff6e5;--warnln:#f0d9a8;--warnink:#7a5200;
+  --rough:#2f6db5;--entry:#8a5cc2;--link:#d08a1e;--finish:#1e8a4c;--rapid:#c2362b;--air:#9aa6ae;--part:#e9edf0;--stock:#9aa6ae;--shape:#0f6e8c}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Barlow,'Segoe UI',system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.wrap{max-width:1400px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:20px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h1{font-weight:600;font-size:24px;letter-spacing:-.01em;margin:0;line-height:1.2}
+header p{color:var(--mute);margin:2px 0 0;max-width:760px}
+.btn{background:#fff;border:1px solid var(--line2);border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:500;font-size:14px;white-space:nowrap}
+.btn:hover{border-color:#aeb8bf}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.primary:hover{background:#2c3d49}
+.btn.sm{padding:4px 9px;font-size:13px}
+.btn.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:380px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px}
+aside.card{display:flex;flex-direction:column;padding:4px 20px 20px}
+aside section{display:flex;flex-direction:column;gap:10px;padding-top:18px;margin-top:16px;border-top:1px solid var(--line)}
+aside section:first-child{border-top:0;margin-top:0}
+h2{margin:0;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.f>span{font-size:13px;font-weight:500;color:#3b4a55;display:flex;justify-content:space-between;gap:6px}
+.f>span em{font-style:normal;color:var(--mute);font-weight:400}
+.f input,.f select,textarea{width:100%;border:1px solid var(--line2);border-radius:6px;padding:6px 9px;background:#fff;font-variant-numeric:tabular-nums}
+.f input:focus,.f select:focus,textarea:focus{border-color:var(--ink);outline:none}
+.f .hint{font-size:12px;color:var(--mute);line-height:1.35}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--ink)}
+.seg{display:flex;background:#eef1f3;border-radius:7px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg button{flex:1;border:0;background:transparent;border-radius:5px;padding:5px 8px;font-size:13px;font-weight:500;color:var(--mute);cursor:pointer;white-space:nowrap}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(29,42,51,.12)}
+.note{font-size:12.5px;color:var(--mute);line-height:1.4;margin:0}
+main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.tile .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);font-weight:600}
+.tile .v{font-size:22px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .v small{font-size:14px;font-weight:500}
+.tile .s{font-size:12.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.tile.bad .v{color:var(--red)}
+.warn{background:var(--warnbg);border:1px solid var(--warnln);color:var(--warnink);border-radius:10px;padding:10px 14px;font-size:14px}
+.warn ul{margin:0;padding-left:18px}
+.info{font-size:13.5px;color:#3b4a55;margin:8px 0 0;padding-left:18px}
+.plotbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.plotbar h2{margin-right:auto}
+.drawbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;padding:8px 10px;background:#f1f6f8;border:1px solid #d6e6ec;border-radius:8px}
+.drawbar .lbl{font-size:13px;color:var(--mute)}
+.drawbar select{border:1px solid var(--line2);border-radius:6px;padding:3px 6px;background:#fff;font-size:13px}
+#plot{width:100%;height:480px;display:block;background:#fbfcfc;border:1px solid var(--line);border-radius:8px;touch-action:none;user-select:none}
+#plot.pan{cursor:grab}#plot.draw{cursor:crosshair}#plot.edit{cursor:default}
+.scrub{display:flex;align-items:center;gap:10px;margin-top:10px}
+.scrub input{flex:1;accent-color:var(--red)}
+.readout{font:13px/1.4 'IBM Plex Mono',Consolas,monospace;color:#3b4a55;min-height:1.4em;margin-top:6px;white-space:pre-wrap;word-break:break-all}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--mute);margin-top:8px}
+.legend i{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.tabs{display:flex;background:#eef1f3;border-radius:7px;padding:3px;gap:3px}
+.tabs button{border:0;background:transparent;border-radius:5px;padding:5px 12px;font-size:14px;font-weight:500;color:var(--mute);cursor:pointer}
+.tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(29,42,51,.12)}
+.outhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+pre.code{margin:0;background:#1d2a33;color:#e6ecef;border-radius:8px;padding:14px 16px;font:12.5px/1.5 'IBM Plex Mono',Consolas,monospace;max-height:520px;overflow:auto;white-space:pre}
+table.data{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+table.data th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);text-align:right;padding:6px 8px;border-bottom:1px solid #9aa6ae;font-weight:600}
+table.data th:first-child,table.data td:first-child{text-align:left}
+table.data td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right}
+.explain{font-size:14px;color:#3b4a55;margin-top:14px;display:grid;gap:6px}
+.explain code{font:12.5px 'IBM Plex Mono',Consolas,monospace;background:#eef1f3;padding:1px 5px;border-radius:4px}
+.foot{font-size:12.5px;color:var(--mute)}
+.msg{font-size:13px;color:var(--red)}
+body.drawonly .tiles, body.drawonly #warn, body.drawonly .badge, body.drawonly #viewSeg, body.drawonly .scrub, body.drawonly .legend{display:none!important}
+.dimsec h3{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);margin:14px 0 4px}
+table.dims{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px;width:100%}
+table.dims th{font-size:11.5px;color:var(--mute);text-align:right;padding:3px 6px;border-bottom:1px solid #9aa6ae;font-weight:600;white-space:nowrap}
+table.dims td{padding:3px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+table.dims th:first-child,table.dims td:first-child{text-align:left}
+#printArea{display:none}
+@media print{body>.wrap{display:none!important}#printArea{display:block!important;padding:0 4mm;color:#000}#printArea svg{width:100%;height:auto;max-height:120mm;border:1px solid #999}#printArea table.dims td,#printArea table.dims th{font-size:10px;padding:2px 4px}}
+.badge{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 12px;font-size:13px;font-weight:700;letter-spacing:.06em;white-space:nowrap}
+.badge i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.badge.both{background:#e6f4ec;color:#135c33;border:1px solid #b5dcc4}
+.badge.rough{background:#e8f0fa;color:#1d4f8c;border:1px solid #bcd2ee}
+.badge.fin{background:#e6f4ec;color:#135c33;border:1px solid #b5dcc4}
+.badge.none{background:#eef1f3;color:var(--mute);border:1px solid var(--line2)}
+.shape{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.shape.sel{border-color:var(--shape);box-shadow:0 0 0 1px var(--shape)}
+.shape .hd{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600}
+.shape .hd{flex-wrap:wrap;row-gap:4px}
+.shape .hd span{margin-right:auto;cursor:pointer;flex:1 1 calc(100% - 30px)}
+.pts{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.pts th{font-size:11.5px;color:var(--mute);font-weight:600;text-align:left;padding:2px 3px}
+.pts td{padding:1px 2px}
+.pts td:first-child{font-size:12px;color:var(--mute);width:22px;text-align:right;padding-right:5px}
+.pts input{width:100%;border:1px solid var(--line2);border-radius:4px;padding:3px 5px;font-size:13px;background:#fff}
+.pts tr.sel input{border-color:var(--shape);background:#eef7fa}
+.pts button{border:0;background:none;color:var(--mute);cursor:pointer;font-size:14px;padding:0 4px}
+.pts button:hover{color:var(--red)}
+.shape.bulk{border-color:#7b3fb5;box-shadow:0 0 0 1px #7b3fb5}
+.bulkbox{border:1px solid #d9c9ec;background:#faf6fe;border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.bulkbox .r{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px}
+.bulkbox input{width:64px;border:1px solid var(--line2);border-radius:5px;padding:3px 6px;font-size:13px;background:#fff}
+.ogrid{display:grid;grid-template-columns:repeat(3,26px);gap:4px}
+.ogrid button{width:26px;height:26px;border:1px solid var(--line2);border-radius:5px;background:#fff;cursor:pointer;padding:0}
+.ogrid button:hover{border-color:var(--ink)}
+.link{background:none;border:0;color:var(--shape);cursor:pointer;padding:0;font-size:13px;font-weight:500}
+.segedit{display:flex;flex-direction:column;gap:6px;margin-top:10px;padding:8px 10px;background:#fff8ef;border:1px solid #f0d9b5;border-radius:8px;font-size:13px}
+.segedit .r{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.segedit input:not([type]){width:74px;border:1px solid var(--line2);border-radius:5px;padding:3px 6px;font-size:13px;background:#fff;font-variant-numeric:tabular-nums}
+.segedit .seg{flex:0 0 auto}
+.ctx{position:fixed;z-index:50;background:#fff;border:1px solid var(--line2);border-radius:8px;box-shadow:0 6px 24px rgba(29,42,51,.18);padding:4px;min-width:200px;font-size:13.5px}
+.ctx button{display:block;width:100%;text-align:left;border:0;background:none;padding:5px 10px;border-radius:5px;cursor:pointer}
+.ctx button:hover,.ctx button:focus{background:#eef1f3;outline:none}
+.ctx button.danger{color:var(--red)}
+.ctx .h{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);font-weight:600;padding:5px 10px 2px}
+.ctx hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+</style>
+</head>
+<body>
+<div class="ctx" id="ctx" hidden role="menu"></div>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>HEM Toolpath Generator</h1>
+      <p>High-efficiency milling: light radial stepover, full flute depth, steady engagement. Pick an operation or draw your own shape, set the tool and material; speeds and feeds are worked out with chip thinning, and the toolpath is written as G-code or a Mazak Mazatrol program (Matrix and Smooth).</p>
+    </div>
+    <div class="btns">
+      <label class="btn" title="Get every setting back from a .nc this app wrote (or drop the file on the page)">Open .nc…<input id="openNc" type="file" accept=".nc,.txt,.tap,.eia,.ngc" hidden></label>
+      <button class="btn" id="drawOnly" title="Just the drawing and its dimensions: hides the machining settings and skips the toolpath">Drawing only</button>
+      <button class="btn" id="resetSettings" title="Every setting back to its default; your shapes (and the operation they are for) stay">Reset settings</button>
+      <button class="btn" id="reset" title="Every setting back to its default and your shapes deleted">Reset all + shapes</button>
+    </div>
+  </header>
+  <div id="openMsg" class="msg" hidden></div>
+  <div class="grid">
+    <aside class="card" id="form"></aside>
+    <main>
+      <div class="tiles" id="tiles"></div>
+      <div class="warn" id="warn" hidden></div>
+      <div class="card">
+        <div class="plotbar">
+          <h2 id="plotTitle">Toolpath, top view</h2>
+          <span class="badge" id="badge1"></span>
+          <span class="note" id="busy" hidden style="color:#b85c00;font-weight:600">Working…</span>
+          <div class="seg" id="viewSeg"></div>
+          <button class="btn" id="fit">Fit</button>
+        </div>
+        <div class="drawbar" id="drawbar" hidden>
+          <div class="btns" id="tools"></div>
+          <span class="lbl">Snap</span>
+          <select id="snap"><option value="0">off</option><option value="0.01">0.01</option><option value="0.0625">1/16</option><option value="0.125">1/8</option><option value="0.25">1/4</option><option value="0.5">1/2</option></select>
+          <span class="lbl" id="drawHint"></span>
+        </div>
+        <svg id="plot"></svg>
+        <div class="segedit" id="segEdit" hidden></div>
+        <div class="scrub">
+          <button class="btn" id="play" style="min-width:74px">▶ Play</button>
+          <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Step through the toolpath">
+        </div>
+        <div class="readout" id="readout"></div>
+        <div class="legend" id="legend"></div>
+        <ul class="info" id="info"></ul>
+      </div>
+      <div class="card">
+        <div class="outhead">
+          <div class="btns"><div class="tabs" id="tabs"></div><span class="badge" id="badge2"></span></div>
+          <div class="btns" id="dls"></div>
+        </div>
+        <div id="out"></div>
+      </div>
+      <p class="foot">Check every program on the machine's screen and in its path check before running it. These are starting points for coated carbide: compare them with your tool maker's numbers. The preview shows the tool centre.</p>
+    </main>
+  </div>
+</div>
+<div id="printArea"></div>
+<script id="lib-clipper">/*@@CLIPPER@@*/</script>
+<script>/*@@MACH1@@*/</script>
+<script id="lib-geo">/*@@HEMGEO@@*/</script>
+<script id="lib-hem">/*@@HEM@@*/</script>
+<script>
+'use strict';
+const KEY = 'cnc-hem-cfg-v1', UIKEY = 'cnc-hem-ui-v1';
+const $ = id => document.getElementById(id);
+const num = (v, d = 0) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const f4 = v => { let s = (+v).toFixed(4).replace(/0+$/, '').replace(/\.$/, ''); return s === '-0' ? '0' : s; };
+const clone = o => JSON.parse(JSON.stringify(o));
+
+let cfg = (() => { let s = {}; try { s = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { } const c = Object.assign(clone(HEM.DEFAULTS), s); if (!Array.isArray(c.shapes)) c.shapes = [];
+  if (s.passes === undefined && s.finish === false) c.passes = 'rough'; return c; })();
+const ui = Object.assign({ txt: {}, txtAll: false, bulk: new Set(), bk: { dx: '0', dy: '0', ang: '90', k: '1', fr: '0.125', off: '0.1' }, oX: '0', oY: '0', segMode: 'line', tab: 'g', view: 'all', zoom: 1, panX: 0, panY: 0, step: null, playing: false, tool: 'edit', snap: '0.0625', sel: null, selPt: null, selSeg: null, selCon: null, conAng: '45', segLen: '', segAng: '0', open: {} },
+  (() => { try { const u = JSON.parse(localStorage.getItem(UIKEY) || '{}'); return { snap: u.snap || '0.0625', tab: u.tab || 'g', drawOnly: !!u.drawOnly, showNums: !!u.showNums }; } catch (e) { return {}; } })());
+let drawing = null;                  // the shape being drawn: {closed, pts}
+let hover = null;                    // cursor in work coordinates
+function save() { record(); try { localStorage.setItem(KEY, JSON.stringify(cfg)); localStorage.setItem(UIKEY, JSON.stringify({ snap: ui.snap, tab: ui.tab, drawOnly: ui.drawOnly, showNums: ui.showNums })); } catch (e) { } }
+const custom = () => cfg.op === 'custom';
+
+// ---------------------------------------------------------------- the form
+const F = (k, label, unit, hint, extra) => Object.assign({ k, label, unit, hint }, extra || {});
+const isOp = o => c => c.op === o;
+// a pocket with an edge marked open is cut from the open side in
+const openPocket = c => c.op === 'custom' && c.cop === 'pocket' && (c.shapes || []).some(sh => sh.closed && (sh.pts || []).some(p => +p[4]));
+const MAT_OPTS = Object.entries(HEM.MATERIALS).map(([k, m]) => [k, m.name]);
+const COAT_OPTS = Object.entries(HEM.COATINGS).map(([k, m]) => [k, m.name]);
+// the material and coating numbers for the current tool, shown in grey in blank fields
+const autoNum = k => { const a = HEM.matNumbers(cfg, Math.abs(num(cfg.toolD, 0.75)) || 0.75); return { sfmR: a.sfmR, fzR: a.fzR, sfmF: a.sfmF, fzF: a.fzF, unitHp: a.hp }[k]; };
+const SECTIONS = [
+  { h: 'Operation', items: [
+    F('op', '', '', '', { kind: 'seg', opts: [['profile', 'Profile'], ['pocket', 'Round pocket'], ['slot', 'Slot'], ['custom', 'Your shape']] }),
+    { note: c => ({ profile: 'Outside of a rectangle or circle.', pocket: 'Circular pocket: helix in, spiral out.', slot: 'Trochoidal slot between two points.', custom: 'Draw on the preview, type points, paste them or import a DXF.' })[c.op] },
+  ] },
+  { h: 'Your shape', show: isOp('custom'), items: [
+    F('cop', '', '', '', { kind: 'seg', opts: [['outside', 'Outside profile'], ['open', 'Open profile'], ['pocket', 'Pocket'], ['path', 'Groove along path']] }),
+    { note: c => ({ outside: 'Closed shapes are the part; passes run around them, from the stock per side in to the wall.', open: 'An open path is the finished wall (a step, an edge, one side of a part). Passes run alongside it from the stock edge in, past both ends.', pocket: 'Closed shapes are pocket walls; a shape inside another is an island, and only the area between is cut. Tick Open on an edge (in the points table) for a side with air beyond it: the tool comes in from there, no helix.', path: 'The tool cuts a groove of the width below along each path, open or closed.' })[c.cop] || '' },
+    F('openSide', 'Stock is on the', '', '', { kind: 'seg', opts: [['left', 'Left of the path'], ['right', 'Right of the path']], show: c => c.cop === 'open', hintFn: () => 'Looking along the path from its first point (the arrow on the preview). The shaded band is the stock.' }),
+    { row: [F('openStock', 'Stock to remove', 'in', 'From the wall out'), F('openExt', 'Run past the ends', 'in', 'Blank = tool radius + 0.1')], show: c => c.cop === 'open' },
+    F('openDir', 'Passes', '', '', { kind: 'seg', opts: [['oneway', 'One way (all climb)'], ['zigzag', 'Zigzag (no lifts)']], show: c => c.cop === 'open', hintFn: c => c.openDir === 'zigzag' ? 'Every other pass comes back conventional, stepping over past the end without lifting.' : 'Every pass climbs; the tool lifts to the retract height and goes back to the start.' }),
+    F('pocketStrategy', 'Roughing', '', '', { kind: 'seg', opts: [['auto', 'Auto (faster)'], ['offset', 'Offset loops'], ['troch', 'Trochoidal']], show: c => c.cop === 'pocket' && !openPocket(c), hintFn: c => ({ auto: 'Works out both and uses whichever has the shorter cycle time.', offset: 'Small trochoidal cores, then loops peeling outward at the stepover: fastest on open pockets.', troch: 'Circular loops everywhere: low engagement in any corner and narrow gap, more air cutting.' })[c.pocketStrategy] || '' }),
+    F('strategy', 'Roughing', '', '', { kind: 'seg', opts: [['offset', 'Offset loops'], ['troch', 'Trochoidal']], show: c => c.cop === 'outside', hintFn: c => c.strategy === 'troch' ? 'Loops along paths: engagement stays low in any corner.' : 'Loops that follow the shape: fastest; inside corners are rounded below.' }),
+    F('pieceDir', 'Where loops cross open air', '', '', { kind: 'seg', opts: [['zigzag', 'Zigzag (no lifts)'], ['oneway', 'One way (all climb)']], show: c => c.cop === 'outside' && c.strategy !== 'troch' && c.stockType === 'rect', hintFn: c => c.pieceDir === 'oneway' ? 'Every piece climbs; after each the tool lifts and goes back to the start side. More lifts.' : 'With a block, loops meet stock in separate pieces. Each area is cleared on its own, every other piece running back (conventional) without lifting.' }),
+    F('smoothR', 'Round inside corners of roughing loops', 'in', 'Keeps the tool from wrapping into inside corners; the finish pass takes what is left.', { show: c => c.cop === 'outside' && c.strategy !== 'troch' }),
+    F('trochD', 'Trochoid loop diameter', 'in', 'Tool centre circle; 0.4–0.6× the tool is typical. Pockets use it for their cores too.', { show: c => (c.cop === 'pocket' && !openPocket(c)) || (c.cop === 'outside' && c.strategy === 'troch') }),
+    F('pieceDir', 'Passes from the open side', '', '', { kind: 'seg', opts: [['zigzag', 'Zigzag (no lifts)'], ['oneway', 'One way (all climb)']], show: openPocket, hintFn: c => c.pieceDir === 'oneway' ? 'Every pass climbs; the tool lifts and goes back after each.' : 'Every other pass comes back conventional, stepping over without lifting.' }),
+    { note: c => openPocket(c) ? 'Open edges (dashed orange) have air beyond them: passes start from that side and work in to the walls and round the islands; the tool comes down in the air, no helix. The finish pass follows the walls and islands only.' : '', show: openPocket },
+    F('slotW', 'Groove width', 'in', '', { show: c => c.cop === 'path' }),
+    F('slotEntry', 'Entry', '', '', { kind: 'seg', opts: [['open', 'Open (start off the part)'], ['helix', 'Helix']], show: c => c.cop === 'path' }),
+    { shapes: true, draw: true },
+  ] },
+  { h: 'Construction geometry', show: isOp('custom'), items: [
+    { cons: true, draw: true },
+  ] },
+  { h: 'Part', show: c => c.op !== 'custom', items: [
+    F('shape', '', '', '', { kind: 'seg', opts: [['rect', 'Rectangle'], ['circle', 'Circle']], show: isOp('profile') }),
+    { row: [F('partW', 'Width X', 'in'), F('partH', 'Height Y', 'in')], show: c => c.op === 'profile' && c.shape !== 'circle' },
+    F('cornerR', 'Corner radius', 'in', '0 for sharp corners', { show: c => c.op === 'profile' && c.shape !== 'circle' }),
+    F('partD', 'Diameter', 'in', '', { show: c => c.op === 'profile' && c.shape === 'circle' }),
+    F('pocketD', 'Pocket diameter', 'in', '', { show: isOp('pocket') }),
+    { row: [F('cx', 'Center X', 'in'), F('cy', 'Center Y', 'in')], show: c => c.op === 'profile' || c.op === 'pocket', hint: 'From work zero (X0 Y0).' },
+    { row: [F('x1', 'Start X', 'in'), F('y1', 'Start Y', 'in')], show: isOp('slot') },
+    { row: [F('x2', 'End X', 'in'), F('y2', 'End Y', 'in')], show: isOp('slot') },
+    F('slotW', 'Slot width', 'in', 'Start and end are the centres of the slot\'s round ends. 1.3–2× the tool is ideal.', { show: isOp('slot') }),
+    F('slotEntry', 'Entry', '', '', { kind: 'seg', opts: [['open', 'Open end (start off the part)'], ['helix', 'Helix']], show: isOp('slot') }),
+  ] },
+  { h: 'Work zero (X0 Y0)', items: [{ origin: true, draw: true }] },
+  { h: 'Depth', items: [
+    { row: [F('depth', 'Depth', 'in', 'Z0 is the top of the part'), F('apMax', 'Max depth per level', 'in', '0 = full depth in one level')] },
+  ] },
+  { h: 'Stock', show: c => c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside'), items: [
+    F('stockType', '', '', '', { kind: 'seg', opts: [['even', 'Passes around the part'], ['rect', 'Clear a rectangular block']], hintFn: c => c.stockType === 'rect' ? 'Clears the whole block, corners and all, down to the part.' : 'Loops follow the part all the way round, from the stock per side in to the wall. Nothing else is cleared.' }),
+    { row: [F('stockX', 'Stock X', 'in'), F('stockY', 'Stock Y', 'in')], show: c => c.op === 'profile' && c.stockType === 'rect', hint: 'Centred on the part.' },
+    F('stockM', 'Stock per side', 'in', '', { show: c => c.op === 'custom' && c.stockType === 'rect', hintFn: c => {
+      // the block this makes: the shapes' extents plus the stock on every side
+      const b = [Infinity, Infinity, -Infinity, -Infinity];
+      (c.shapes || []).filter(s => s.closed).forEach(s => HEMGeo.filleted(s).forEach(p => { b[0] = Math.min(b[0], p[0]); b[1] = Math.min(b[1], p[1]); b[2] = Math.max(b[2], p[0]); b[3] = Math.max(b[3], p[1]); }));
+      const m = Math.abs(num(c.stockM, 0));
+      return isFinite(b[0]) ? 'Block ' + f4(b[2] - b[0] + 2 * m) + ' × ' + f4(b[3] - b[1] + 2 * m) + ': the shape\'s extents plus this on every side.' : 'Added to the shape\'s extents on every side.';
+    } }),
+    F('stockW', 'Stock per side', 'in', '', { show: c => c.stockType !== 'rect', hintFn: c => { const n = Math.max(0, Math.ceil((Math.abs(num(c.stockW, 0)) - (c.passes === 'rough' ? 0 : Math.abs(num(c.finStock, 0)))) / Math.max(0.001, Math.abs(num(c.ae, 0.06))) - 1e-6)); return n + ' pass' + (n === 1 ? '' : 'es') + ' around the part at the stepover' + (c.passes !== 'rough' ? ', then the finish pass' : '') + '.'; } }),
+  ] },
+  { h: 'Tool', items: [
+    { row: [F('toolD', 'Diameter', 'in'), F('flutes', 'Flutes', '')] },
+    { row: [F('loc', 'Flute length', 'in'), F('stick', 'Stick-out', 'in')], hint: 'Stick-out: holder face to tool tip. Keep it short: deflection grows with its cube.' },
+    F('toolNo', 'Tool number (T / H)', ''),
+    { feedsList: true },
+  ] },
+  { h: 'Material & cutting data', items: [
+    { row: [F('mat', 'Material', '', '', { kind: 'sel', opts: MAT_OPTS }), F('coating', 'Coating', '', '', { kind: 'sel', opts: COAT_OPTS })] },
+    { note: () => 'From the Feeds and Speeds numbers: blank fields below use the material, coating and tool size (shown in grey); type a number to use your own.' },
+    { row: [F('sfmR', 'Rough SFM', 'ft/min', '', { auto: true }), F('fzR', 'Rough chip load', 'in/tooth', '', { auto: true })], hint: 'Chip load is the real chip; the feed is raised for chip thinning when that box is ticked.' },
+    F('thin', 'Chip thinning compensation', '', '', { kind: 'chk' }),
+    { row: [F('sfmF', 'Finish SFM', 'ft/min', '', { auto: true }), F('fzF', 'Finish chip load', 'in/tooth', '', { auto: true })], show: c => c.finish, hint: 'Finish chip load is programmed as is.' },
+    F('unitHp', 'Unit power', 'hp per in³/min', 'For the spindle power estimate', { auto: true }),
+    { row: [F('rpmR', 'Rough RPM override', ''), F('feedR', 'Rough feed override', 'ipm')], hint: 'Leave blank to use the calculated values.' },
+    { row: [F('rpmF', 'Finish RPM override', ''), F('feedF', 'Finish feed override', 'ipm')], show: c => c.finish },
+  ] },
+  { h: 'Toolpath', items: [
+    F('ae', 'Stepover (ae)', 'in', '', { hintFn: c => { const D = num(c.toolD, .75), a = num(c.ae); return D > 0 ? Math.round(a / D * 1000) / 10 + '% of the tool. HEM: 5–15%. ' + (c.op === 'slot' || (c.op === 'custom' && (c.cop !== 'outside' || c.strategy === 'troch')) ? 'Also the advance per trochoidal loop.' : c.op === 'pocket' ? 'Growth per spiral turn.' : 'Loops are spaced evenly, never more than this.') : ''; } }),
+    F('dir', 'Direction', '', '', { kind: 'seg', opts: [['climb', 'Climb'], ['conv', 'Conventional']] }),
+    F('entryOn', 'Choose where passes start', '', '', { kind: 'chk', show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) }),
+    { row: [F('entryX', 'Start near X', 'in'), F('entryY', 'Start near Y', 'in')], show: c => c.entryOn && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))), hint: 'Each pass (and the finish pass) leads in at its point nearest here, where there is room for the lead arc in the clear. Pockets still open up in the middle first.' },
+    { pick: true, show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) },
+    F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
+    { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') },
+    F('spring', 'Spring pass (repeat the finish pass)', '', '', { kind: 'chk', show: c => c.finish }),
+    F('link', 'Between loops', '', 'Stay down: feed across in the clear at depth. Lift: small lift and rapid.', { kind: 'seg', opts: [['depth', 'Stay at depth'], ['lift', 'Lift']], show: c => c.passes !== 'finish' && c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch') }),
+    F('lift', 'Lift', 'in', '', { show: c => c.passes !== 'finish' && c.link === 'lift' && (c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch')) }),
+    F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: isOp('pocket'), hintFn: c => 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
+    { row: [F('ramp', 'Helix ramp angle', '°'), F('rampPct', 'Helix feed', '% of rough')], show: c => c.op === 'pocket' || c.slotEntry === 'helix' || c.op === 'custom' },
+    F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk' }),
+    { note: () => 'Checked along the whole roughing toolpath by simulating the cut: where more of the cutter is in the material than the stepover gives (corners, narrow gaps, trochoid fronts), the feed drops to keep the chip the same.' },
+    F('retPct', 'Trochoid loop return feed', '% of rough', 'The back half of each trochoidal loop runs over ground just cut', { show: c => c.op === 'slot' || (c.op === 'custom' && (c.cop === 'path' || c.cop === 'pocket' || (c.cop === 'outside' && c.strategy === 'troch'))) }),
+    F('airFeed', 'Feed in the clear', 'ipm', 'Coming down outside the stock or over ground already cut, and unit restarts'),
+  ] },
+  { h: 'Machine & G-code', items: [
+    { row: [F('maxRpm', 'Max spindle', 'RPM'), F('hp', 'Spindle power', 'hp')] },
+    { row: [F('safeZ', 'Clearance plane', 'Z in', 'Above clamps and fixtures: the tool comes in, leaves and changes units here'), F('rapidZ', 'Rapid plane', 'Z in', 'Just above the part: rapid down to here, then feed')] },
+    F('retract', 'Between cuts lift to', '', '', { kind: 'seg', opts: [['rapid', 'Rapid plane'], ['clear', 'Clearance plane']], hintFn: c => c.retract === 'clear' ? 'Safest over clamps; slower. Every move across goes at Z' + f4(num(c.safeZ, 1)) + '.' : 'Fastest: moves across at Z' + f4(Math.min(num(c.rapidZ, 0.1), num(c.safeZ, 1))) + '. Use the clearance plane if clamps stand above the part.' }),
+    { row: [F('prog', 'Program number', 'O'), F('wcs', 'Work offset', '', '', { kind: 'text' })] },
+    { row: [F('cool', 'Coolant', '', 'M8, M7, blank = none', { kind: 'text' }), F('dec', 'Decimals', '')] },
+    F('rapid', 'Rapid rate', 'ipm', 'For the cycle time only'),
+    F('toolChange', 'Tool change T M6', '', '', { kind: 'chk' }),
+    F('home', 'G91 G28 Z0 at the end', '', '', { kind: 'chk' }),
+    F('lineNums', 'Line numbers', '', '', { kind: 'chk' }),
+    F('fileName', 'File name', '', '', { kind: 'text', hintFn: c => 'Blank = ' + HEM.fileBase(Object.assign({}, c, { fileName: '' })) + '.nc' }),
+  ] },
+  { h: 'Mazatrol', items: [
+    { note: () => 'Both kinds are written from the same toolpath: Matrix (.PBD) and Smooth (.PBM). The listing shows the one picked here.' },
+    F('mazCtl', '', '', '', { kind: 'seg', opts: [['MatrixM', 'Matrix .PBD'], ['SmoothM', 'Smooth .PBM']] }),
+    { row: [F('mazTool', 'Tool', '', '', { kind: 'sel', opts: [['END MILL', 'END MILL'], ['FCE MILL', 'FCE MILL'], ['BAL EMIL', 'BAL EMIL'], ['OTHER', 'OTHER']] }), F('mazNom', 'NOM-Ø', 'in', 'Blank = tool diameter')] },
+    { row: [F('mazSuf', 'Suffix', '', 'A–Z or blank', { kind: 'text' }), F('mazMat', 'Material', '', 'As in the machine\'s list', { kind: 'text' })] },
+    { row: [F('mazName', 'Program name', '', '', { kind: 'text' }), F('mazInitZ', 'Initial Z', 'in')] },
+    { note: () => 'MANL PRG units. The tool must be in the machine\'s TOOL DATA with the same type, NOM-Ø and suffix.' },
+  ] },
+];
+
+function field(it) {
+  const v = cfg[it.k], kind = it.kind || 'num';
+  if (kind === 'seg') return `${it.label ? `<div class="f"><span>${esc(it.label)}</span></div>` : ''}<div class="seg" data-k="${it.k}">${it.opts.map(([val, l]) => `<button type="button" data-v="${esc(val)}" class="${v === val ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>${it.hintFn ? `<p class="note" data-hint="${it.k}">${esc(it.hintFn(cfg))}</p>` : ''}`;
+  if (kind === 'chk') return `<label class="chk"><input type="checkbox" data-k="${it.k}" ${v ? 'checked' : ''}>${esc(it.label)}</label>`;
+  const hint = it.hintFn ? it.hintFn(cfg) : it.hint;
+  const head = `<span>${esc(it.label)}${it.unit ? `<em>${esc(it.unit)}</em>` : ''}</span>`;
+  const ctl = kind === 'sel'
+    ? `<select data-k="${it.k}">${it.opts.map(([val, l]) => `<option value="${esc(val)}" ${v === val ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`
+    : `<input type="text" inputmode="${kind === 'text' ? 'text' : 'decimal'}" data-k="${it.k}" value="${esc(v == null ? '' : v)}"${it.auto ? ` placeholder="${esc(String(autoNum(it.k)))}" data-auto="${it.k}"` : ''} autocomplete="off" spellcheck="false">`;
+  return `<label class="f">${head}${ctl}${hint ? `<span class="hint" data-hint="${it.k}">${esc(hint)}</span>` : ''}</label>`;
+}
+// construction geometry: never machined; drawn light blue; points snap to it
+const CONS_T = { point: { name: 'Point', f: [['x', 'X'], ['y', 'Y']] }, line: { name: 'Line (point, angle)', f: [['x', 'X'], ['y', 'Y'], ['a', 'Angle °']] },
+  line2: { name: 'Line (two points)', f: [['x1', 'X1'], ['y1', 'Y1'], ['x2', 'X2'], ['y2', 'Y2']] }, circle: { name: 'Circle', f: [['x', 'X'], ['y', 'Y'], ['d', 'Ø']] } };
+function consHtml() {
+  const list = (cfg.cons || []).map((g, i) => { const T = CONS_T[g.t]; if (!T) return ''; return `<div class="r" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px"><b style="min-width:108px;color:#2f7fb8">${i + 1}. ${T.name}</b>${T.f.map(([k, l]) => `<label style="display:flex;gap:3px;align-items:center">${l}<input data-cg="${i}:${k}" value="${esc(f4(+g[k] || 0))}" inputmode="decimal" style="width:62px;border:1px solid var(--line2);border-radius:5px;padding:3px 6px;font-size:13px"></label>`).join('')}<button class="link" data-cgdel="${i}" title="Delete">×</button></div>`; }).join('');
+  return `${list || '<p class="note">None yet.</p>'}<div class="btns">${Object.entries(CONS_T).map(([t, T]) => `<button type="button" class="btn sm" data-cgadd="${t}">+ ${T.name}</button>`).join('')}</div>
+    <p class="note">Lines run endlessly. Never machined. While drawing or dragging, points snap to construction points, centres and crossings, then onto the lines and circles (and to your shapes' points). Or place them with the Construction tools above the preview.</p>`;
+}
+function consChanged(rerender) { save(); if (rerender) renderForm(); drawPlot(); }
+$('form').addEventListener('input', e => { const t = e.target; if (t.dataset.cg === undefined) return; const [i, k] = t.dataset.cg.split(':'), g = cfg.cons[+i], v = parseFloat(t.value); if (g && isFinite(v)) { g[k] = v; consChanged(false); } });
+$('form').addEventListener('click', e => {
+  const t = e.target;
+  if (t.dataset.cgadd) { const g = { point: { t: 'point', x: 0, y: 0 }, line: { t: 'line', x: 0, y: 0, a: 0 }, line2: { t: 'line2', x1: 0, y1: 0, x2: 1, y2: 1 }, circle: { t: 'circle', x: 0, y: 0, d: 1 } }[t.dataset.cgadd]; cfg.cons = (cfg.cons || []).concat([g]); consChanged(true); }
+  else if (t.dataset.cgdel !== undefined) { cfg.cons.splice(+t.dataset.cgdel, 1); consChanged(true); }
+});
+// moving work zero: every point and coordinate shifts so the chosen spot becomes X0 Y0
+const ORG = { tl: [0, 1], tc: [0.5, 1], tr: [1, 1], ml: [0, 0.5], c: [0.5, 0.5], mr: [1, 0.5], bl: [0, 0], bc: [0.5, 0], br: [1, 0] };
+const ORG_NAME = { tl: 'top left', tc: 'top middle', tr: 'top right', ml: 'middle left', c: 'centre', mr: 'middle right', bl: 'bottom left', bc: 'bottom middle', br: 'bottom right' };
+function originHtml() {
+  const b = custom() && cfg.shapes.length ? HEMGeo.shapesBox(cfg.shapes) : null;
+  const grid = b ? `<div class="r" style="display:flex;gap:10px;align-items:center"><div class="ogrid">${Object.keys(ORG).map(k => `<button type="button" data-org="${k}" title="X0 Y0 at the shapes' ${ORG_NAME[k]}">${k === 'c' ? '·' : ''}</button>`).join('')}</div><span class="note">X0 Y0 at a corner, edge or the centre of your shapes' extents (${f4(b[2] - b[0])} × ${f4(b[3] - b[1])})</span></div>` : '';
+  return `${grid}<div class="row"><label class="f"><span>New X0 at X<em>in</em></span><input data-og="oX" value="${esc(ui.oX)}" inputmode="decimal"></label><label class="f"><span>New Y0 at Y<em>in</em></span><input data-og="oY" value="${esc(ui.oY)}" inputmode="decimal"></label></div>
+    <div class="btns"><button type="button" class="btn sm" id="oApply">Move X0 Y0 here</button><button type="button" class="btn sm${ui.pickOrigin ? ' on' : ''}" id="oPick">${ui.pickOrigin ? 'Click the preview…' : 'Pick it on the preview'}</button></div>
+    <p class="note">Every point${custom() ? ' of every shape' : ''} and every position (centre, slot ends, start point) shifts so that spot becomes X0 Y0; nothing moves on the part.</p>`;
+}
+function applyOrigin(x, y) {
+  if (!isFinite(x) || !isFinite(y) || (Math.abs(x) < 1e-9 && Math.abs(y) < 1e-9)) return;
+  cfg = HEM.moveOrigin(cfg, x, y); ui.oX = '0'; ui.oY = '0'; ui.pickOrigin = false;
+  save(); ui.fitNext = true; renderForm(); renderTools(); update();
+  const m = $('openMsg'); m.hidden = false; m.style.color = 'var(--finish)';
+  m.textContent = 'Work zero moved to what was X' + f4(x) + ' Y' + f4(y) + ': every point shifted by X' + f4(-x) + ' Y' + f4(-y) + '.';
+}
+$('form').addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.org) { const b = HEMGeo.shapesBox(cfg.shapes); if (b) { const o = ORG[t.dataset.org]; applyOrigin(+(b[0] + (b[2] - b[0]) * o[0]).toFixed(5), +(b[1] + (b[3] - b[1]) * o[1]).toFixed(5)); } }
+  else if (t.id === 'oApply') applyOrigin(num(ui.oX, NaN), num(ui.oY, NaN));
+  else if (t.id === 'oPick') { ui.pickOrigin = !ui.pickOrigin; ui.pickEntry = false; renderForm(); renderTools(); }
+});
+// the end mills saved in the Feeds and Speeds app's tool list (kept in this browser)
+function feedsTools() { try { return (JSON.parse(localStorage.getItem('feeds-list-v1')) || []).filter(t => t && t.cfg && (t.cfg.tool === 'endmill' || !t.cfg.tool)); } catch (e) { return []; } }
+$('form').addEventListener('change', e => {
+  if (e.target.id !== 'feedsTool' || e.target.value === '') return;
+  const t = feedsTools()[+e.target.value]; if (!t) return; const c = t.cfg;
+  const take = { toolD: c.D, flutes: c.Z, loc: c.loc, stick: c.stick, mat: HEM.MATERIALS[c.mat] ? c.mat : cfg.mat, coating: HEM.COATINGS[c.coating] ? c.coating : 'auto' };
+  for (const [k, v] of Object.entries(take)) if (v !== undefined && v !== '') cfg[k] = String(v);
+  save(); renderForm(); schedule();
+  const m = $('openMsg'); m.hidden = false; m.style.color = 'var(--finish)'; m.textContent = 'Tool ' + t.name + ' taken from the Feeds and Speeds list.';
+});
+function renderForm() {
+  const shown = it => (!it.show || it.show(cfg)) && (!ui.drawOnly || it.draw);
+  $('form').innerHTML = SECTIONS.filter(s => (!s.show || s.show(cfg)) && s.items.some(shown)).map(s => `<section><h2>${esc(ui.drawOnly && s.h === 'Your shape' ? 'Shapes' : s.h)}</h2>${s.items.filter(shown).map(it => {
+    if (it.shapes) return '<div id="shapes"></div>';
+    if (it.origin) return originHtml();
+    if (it.feedsList) { const L = feedsTools(); return L.length ? `<label class="f"><span>From the Feeds and Speeds tool list</span><select id="feedsTool"><option value="">Pick a tool…</option>${L.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('')}</select><span class="hint">Takes its diameter, flutes, flute length, stick-out, material and coating.</span></label>` : ''; }
+    if (it.cons) return consHtml();
+    if (it.pick) return `<div class="btns"><button type="button" class="btn sm${ui.pickEntry ? ' on' : ''}" id="pickEntry">${ui.pickEntry ? 'Click the preview…' : 'Pick the start on the preview'}</button>${cfg.entryOn ? '<button type="button" class="btn sm" id="clearEntry">Automatic</button>' : ''}</div>`;
+    if (it.note) { const t = it.note(cfg); return t ? `<p class="note">${esc(t)}</p>` : ''; }
+    if (it.row) return `<div class="row">${it.row.map(field).join('')}</div>${it.hint ? `<p class="note">${esc(it.hint)}</p>` : ''}`;
+    return field(it);
+  }).join('')}</section>`).join('');
+  renderShapes();
+}
+const LAYOUT_KEYS = new Set(['coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+function set(k, v) {
+  const was = cfg[k];
+  cfg[k] = v;
+  if (k === 'passes') cfg.finish = v !== 'rough';
+  if (k === 'mat' || k === 'coating' || k === 'toolD') document.querySelectorAll('[data-auto]').forEach(el => { el.placeholder = String(autoNum(el.dataset.auto)); });
+  save();
+  if (LAYOUT_KEYS.has(k)) renderForm();
+  else document.querySelectorAll('[data-hint]').forEach(el => { const it = findItem(el.dataset.hint); if (it && it.hintFn) el.textContent = it.hintFn(cfg); });
+  if (k === 'op' && was !== v) { ui.fitNext = true; drawing = null; }
+  if (k === 'op' || k === 'cop') renderTools();
+  schedule();
+}
+function findItem(k) { for (const s of SECTIONS) for (const it of s.items) { if (it.k === k) return it; if (it.row) for (const r of it.row) if (r.k === k) return r; } return null; }
+$('form').addEventListener('input', e => { const t = e.target; if (t.closest('#shapes')) return; const k = t.dataset.k; if (!k) return; set(k, t.type === 'checkbox' ? t.checked : t.value); });
+$('form').addEventListener('change', e => { const t = e.target; if (t.closest('#shapes')) return; if (t.tagName === 'SELECT' && t.dataset.k) set(t.dataset.k, t.value); });
+$('form').addEventListener('click', e => {
+  if (e.target.id === 'pickEntry') { ui.pickEntry = !ui.pickEntry; renderForm(); renderTools(); return; }
+  if (e.target.id === 'clearEntry') { ui.pickEntry = false; set('entryOn', false); return; }
+  const b = e.target.closest('.seg button'); if (!b || b.closest('#shapes')) return; set(b.parentElement.dataset.k, b.dataset.v);
+});
+
+// ---------------------------------------------------------------- shapes: list and point tables
+const MAXROWS = 60;
+function shapesChanged(opts) { save(); if (!opts || !opts.keepList) renderShapes(); const h = document.querySelector('[data-hint=stockM]'), it = findItem('stockM'); if (h && it) h.textContent = it.hintFn(cfg); schedule(); }
+function renderShapes() {
+  const el = $('shapes'); if (!el) return;
+  const list = cfg.shapes.map((s, i) => {
+    const many = s.pts.length > MAXROWS && !ui.open[i];
+    const openCell = (p, j) => s.closed ? `<td style="text-align:center"><input type="checkbox" data-open="${i}:${j}" ${+p[4] ? 'checked' : ''} title="The edge from this point to the next is open: air beyond it, no wall (pockets)" style="width:15px;height:15px;accent-color:#b85c00"></td>` : '';
+    const cell = (p, j, k) => { const off = k === 3 && !s.closed && j === s.pts.length - 1, v = p[k]; return `<td><input data-s="${i}" data-p="${j}" data-c="${k}" value="${off || !v && k >= 2 ? '' : esc(v === undefined ? '' : f4(v))}" inputmode="decimal"${off ? ' disabled placeholder="—"' : k === 3 ? ' placeholder="line"' : k === 2 ? ' placeholder="0"' : ''}></td>`; };
+    const rows = many ? '' : `<table class="pts"><thead><tr><th></th><th>X</th><th>Y</th><th title="Rounds the corner at this point (between two straight segments)">Fillet R</th><th title="The segment to the next point: blank = straight, + radius = counter-clockwise arc (G3), − radius = clockwise (G2)">Arc R ±</th>${s.closed ? '<th title="Open edge (pockets): air beyond it, no wall">Open</th>' : ''}<th></th></tr></thead><tbody>${s.pts.map((p, j) =>
+      `<tr class="${ui.sel === i && ui.selPt === j ? 'sel' : ''}"><td>${j + 1}</td>${[0, 1, 2, 3].map(k => cell(p, j, k)).join('')}${openCell(p, j)}<td><button data-del="${i}:${j}" title="Delete point">×</button></td></tr>`).join('')}</tbody></table>
+      <div class="btns"><button class="link" data-addpt="${i}">+ Add point</button></div>`;
+    return `<div class="shape${ui.sel === i ? ' sel' : ''}${ui.bulk.has(i) ? ' bulk' : ''}"><div class="hd"><input type="checkbox" data-bulk="${i}" ${ui.bulk.has(i) ? 'checked' : ''} title="Select for bulk edit (or Shift+click the shape on the preview)" style="width:15px;height:15px;accent-color:#7b3fb5"><span data-pick="${i}">Shape ${i + 1} · ${s.closed ? 'closed' : 'open'} · ${s.pts.length} pts${s.cut === false ? ' · <b style="color:#6b7780">CAD only</b>' : ''}</span>
+      <label class="chk" style="font-weight:400;font-size:13px" title="Untick to keep this shape in the drawing but leave it out of the toolpath"><input type="checkbox" data-cut="${i}" ${s.cut === false ? '' : 'checked'}>Machine</label>
+      <label class="chk" style="font-weight:400;font-size:13px"><input type="checkbox" data-closed="${i}" ${s.closed ? 'checked' : ''}>Closed</label>
+      <button class="btn sm${ui.txt[i] ? ' on' : ''}" data-txt="${i}" title="Edit or paste this shape's points as text">Text</button>
+      <button class="btn sm" data-delshape="${i}" title="Delete this shape">Delete</button></div>
+      ${ui.txt[i] ? txtBox('s' + i, HEMGeo.shapesToText([s]).replace(/^# .*\n/, ''), Math.min(18, s.pts.length + 2)) : many ? `<button class="link" data-openpts="${i}">Show all ${s.pts.length} points</button>` : rows}</div>`;
+  }).join('');
+  const nb = ui.bulk.size, bk = ui.bk, bi = k => `<input data-bk="${k}" value="${esc(bk[k])}" inputmode="decimal">`;
+  const all = `<div class="btns"><button type="button" class="btn sm${ui.txtAll ? ' on' : ''}" id="txtAllBtn" title="Every shape's points as text: type, paste from a spreadsheet or CAD list, or copy them out">Edit all shapes as text</button></div>` +
+    (ui.txtAll ? txtBox('all', cfg.shapes.length ? HEMGeo.shapesToText(cfg.shapes) : '# shape 1 closed\n', 14) : '');
+  const bulk = cfg.shapes.length ? `<div class="bulkbox"><div class="r"><b style="color:#5b2d8a">${nb ? nb + ' selected' : 'Move / rotate / scale'}</b><button class="link" id="bulkAll">Select all</button>${nb ? '<button class="link" id="bulkNone">None</button>' : '<span class="note">tick shapes, or Shift+click them on the preview</span>'}</div>
+    ${nb ? `<div class="r">Move X ${bi('dx')} Y ${bi('dy')} <button class="btn sm" id="bMove">Move</button><button class="btn sm" id="bDup" title="Copies, moved by X and Y">Duplicate</button></div>
+    <div class="r">Rotate ${bi('ang')}° <button class="btn sm" id="bRot">Rotate</button> Scale × ${bi('k')} <button class="btn sm" id="bScale">Scale</button></div>
+    <div class="r"><button class="btn sm" id="bFlipX">Flip left–right</button><button class="btn sm" id="bFlipY">Flip up–down</button><span class="note">about their centre</span></div>
+    <div class="r">Fillet R ${bi('fr')} <button class="btn sm" id="bFillet">Set on every corner</button></div>
+    <div class="r">Offset ${bi('off')} <button class="btn sm" id="bOffset" title="New shapes this far out (+) or in (−); open paths: to the left (+) or right (−)">Offset (new shapes)</button></div>
+    <div class="r"><button class="btn sm" id="bExtend" title="Open paths: run their end segments on to the nearest line, circle or shape">Extend ends</button><button class="btn sm" id="bTrim" title="Open paths: cut their end segments back to the nearest line, circle or shape they cross">Trim ends</button><button class="btn sm" id="bDel" style="margin-left:auto">Delete</button></div>` : ''}</div>` : '';
+  el.innerHTML = `<div style="display:flex;flex-direction:column;gap:8px">${all}${bulk}${list || '<p class="note">No shapes yet. Pick Draw closed or Draw path above the preview and click to place points.</p>'}
+    <div class="btns"><button class="btn sm" id="newShape">+ New shape</button><button class="btn sm" id="pasteBtn">Paste points…</button>
+    <label class="btn sm">Import DXF…<input id="dxfIn" type="file" accept=".dxf" hidden></label>
+    <select id="dxfUnits" class="btn sm" title="DXF units"><option value="auto">DXF units: auto</option><option value="in">inch</option><option value="mm">mm</option></select></div>
+    <div id="pasteBox" hidden><textarea id="pasteText" rows="5" placeholder="One point per line: X, Y  or  X, Y, fillet R, arc R" style="font:13px 'IBM Plex Mono',Consolas,monospace"></textarea>
+    <div class="btns" style="margin-top:6px"><button class="btn sm primary" id="pasteClosed">Add as closed shape</button><button class="btn sm" id="pasteOpen">Add as open path</button></div></div>
+    <p class="msg" id="shapeMsg" hidden></p>
+    <p class="note">To type or paste many points at once, use <b>Text</b> on a shape or <b>Edit all shapes as text</b>. Points are inches from work zero. Arc R is the segment to the next point: + counter-clockwise, − clockwise, blank straight; an arc goes the short way (180° at most). Fillets round corners between straight segments. On the preview: click to add, drag to move, drag a segment's middle handle to bend it into an arc, Alt+click an edge to insert. Click a point or a segment to edit it in the box under the preview (a segment's ends, length, angle, straight or arc, radius); Delete removes it: a closed shape opens where a segment goes, an open path splits in two. <b>Right-click</b> a point, segment or shape for everything else.</p></div>`;
+  $('dxfUnits').value = cfg.dxfUnits || 'auto';
+  renderSegEdit();
+}
+// points as text: one per line, X, Y [, fillet R, arc R, open]; commas, tabs (a spreadsheet paste) or spaces
+function txtBox(key, text, rows) {
+  return `<div class="txtbox" data-tbox="${key}"><textarea rows="${rows}" spellcheck="false" style="font:13px 'IBM Plex Mono',Consolas,monospace;width:100%">${esc(text)}</textarea>
+    <div class="btns" style="margin-top:6px"><button type="button" class="btn sm primary" data-tapply="${key}">Apply</button><button type="button" class="btn sm" data-tcopy="${key}">Copy</button><button type="button" class="btn sm" data-tcancel="${key}">Cancel</button>
+    <span class="note">X, Y, fillet R, arc R (+ ccw / − cw), open (1) — only X and Y needed${key === 'all' ? '; # shape 2 open starts the next shape' : ''}</span></div>
+    <p class="msg" data-tmsg="${key}" hidden></p></div>`;
+}
+$('form').addEventListener('click', e => {
+  const t = e.target, d = t.dataset;
+  if (t.id === 'txtAllBtn') { ui.txtAll = !ui.txtAll; renderShapes(); return; }
+  if (d.txt !== undefined) { ui.txt[+d.txt] = !ui.txt[+d.txt]; renderShapes(); return; }
+  const key = d.tapply || d.tcopy || d.tcancel; if (key === undefined) return;
+  const box = t.closest('[data-tbox]'), ta = box.querySelector('textarea'), msg = box.querySelector('[data-tmsg]');
+  if (d.tcancel !== undefined) { if (key === 'all') ui.txtAll = false; else delete ui.txt[+key.slice(1)]; renderShapes(); return; }
+  if (d.tcopy !== undefined) { ta.select(); (navigator.clipboard ? navigator.clipboard.writeText(ta.value) : Promise.resolve(document.execCommand('copy'))).then(() => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Copy'; }, 1200); }); return; }
+  // apply: nothing changes unless every line reads
+  const i = key === 'all' ? -1 : +key.slice(1), own = i >= 0 ? cfg.shapes[i] : null;
+  const r = HEMGeo.shapesFromText(ta.value, own ? own.closed : true);
+  if (r.errors.length) { msg.hidden = false; msg.textContent = 'Line' + (r.errors.length > 1 ? 's ' : ' ') + r.errors.slice(0, 5).map(x => x.line + ' ("' + x.text.trim().slice(0, 30) + '")').join(', ') + (r.errors.length > 5 ? '…' : '') + ' can\'t be read. Nothing was changed.'; return; }
+  if (!r.shapes.length) { msg.hidden = false; msg.textContent = 'No points found. Nothing was changed.'; return; }
+  if (i < 0) { cfg.shapes = r.shapes; ui.txtAll = false; ui.bulk.clear(); ui.selSeg = null; ui.selCon = null; ui.sel = null; ui.selPt = null; ui.fitNext = true; }
+  else {
+    // a header line may say closed or open; otherwise the shape stays what it was
+    if (!/^\s*(#|shape|path|closed|open)/im.test(ta.value)) r.shapes.forEach(sh => { sh.closed = own.closed; });
+    cfg.shapes.splice(i, 1, ...r.shapes); delete ui.txt[i]; ui.bulk.clear(); ui.selSeg = null; ui.selCon = null; ui.sel = i; ui.selPt = null;
+  }
+  shapesChanged(); renderForm();                          // open edges may have come or gone: the settings shown change
+  const m = $('shapeMsg'); if (m) { m.hidden = false; m.style.color = 'var(--finish)'; m.textContent = r.shapes.reduce((n, sh) => n + sh.pts.length, 0) + ' points in ' + r.shapes.length + ' shape' + (r.shapes.length > 1 ? 's' : '') + ' applied.'; }
+});
+// bulk edit: the selected shapes, together about their common centre
+function bulkApply(fn) {
+  const idx = [...ui.bulk].filter(i => cfg.shapes[i]).sort((a, b) => a - b); if (!idx.length) return;
+  const sel = idx.map(i => cfg.shapes[i]), b = HEMGeo.shapesBox(sel) || [0, 0, 0, 0], c = [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2];
+  const out = fn(sel, c); if (!out) return;
+  idx.forEach((i, k) => { cfg.shapes[i] = out[k]; });
+  shapesChanged();
+}
+$('form').addEventListener('input', e => { const t = e.target; if (t.dataset.bk !== undefined) ui.bk[t.dataset.bk] = t.value; if (t.dataset.og !== undefined) ui[t.dataset.og] = t.value; });
+$('form').addEventListener('click', e => {
+  const id = e.target.id, bk = ui.bk, n = (k, d) => num(bk[k], d);
+  if (id === 'bulkAll') { ui.bulk = new Set(cfg.shapes.map((_, i) => i)); renderShapes(); drawPlot(); }
+  else if (id === 'bulkNone') { ui.bulk.clear(); renderShapes(); drawPlot(); }
+  else if (id === 'bMove') bulkApply(sel => HEMGeo.moveShapes(sel, n('dx', 0), n('dy', 0)));
+  else if (id === 'bRot') bulkApply((sel, c) => HEMGeo.rotateShapes(sel, n('ang', 0), c));
+  else if (id === 'bScale') bulkApply((sel, c) => n('k', 1) > 0 ? HEMGeo.scaleShapes(sel, n('k', 1), c) : null);
+  else if (id === 'bFlipX') bulkApply((sel, c) => HEMGeo.mirrorShapes(sel, 'x', c));
+  else if (id === 'bFlipY') bulkApply((sel, c) => HEMGeo.mirrorShapes(sel, 'y', c));
+  else if (id === 'bFillet') bulkApply(sel => sel.map(sh => ({ ...sh, pts: sh.pts.map(p => { const q = p.slice(); while (q.length < 3) q.push(0); q[2] = Math.abs(n('fr', 0)); return q; }) })));
+  else if (id === 'bOffset') {
+    const idx = [...ui.bulk].filter(i => cfg.shapes[i]).sort((a, b) => a - b), made = HEMGeo.offsetShapes(idx.map(i => cfg.shapes[i]), n('off', 0));
+    const m = $('shapeMsg'); if (!made.length) { if (m) { m.hidden = false; m.style.color = ''; m.textContent = 'Nothing left after offsetting by ' + bk.off + ': the shapes shrink away.'; } return; }
+    const start = cfg.shapes.length; cfg.shapes.push(...made); ui.bulk = new Set(made.map((_, k) => start + k)); shapesChanged();
+  } else if (id === 'bExtend' || id === 'bTrim') {
+    const idx = [...ui.bulk].filter(i => cfg.shapes[i] && !cfg.shapes[i].closed);
+    idx.forEach(i => { cfg.shapes[i] = HEMGeo.extendEnds(cfg.shapes[i], cfg.shapes.filter((_, j) => j !== i), cfg.cons || [], id === 'bTrim'); });
+    shapesChanged();
+  }
+  else if (id === 'bDup') {
+    const idx = [...ui.bulk].filter(i => cfg.shapes[i]).sort((a, b) => a - b);
+    const copies = HEMGeo.moveShapes(idx.map(i => cfg.shapes[i]), n('dx', 0), n('dy', 0));
+    const start = cfg.shapes.length; cfg.shapes.push(...copies); ui.bulk = new Set(copies.map((_, k) => start + k)); shapesChanged();
+  } else if (id === 'bDel') {
+    if (!confirm('Delete the ' + ui.bulk.size + ' selected shape' + (ui.bulk.size > 1 ? 's' : '') + '?')) return;
+    cfg.shapes = cfg.shapes.filter((_, i) => !ui.bulk.has(i)); ui.bulk.clear(); ui.selSeg = null; ui.selCon = null; ui.sel = null; ui.selPt = null; shapesChanged();
+  }
+});
+$('form').addEventListener('change', e => { const t = e.target; if (t.dataset.bulk !== undefined) { const i = +t.dataset.bulk; if (t.checked) ui.bulk.add(i); else ui.bulk.delete(i); renderShapes(); drawPlot(); } });
+$('form').addEventListener('input', e => {
+  const t = e.target; if (!t.closest('#shapes') || t.dataset.s === undefined) return;
+  const s = cfg.shapes[+t.dataset.s], p = s && s.pts[+t.dataset.p]; if (!p) return;
+  const v = t.value.trim(), c = +t.dataset.c;
+  if (c === 2) p[2] = Math.abs(num(v, 0));
+  else if (c === 3) { while (p.length < 3) p.push(0); p[3] = num(v, 0); }
+  else if (isFinite(parseFloat(v))) p[c] = parseFloat(v); else return;
+  ui.selSeg = null; ui.selCon = null; ui.sel = +t.dataset.s; ui.selPt = +t.dataset.p;
+  shapesChanged({ keepList: true });
+});
+$('form').addEventListener('click', e => {
+  const t = e.target;
+  if (!t.closest('#shapes')) return;
+  const d = t.dataset;
+  if (d.del) { const [i, j] = d.del.split(':').map(Number); cfg.shapes[i].pts.splice(j, 1); if (cfg.shapes[i].pts.length === 0) cfg.shapes.splice(i, 1); ui.selPt = null; shapesChanged(); }
+  else if (d.addpt !== undefined) { const s = cfg.shapes[+d.addpt], l = s.pts[s.pts.length - 1] || [0, 0, 0]; s.pts.push([+(l[0] + 0.5).toFixed(4), l[1], 0]); shapesChanged(); }
+  else if (d.delshape !== undefined) { cfg.shapes.splice(+d.delshape, 1); ui.selSeg = null; ui.selCon = null; ui.sel = null; ui.selPt = null; ui.bulk.clear(); shapesChanged(); }
+  else if (d.pick !== undefined) { ui.selSeg = null; ui.selCon = null; ui.sel = +d.pick; ui.selPt = null; renderShapes(); drawPlot(); }
+  else if (d.openpts !== undefined) { ui.open[+d.openpts] = true; renderShapes(); }
+  else if (t.id === 'newShape') { cfg.shapes.push({ closed: cfg.cop !== 'path', pts: [[0, 0, 0], [1, 0, 0], [1, 1, 0]] }); ui.selSeg = null; ui.selCon = null; ui.sel = cfg.shapes.length - 1; shapesChanged(); }
+  else if (t.id === 'pasteBtn') { $('pasteBox').hidden = !$('pasteBox').hidden; }
+  else if (t.id === 'pasteClosed' || t.id === 'pasteOpen') {
+    const pts = $('pasteText').value.split(/\r?\n/).map(l => l.trim().split(/[\s,;]+/).map(parseFloat)).filter(a => a.length >= 2 && isFinite(a[0]) && isFinite(a[1])).map(a => [a[0], a[1], isFinite(a[2]) ? Math.abs(a[2]) : 0, isFinite(a[3]) ? a[3] : 0]);
+    const msg = $('shapeMsg');
+    if (pts.length < 2) { msg.hidden = false; msg.textContent = 'Found fewer than two points. Put one point per line: X, Y (and a fillet radius if you like).'; return; }
+    cfg.shapes.push({ closed: t.id === 'pasteClosed' && pts.length >= 3, pts }); ui.selSeg = null; ui.selCon = null; ui.sel = cfg.shapes.length - 1; ui.fitNext = true; shapesChanged();
+  }
+});
+$('form').addEventListener('change', async e => {
+  const t = e.target;
+  if (t.dataset.closed !== undefined) { cfg.shapes[+t.dataset.closed].closed = t.checked; shapesChanged(); }
+  if (t.dataset.cut !== undefined) { const sh = cfg.shapes[+t.dataset.cut]; if (t.checked) delete sh.cut; else sh.cut = false; shapesChanged(); }
+  if (t.dataset.open !== undefined) { const [i, j] = t.dataset.open.split(':').map(Number), p = cfg.shapes[i].pts[j]; while (p.length < 4) p.push(0); p[4] = t.checked ? 1 : 0; if (!t.checked) p.length = 4; ui.selSeg = null; ui.selCon = null; ui.sel = i; ui.selPt = j; shapesChanged(); renderForm(); }
+  if (t.id === 'dxfUnits') { cfg.dxfUnits = t.value; save(); }
+  if (t.id === 'dxfIn' && t.files[0]) {
+    const fl = t.files[0]; t.value = '';
+    try {
+      const D = HEMGeo.dxfShapes(await fl.text(), cfg.dxfUnits || 'auto');
+      if (!D.shapes.length) throw new Error('no lines, arcs, circles or polylines in it');
+      cfg.shapes.push(...D.shapes); ui.selSeg = null; ui.selCon = null; ui.sel = cfg.shapes.length - 1; ui.fitNext = true; shapesChanged();
+      const sk = Object.entries(D.skipped).map(([k, n]) => n + ' ' + k).join(', ');
+      const msg = $('shapeMsg'); msg.hidden = false; msg.style.color = 'var(--mute)';
+      msg.textContent = fl.name + ': ' + D.shapes.length + ' shape' + (D.shapes.length > 1 ? 's' : '') + ' (' + D.shapes.filter(s => s.closed).length + ' closed)' + (sk ? '; skipped ' + sk : '') + '.';
+    } catch (er) { const msg = $('shapeMsg'); msg.hidden = false; msg.style.color = ''; msg.textContent = fl.name + ': ' + er.message; }
+  }
+});
+
+// ---------------------------------------------------------------- drawing tools
+const TOOLS = [['edit', 'Select / move'], ['measure', 'Measure'], ['closed', 'Draw closed'], ['open', 'Draw path'], ['cpoint', '+ Point'], ['cline', '+ Line'], ['chline', '+ Horizontal'], ['cvline', '+ Vertical'], ['caline', '+ At angle'], ['ccircle', '+ Circle']];
+const CTOOL = { cpoint: 'Construction point: click to place', cline: 'Construction line: click two points it passes through', chline: 'Horizontal construction line: click a point it passes through', cvline: 'Vertical construction line: click a point it passes through', caline: 'Construction line at the angle given: click a point it passes through', ccircle: 'Construction circle: click the centre, then a point on it' };
+function renderTools() {
+  $('drawbar').hidden = !custom();
+  $('tools').innerHTML = TOOLS.map(([k, l]) => (k === 'cpoint' ? '<span class="lbl">Construction</span>' : '') + `<button type="button" class="btn sm${ui.tool === k ? ' on' : ''}" data-tool="${k}"${CTOOL[k] ? ' style="border-color:#9cc6e4"' : ''}>${l}</button>`).join('') +
+    (ui.tool === 'closed' || ui.tool === 'open' ? `<span class="seg" style="flex:0 0 auto">${[['line', 'Line (L)'], ['arc', 'Arc 3-point (A)'], ['tangent', 'Tangent arc (T)']].map(([k, l]) => `<button type="button" data-segmode="${k}" class="${ui.segMode === k ? 'on' : ''}">${l}</button>`).join('')}</span>` : '') +
+    (ui.tool === 'caline' ? `<label class="lbl" style="display:flex;gap:4px;align-items:center">Angle <input id="conAng" value="${esc(ui.conAng)}" inputmode="decimal" style="width:60px;border:1px solid var(--line2);border-radius:6px;padding:3px 6px">°</label>` : '') +
+    (ui.tool === 'closed' || ui.tool === 'open' || ui.tool === 'cline' ? `<span class="lbl" style="display:flex;gap:4px;align-items:center" title="From the last point (or the first click): a segment this long at this angle (degrees, 0 = +X, 90 = +Y)">Length <input id="segLen" value="${esc(ui.segLen)}" inputmode="decimal" style="width:62px;border:1px solid var(--line2);border-radius:6px;padding:3px 6px"> Angle <input id="segAng" value="${esc(ui.segAng)}" inputmode="decimal" style="width:56px;border:1px solid var(--line2);border-radius:6px;padding:3px 6px">° <button type="button" class="btn sm" id="segAdd"${anchorPt() ? '' : ' disabled title="Click the start point first"'}>Add</button>${drawing && drawing.pts.length >= 2 ? `<button type="button" class="btn sm primary" id="drawDone" title="${drawing.closed ? 'Close the shape back to its first point' : 'Finish the path (Enter or double-click)'}">${drawing.closed ? 'Close' : 'Finish'}</button>` : ''}</span>` : '') +
+    (ui.tool !== 'edit' ? `<input id="typeIn" placeholder="x,y   @dx,dy   @len<ang" title="Type a point and press Enter: x,y from X0 Y0; @dx,dy from the last point; @length<angle (degrees)" style="width:150px;border:1px solid var(--line2);border-radius:6px;padding:4px 7px;font:12.5px 'IBM Plex Mono',Consolas,monospace">` : '') +
+    `<button type="button" class="btn sm${ui.showNums ? ' on' : ''}" id="numsBtn" title="Number the points on the preview (as in the Dimensions tables)">Numbers</button>` +
+    `<button type="button" class="btn sm" id="undoBtn" title="Undo (Ctrl+Z / ⌘Z)"${hist.u.length ? '' : ' disabled'}>↶ Undo</button><button type="button" class="btn sm" id="redoBtn" title="Redo (Ctrl+Shift+Z / ⌘⇧Z)"${hist.r.length ? '' : ' disabled'}>↷ Redo</button>` +
+    `<button type="button" class="btn sm" id="clearAll">Clear all</button>`;
+  $('snap').value = ui.snap; renderSegEdit();
+  if (ui.pickOrigin) { $('drawbar').hidden = false; if (!custom()) $('tools').innerHTML = ''; $('drawHint').textContent = 'Click the preview where the new X0 Y0 should be · Esc cancels'; $('plot').setAttribute('class', 'draw'); return; }
+  if (ui.pickEntry) { $('drawbar').hidden = false; if (!custom()) $('tools').innerHTML = ''; $('drawHint').textContent = 'Click the preview where the passes should start · Esc cancels'; $('plot').setAttribute('class', 'draw'); return; }
+  if (ui.tool === 'measure') { $('drawHint').textContent = ui.mB ? 'Click to measure again' : ui.mA ? 'Click the second point' : 'Click two points (they snap to points, crossings and construction)'; $('plot').setAttribute('class', 'draw'); return; }
+  if (CTOOL[ui.tool]) { $('drawHint').textContent = CTOOL[ui.tool] + (ui.cpend ? ' (second click)' : '') + ' · Esc cancels'; $('plot').setAttribute('class', 'draw'); return; }
+  $('drawHint').textContent = drawing && drawing.pending ? 'Click a point the arc passes through' : drawing && ui.segMode === 'arc' ? 'Click where the arc ends, then a point on it' + (drawing.closed ? ' · end on the first point to close' : ' · Enter finishes') + ' · Esc cancels' : drawing ? (drawing.closed ? 'Click the first point to close · Esc cancels' : 'Double-click or Enter to finish · Esc cancels') :
+    ui.tool === 'edit' ? 'Click a point, segment or construction to edit its numbers · right-click for more · drag points · Delete removes · drag empty space to pan' : 'Click to place points · Shift locks the angle to 15° steps · drag to pan · wheel zooms';
+  $('plot').setAttribute('class', !custom() ? 'pan' : ui.tool === 'edit' ? 'edit' : 'draw');
+}
+$('tools').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.id === 'undoBtn' || b.id === 'redoBtn') { undo(b.id === 'redoBtn'); return; }
+  if (b.id === 'segAdd') { addLenAng(); return; }
+  if (b.id === 'drawDone') { finishDrawing(); return; }
+  if (b.id === 'numsBtn') { ui.showNums = !ui.showNums; save(); renderTools(); drawPlot(); return; }
+  if (b.dataset.segmode) { ui.segMode = b.dataset.segmode; if (drawing) drawing.pending = null; renderTools(); drawPlot(); return; }
+  if (b.id === 'clearAll') { if (cfg.shapes.length && !confirm('Delete every shape?')) return; cfg.shapes = []; drawing = null; ui.selSeg = null; ui.selCon = null; ui.sel = null; ui.bulk.clear(); shapesChanged(); renderTools(); drawPlot(); return; }
+  finishDrawing(); ui.cpend = null; ui.mA = ui.mB = null; ui.tool = b.dataset.tool; renderTools(); drawPlot();
+});
+$('snap').addEventListener('change', e => { ui.snap = e.target.value; save(); });
+// a typed point, as a click there
+$('tools').addEventListener('input', e => { const id = e.target.id; if (id === 'conAng' || id === 'segLen' || id === 'segAng') { ui[id] = e.target.value; e.target.style.borderColor = ''; } });
+$('tools').addEventListener('keydown', e => {
+  if ((e.target.id === 'segLen' || e.target.id === 'segAng') && e.key === 'Enter') { e.preventDefault(); addLenAng(); return; }
+  if (e.target.id !== 'typeIn' || e.key !== 'Enter') return;
+  e.preventDefault();
+  const last = anchorPt();
+  const p = CAD.parsePoint(e.target.value, last ? [+last[0], +last[1]] : null);
+  if (!p) { e.target.style.borderColor = 'var(--red)'; return; }
+  const first = drawing && drawing.pts[0];
+  clickAt(p.map(v => +v.toFixed(5)), p, !!first && Math.hypot(first[0] - p[0], first[1] - p[1]) < 1e-6);
+  const box = $('typeIn'); if (box) { box.value = ''; box.focus(); }
+});
+// the point the next one is measured from: the last point drawn, the first click of a construction line or circle,
+// or the first point of a measurement
+function anchorPt() {
+  if (ui.tool === 'measure') return ui.mB ? null : ui.mA;
+  if (CTOOL[ui.tool]) return ui.cpend;
+  return drawing && (drawing.pending || drawing.pts[drawing.pts.length - 1]) || null;
+}
+// Length / Angle boxes: the next point that far from the last, at that angle
+function addLenAng() {
+  const L = parseFloat(ui.segLen), A = parseFloat(ui.segAng), a = anchorPt();
+  if (!(L > 0)) { const b = $('segLen'); if (b) { b.style.borderColor = 'var(--red)'; b.focus(); } return; }
+  if (!isFinite(A)) { const b = $('segAng'); if (b) { b.style.borderColor = 'var(--red)'; b.focus(); } return; }
+  if (!a) return;
+  const t = A * Math.PI / 180, p = [+a[0] + L * Math.cos(t), +a[1] + L * Math.sin(t)].map(v => +v.toFixed(5)), first = drawing && drawing.pts[0];
+  clickAt(p, p, !!first && Math.hypot(first[0] - p[0], first[1] - p[1]) < 1e-6);
+  const b = $('segLen'); if (b) { b.focus(); b.select(); }
+}
+// Shift held: the point from the anchor at the nearest 15° (its distance on the snap grid)
+function lockPt(w, p, shift) {
+  const a = shift && anchorPt(); if (!a) return p;
+  const dx = w[0] - a[0], dy = w[1] - a[1], L = Math.hypot(dx, dy); if (L < 1e-9) return p;
+  const st = Math.PI / 12, t = Math.round(Math.atan2(dy, dx) / st) * st, g = num(ui.snap, 0), Ls = g > 0 ? Math.max(g, Math.round(L / g) * g) : L;
+  snapHit = null; return [+a[0] + Ls * Math.cos(t), +a[1] + Ls * Math.sin(t)].map(v => +v.toFixed(5));
+}
+// ---- undo / redo: the drawing (shapes and construction), recorded on every save that changed it
+const hist = { u: [], r: [], last: null };
+const geoNow = () => JSON.stringify({ s: cfg.shapes || [], c: cfg.cons || [] });
+function record() {
+  if (ui.dragging) return;
+  const now = geoNow(); if (hist.last === null) { hist.last = now; return; }
+  if (now === hist.last) return;
+  hist.u.push(hist.last); if (hist.u.length > 200) hist.u.shift(); hist.r = []; hist.last = now; undoButtons();
+}
+function undoButtons() { const u = $('undoBtn'), r = $('redoBtn'); if (u) u.disabled = !hist.u.length; if (r) r.disabled = !hist.r.length; }
+function undo(redo) {
+  const from = redo ? hist.r : hist.u, to = redo ? hist.u : hist.r; if (!from.length) return;
+  to.push(geoNow()); const g = JSON.parse(from.pop());
+  cfg.shapes = g.s; cfg.cons = g.c; hist.last = geoNow();
+  drawing = null; ui.sel = null; ui.selPt = null; ui.selSeg = null; ui.selCon = null; ui.cpend = null; ui.bulk.clear(); ui.txt = {};
+  save(); renderForm(); renderTools(); shapesChanged(); drawPlot();
+}
+// snapping: construction points, centres and crossings, and shapes' points; then onto construction lines and
+// circles; then the grid. noShapes: while dragging a point it must not snap to itself.
+let snapHit = null;
+function snapPt(p, noShapes) {
+  snapHit = null;
+  if (custom() && VIEW) {
+    const hit = HEMGeo.consSnap(p, cfg.cons || [], noShapes ? [] : cfg.shapes, 10 / VIEW.s);
+    if (hit) { snapHit = hit; return hit.p.map(v => +v.toFixed(5)); }
+  }
+  const g = num(ui.snap, 0); return g > 0 ? [Math.round(p[0] / g) * g, Math.round(p[1] / g) * g].map(v => +v.toFixed(6)) : p.map(v => +v.toFixed(4));
+}
+function finishDrawing() {
+  if (!drawing) return;
+  const d = drawing; drawing = null;
+  if (d.pending && !d.closing) d.pts.push([d.pending[0], d.pending[1], 0, 0]);   // an arc left half-drawn ends straight
+  const arcs = d.pts.some(p => p[3]);
+  if (d.pts.length >= (d.closed ? (arcs ? 2 : 3) : 2)) { cfg.shapes.push({ closed: d.closed, pts: d.pts.map(p => [p[0], p[1], 0, p[3] || 0]) }); ui.selSeg = null; ui.selCon = null; ui.sel = cfg.shapes.length - 1; shapesChanged(); }
+  renderTools(); drawPlot();
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !$('ctx').hidden) { closeMenu(); return; }
+  if (e.key === 'Escape' && document.activeElement && document.activeElement.closest && document.activeElement.closest('#segEdit')) { document.activeElement.blur(); SEGACT.done(); return; }
+  if (e.key === 'Escape' && ui.cpend) { ui.cpend = null; renderTools(); drawPlot(); return; }
+  if (e.key === 'Escape' && (ui.pickEntry || ui.pickOrigin)) { ui.pickEntry = false; ui.pickOrigin = false; renderForm(); renderTools(); return; }
+  if (!custom() || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y')) { e.preventDefault(); undo(e.key === 'y' || e.shiftKey); return; }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && ui.selCon != null && cfg.cons && cfg.cons[ui.selCon]) { e.preventDefault(); CONACT.del(ui.selCon); return; }
+  if (e.key === 'Escape' && ui.selCon != null) { CONACT.done(); return; }
+  if (e.key === 'Escape' && drawing) { drawing = null; renderTools(); drawPlot(); }
+  else if (/^[aAlLtT]$/.test(e.key) && (ui.tool === 'closed' || ui.tool === 'open')) { ui.segMode = /a/i.test(e.key) ? 'arc' : /t/i.test(e.key) ? 'tangent' : 'line'; if (drawing) drawing.pending = null; renderTools(); drawPlot(); }
+  else if (e.key === 'Enter' && drawing) finishDrawing();
+  else if ((e.key === 'Delete' || e.key === 'Backspace') && selShape() && (ui.selPt != null || ui.selSeg != null)) {
+    e.preventDefault(); if (ui.selSeg != null) SEGACT.delseg(ui.sel, ui.selSeg); else SEGACT.delpt(ui.sel, ui.selPt);
+  }
+  else if (e.key === 'Escape' && ui.tool === 'edit' && (ui.selPt != null || ui.selSeg != null)) SEGACT.done();
+});
+
+// ---------------------------------------------------------------- generate and show
+let R = null, MZ = {}, G = null, timer = 0;
+function schedule() { clearTimeout(timer); timer = setTimeout(update, custom() ? 150 : 80); }
+// The toolpath is worked out in a worker (made from this page's own library code), so the page never locks up; only
+// the newest answer is used. Where a browser will not make one, it is worked out here as before.
+let worker = null, workerFailed = false, jobId = 0, running = 0, workerUrl = '';
+function getWorker() {
+  if (worker || workerFailed) return worker;
+  try {
+    if (!workerUrl) workerUrl = URL.createObjectURL(new Blob([['lib-clipper', 'lib-geo', 'lib-hem'].map(id => document.getElementById(id).textContent).join('\n;\n') +
+      '\n;self.onmessage = e => { const { id, cfg } = e.data; try { self.postMessage({ id, r: HEM.generate(cfg) }); } catch (err) { self.postMessage({ id, error: String(err && err.message || err) }); } };'], { type: 'text/javascript' }));
+    worker = new Worker(workerUrl);
+    worker.onmessage = e => { running = 0; if (e.data.id === jobId) applyResult(e.data.error ? failed(e.data.error) : e.data.r); };
+    worker.onerror = () => { workerFailed = true; worker = null; running = 0; update(); };
+  } catch (e) { workerFailed = true; worker = null; }
+  return worker;
+}
+// a newer edit while the last one is still being worked out: that answer is no longer wanted, so stop it rather
+// than wait for it
+function send(id) {
+  if (running && worker) { worker.terminate(); worker = null; }
+  const w = getWorker(); if (!w) return false;
+  running = id; w.postMessage({ id, cfg: JSON.parse(JSON.stringify(cfg)) }); return true;
+}
+const failed = msg => ({ cfg, K: HEM.calc(cfg), moves: [], warn: ['Could not make a toolpath: ' + msg], geo: { info: [] }, stats: { feedLen: 0, rapidLen: 0, minutes: 0, box: [Infinity, Infinity, -Infinity, -Infinity] } });
+function applyResult(r) {
+  R = r; $('busy').hidden = true;
+  MZ = {}; G = null;
+  ui.step = null; stop();
+  if (ui.fitNext || !custom()) { fitView(); ui.fitNext = false; }
+  renderTiles(); renderWarn(); renderBadge(); drawPlot(); renderOut();
+}
+function update() {
+  document.body.classList.toggle('drawonly', !!ui.drawOnly);
+  $('plotTitle').textContent = ui.drawOnly ? 'Drawing' : 'Toolpath, top view';
+  $('drawOnly').classList.toggle('on', !!ui.drawOnly);
+  if (ui.drawOnly) {
+    // just the drawing: no toolpath (quick), the preview fits the shapes
+    R = { cfg, K: HEM.calc(cfg), moves: [], warn: [], geo: { info: [] }, stats: { feedLen: 0, rapidLen: 0, minutes: 0, box: [Infinity, Infinity, -Infinity, -Infinity] } };
+    MZ = {}; G = null; ui.step = null; stop();
+    if (ui.fitNext) { fitView(); ui.fitNext = false; }
+    $('info').innerHTML = ''; drawPlot(); renderOut(); return;
+  }
+  const id = ++jobId;
+  if (send(id)) { $('busy').hidden = false; if (!R) { R = failed(''); R.warn = []; } drawPlot(); return; }
+  let r; try { r = HEM.generate(cfg); } catch (e) { r = failed(e.message); }
+  applyResult(r);
+}
+// Rough only or rough + finish, from the moves the program actually makes
+function renderBadge() {
+  const P = HEM.passes(R), cls = P.rough && P.finish ? 'both' : P.rough ? 'rough' : P.finish ? 'fin' : 'none';
+  const dots = (P.rough ? '<i style="background:var(--rough)"></i>' : '') + (P.finish ? '<i style="background:var(--finish)"></i>' : '');
+  const html = dots + (P.label || 'NOTHING TO CUT');
+  const title = P.rough && P.finish ? 'Roughing leaves ' + f4(R.K.finStock) + ' on the wall; the finish pass cuts it to size at full depth.' :
+    P.rough ? 'No finish pass: roughing cuts straight to size. Tick "Finish pass at full depth" to add one.' : P.finish ? 'Finish pass only: the part must already be roughed, with ' + f4(R.K.finStock) + ' left on the wall.' : '';
+  for (const id of ['badge1', 'badge2']) { const b = $(id); b.className = 'badge ' + cls; b.innerHTML = html; b.title = title; }
+}
+const getG = () => G || (G = HEM.toGcode(R, HEM.settingsLines(R.cfg)));
+function getMZ(ctl) {
+  if (MZ[ctl]) return MZ[ctl];
+  try { MZ[ctl] = HEM.toMazatrol(Object.assign({}, R, { cfg: Object.assign({}, R.cfg, { mazCtl: ctl }) }), MACH1); } catch (e) { MZ[ctl] = { error: e.message, warn: [e.message] }; }
+  return MZ[ctl];
+}
+function renderTiles() {
+  const K = R.K, t = [], P = HEM.passes(R);
+  const tile = (k, v, s, bad) => t.push(`<div class="tile${bad ? ' bad' : ''}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`);
+  if (P.finish && !P.rough) {
+    tile('Finish speed', K.fin.rpm + ' <small>RPM</small>', Math.round(K.fin.sfm) + ' SFM' + (K.fin.clamped ? ' (spindle max)' : ''), K.fin.clamped);
+    tile('Finish feed', K.fin.feed + ' <small>ipm</small>', K.fin.fzProg.toFixed(4) + ' in/tooth');
+    tile('Finish stock', f4(K.finStock) + ' <small>in</small>', 'taken off the wall at ' + f4(K.depth) + ' deep' + (R.cfg.spring ? ', + spring pass' : ''));
+    const m = R.stats.minutes;
+    tile('Cycle time', m.toFixed(1) + ' <small>min</small>', Math.round(R.stats.feedLen) + ' in of feed moves');
+    $('tiles').innerHTML = t.join(''); return;
+  }
+  tile('Rough speed', K.rough.rpm + ' <small>RPM</small>', Math.round(K.rough.sfm) + ' SFM' + (K.rough.clamped ? ' (spindle max)' : ''), K.rough.clamped);
+  tile('Rough feed', K.rough.feed + ' <small>ipm</small>', K.rough.fzProg.toFixed(4) + ' in/tooth programmed');
+  tile('Engagement', (+K.ae.toFixed(3)) + ' × ' + (+K.ap.toFixed(3)), Math.round(K.ae / K.D * 1000) / 10 + '% × ' + (K.ap / K.D).toFixed(2) + 'D' + (K.levels > 1 ? ', ' + K.levels + ' levels' : ''));
+  tile('Removal', K.mrr.toFixed(1) + ' <small>in³/min</small>', '≈ ' + K.hpNeed.toFixed(1) + ' hp' + (K.hpMachine ? ' · ' + Math.round(K.hpNeed / K.hpMachine * 100) + '% of machine' : ''), K.hpMachine && K.hpNeed > 0.8 * K.hpMachine);
+  if (R.cfg.finish) tile('Finish', K.fin.rpm + ' / ' + K.fin.feed, 'RPM / ipm, ' + f4(K.finStock) + ' stock');
+  const m = R.stats.minutes;
+  tile('Cycle time', m >= 60 ? Math.floor(m / 60) + 'h ' + Math.round(m % 60) + 'm' : m.toFixed(1) + ' <small>min</small>', Math.round(R.stats.feedLen) + ' in of feed moves');
+  $('tiles').innerHTML = t.join('');
+}
+function renderWarn() {
+  const w = R.warn.slice(), el = $('warn');
+  el.hidden = !w.length;
+  el.innerHTML = w.length ? '<ul>' + w.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : '';
+  $('info').innerHTML = (R.geo.info || []).concat(R.geo.climbNote ? [R.geo.climbNote + (R.cfg.dir === 'conv' ? ' This program is conventional.' : '')] : []).map(x => `<li>${esc(x)}</li>`).join('');
+}
+
+// ---------------------------------------------------------------- plot
+const COLORS = { rough: 'var(--rough)', entry: 'var(--entry)', link: 'var(--link)', finish: 'var(--finish)', rapid: 'var(--rapid)', air: 'var(--air)' };
+const LABELS = { rough: 'Roughing', entry: 'Helix / lead arcs', link: 'Links, loop returns', finish: 'Finish', air: 'Feed in the clear', rapid: 'Rapid' };
+$('legend').innerHTML = Object.keys(LABELS).map(k => `<span><i style="background:${COLORS[k]}"></i>${LABELS[k]}</span>`).join('');
+$('viewSeg').innerHTML = [['all', 'All'], ['rough', 'Rough'], ['finish', 'Finish'], ['none', 'Shape only']].map(([v, l]) => `<button type="button" data-v="${v}">${l}</button>`).join('');
+$('viewSeg').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.view = b.dataset.v; drawPlot(); });
+let VIEW = null, BASE = null, tpCache = {};
+function contentBox() {
+  let bx = R ? R.stats.box.slice() : [Infinity, Infinity, -Infinity, -Infinity];
+  const add = (x, y) => { bx = [Math.min(bx[0], x), Math.min(bx[1], y), Math.max(bx[2], x), Math.max(bx[3], y)]; };
+  const g = R && R.geo;
+  const grow = s => { if (!s) return; if (s.t === 'rr') { add(s.cx - s.A, s.cy - s.B); add(s.cx + s.A, s.cy + s.B); } else if (s.t === 'circle') { add(s.cx - s.r, s.cy - s.r); add(s.cx + s.r, s.cy + s.r); } else if (s.t === 'slot') { for (const p of [s.p1, s.p2]) { add(p[0] - s.w / 2, p[1] - s.w / 2); add(p[0] + s.w / 2, p[1] + s.w / 2); } } else if (s.t === 'polys') s.loops.forEach(L => L.forEach(p => add(p[0], p[1]))); else if (s.t === 'lines') s.lines.forEach(L => L.forEach(p => add(p[0], p[1]))); };
+  if (g) { grow(g.part); grow(g.stock); }
+  if (custom()) cfg.shapes.forEach(s => s.pts.forEach(p => add(+p[0], +p[1])));
+  if (!isFinite(bx[0])) bx = [-3, -2, 3, 2];
+  add(0, 0);
+  return bx;
+}
+function fitView() { ui.zoom = 1; ui.panX = 0; ui.panY = 0; BASE = null; }
+$('fit').onclick = () => { fitView(); drawPlot(); };
+function arcPts(from, m, out) {
+  const r = Math.hypot(from.x - m.cx, from.y - m.cy), a0 = Math.atan2(from.y - m.cy, from.x - m.cx), sw = HEM.arcSweep(m, from) * (m.t === 'G3' ? 1 : -1);
+  const n = Math.max(2, Math.ceil(Math.abs(sw) / (Math.PI / 36)));
+  for (let i = 1; i <= n; i++) { const a = a0 + sw * i / n; out.push([m.cx + r * Math.cos(a), m.cy + r * Math.sin(a)]); }
+}
+function shapeSvg(g, X, Y, s, cls) {
+  if (!g) return '';
+  if (g.t === 'rr') { const r = Math.max(0, Math.min(g.r, g.A, g.B)) * s; return `<rect x="${X(g.cx - g.A)}" y="${Y(g.cy + g.B)}" width="${2 * g.A * s}" height="${2 * g.B * s}" rx="${r}" ${cls}/>`; }
+  if (g.t === 'circle') return `<circle cx="${X(g.cx)}" cy="${Y(g.cy)}" r="${g.r * s}" ${cls}/>`;
+  if (g.t === 'slot') { const [a, b] = [g.p1, g.p2], L = Math.hypot(b[0] - a[0], b[1] - a[1]), ang = Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI; return `<rect x="${X(a[0]) - g.w / 2 * s}" y="${Y(a[1]) - g.w / 2 * s}" width="${(L + g.w) * s}" height="${g.w * s}" rx="${g.w / 2 * s}" transform="rotate(${-ang} ${X(a[0])} ${Y(a[1])})" ${cls}/>`; }
+  if (g.t === 'lines') return g.lines.map(L => `<path d="M${L.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}" fill="none" stroke="var(--ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`).join('');
+  if (g.t === 'polys') return `<path fill-rule="evenodd" d="${g.loops.map(L => 'M' + L.map(p => X(p[0]) + ' ' + Y(p[1])).join('L') + 'Z').join('')}" ${cls}/>`;
+  return '';
+}
+function drawPlot() {
+  if (!R) return;
+  const svg = $('plot'), W = svg.clientWidth || 800, H = svg.clientHeight || 480;
+  document.querySelectorAll('#viewSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === ui.view));
+  if (!BASE || BASE.W !== W || BASE.H !== H) {
+    const bx = contentBox(), pad = 36;
+    BASE = { W, H, s0: Math.min((W - 2 * pad) / Math.max(bx[2] - bx[0], 1e-3), (H - 2 * pad) / Math.max(bx[3] - bx[1], 1e-3)), mx: (bx[0] + bx[2]) / 2, my: (bx[1] + bx[3]) / 2 };
+  }
+  const s = BASE.s0 * ui.zoom, mx = BASE.mx, my = BASE.my;
+  const X = x => +(W / 2 + ui.panX + (x - mx) * s).toFixed(2), Y = y => +(H / 2 + ui.panY - (y - my) * s).toFixed(2);
+  VIEW = { W, H, s, mx, my, X, Y };
+  const moves = R.moves, geo = R.geo, last = ui.step == null ? moves.length : ui.step;
+  const tpKey = [W, H, ui.zoom, ui.panX, ui.panY, ui.view, last, BASE.s0, BASE.mx, BASE.my, custom()].join('|');
+  let d = {}, cur = null;
+  if (tpCache.r === R && tpCache.key === tpKey) { d = tpCache.d; cur = tpCache.cur; }
+  else {
+  let from = null, sec = 'ROUGH';
+  if (ui.view !== 'none') for (let i = 0; i < last && i < moves.length; i++) {
+    const m = moves[i];
+    if (m.t === 'SEC') { sec = m.name; continue; }
+    if (m.x === undefined) continue;
+    const showSec = ui.view === 'all' || (ui.view === 'rough' ? sec === 'ROUGH' : sec === 'FINISH');
+    if (from && !isNaN(from.x) && showSec && !(m.t === 'G0' && Math.abs(m.x - from.x) < 1e-9 && Math.abs(m.y - from.y) < 1e-9)) {
+      const k = m.k || 'rapid', pts = [];
+      if (m.t === 'G2' || m.t === 'G3') arcPts(from, m, pts); else pts.push([m.x, m.y]);
+      d[k] = (d[k] || '') + `M${X(from.x)} ${Y(from.y)}` + pts.map(p => `L${X(p[0])} ${Y(p[1])}`).join('');
+    }
+    from = m; cur = m;
+  }
+  tpCache = { r: R, key: tpKey, d, cur };
+  }
+  const parts = [];
+  // grid when drawing
+  if (custom()) {
+    const g = num(ui.snap, 0) || 0.25, step = g * s < 8 ? g * Math.ceil(8 / (g * s)) : g, maj = [];
+    const x0 = mx + (-W / 2 - ui.panX) / s, x1 = mx + (W / 2 - ui.panX) / s, y0 = my - (H / 2 - ui.panY) / s, y1 = my + (H / 2 + ui.panY) / s;
+    let gd = '', gm = '';
+    if ((x1 - x0) / step < 400) for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) { const major = Math.abs(x - Math.round(x)) < 1e-9; (major ? (gm += `M${X(x)} 0V${H}`) : (gd += `M${X(x)} 0V${H}`)); }
+    if ((y1 - y0) / step < 400) for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) { const major = Math.abs(y - Math.round(y)) < 1e-9; (major ? (gm += `M0 ${Y(y)}H${W}`) : (gd += `M0 ${Y(y)}H${W}`)); }
+    parts.push(`<path d="${gd}" stroke="#eef1f3" stroke-width="1"/><path d="${gm}" stroke="#dfe5e9" stroke-width="1"/>`);
+  }
+  if (geo.air) parts.push(shapeSvg(geo.air, X, Y, s, 'fill="rgba(184,92,0,.07)" stroke="none"'));
+  parts.push(shapeSvg(geo.stock, X, Y, s, geo.part && geo.part.t === 'lines' ? 'fill="rgba(154,166,174,.18)" stroke="var(--stock)" stroke-dasharray="6 4" stroke-width="1.2"' : 'fill="none" stroke="var(--stock)" stroke-dasharray="6 4" stroke-width="1.2"'));
+  const pocketish = geo.part && (geo.part.hole || geo.part.t === 'slot' || geo.part.pocket);
+  parts.push(shapeSvg(geo.part, X, Y, s, pocketish ? 'fill="#fff" stroke="var(--ink)" stroke-width="1.5"' : 'fill="var(--part)" stroke="var(--ink)" stroke-width="1.5"'));
+  parts.push(`<g stroke="var(--red)" stroke-width="1.5"><line x1="${X(0) - 10}" y1="${Y(0)}" x2="${X(0) + 10}" y2="${Y(0)}"/><line x1="${X(0)}" y1="${Y(0) - 10}" x2="${X(0)}" y2="${Y(0) + 10}"/></g><text x="${X(0) + 6}" y="${Y(0) + 16}" font-size="11" fill="var(--red)">X0 Y0</text>`);
+  for (const k of ['air', 'rapid', 'link', 'entry', 'rough', 'finish']) if (d[k]) parts.push(`<path d="${d[k]}" fill="none" stroke="${COLORS[k]}" stroke-width="${k === 'rough' || k === 'finish' ? 1.3 : 1}" ${k === 'rapid' ? 'stroke-dasharray="5 4"' : k === 'air' ? 'stroke-dasharray="2 3"' : ''} stroke-linejoin="round" opacity="${custom() ? 0.8 : 1}"/>`);
+  // your shapes: outline, points, the one being drawn
+  if (custom()) {
+    cfg.shapes.forEach((sh, i) => {
+      const sel = ui.sel === i, P = sh.pts;
+      if (P.length < 1) return;
+      const fp = HEMGeo.filleted({ closed: sh.closed, pts: P });
+      parts.push(`<path d="M${fp.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}${sh.closed ? 'Z' : ''}" fill="none" stroke="${ui.bulk.has(i) ? '#7b3fb5' : sh.cut === false ? '#8d99a3' : 'var(--shape)'}" stroke-width="${ui.bulk.has(i) ? 3 : sel ? 2.2 : 1.4}"${sh.cut === false ? ' stroke-dasharray="6 3"' : ''}/>`);
+      if (sh.closed && P.some(p => +p[4])) HEMGeo.edgeRuns(sh).open.forEach(o => parts.push(`<path d="M${o.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}" fill="none" stroke="#b85c00" stroke-width="3" stroke-dasharray="7 4"/>`));
+      if (!sh.closed && fp.length > 1) {
+        // which way the path runs: an arrow at its middle, and its first point marked
+        const cum = HEMGeo.cumLen(fp, false), L = cum[cum.length - 1], m = HEMGeo.at(fp, false, L / 2, cum), px = X(m.p[0]), py = Y(m.p[1]), ang = Math.atan2(-m.d[1], m.d[0]) * 180 / Math.PI;
+        parts.push(`<path d="M-7 -5 L4 0 L-7 5 Z" fill="var(--shape)" transform="translate(${px} ${py}) rotate(${ang})"/><circle cx="${X(fp[0][0])}" cy="${Y(fp[0][1])}" r="5" fill="none" stroke="var(--shape)" stroke-width="1.6"/>`);
+      }
+      if (P.length <= 400 || sel) P.forEach((p, j) => parts.push(`<rect data-v="${i}:${j}" x="${X(p[0]) - 4}" y="${Y(p[1]) - 4}" width="8" height="8" fill="${sel && ui.selPt === j ? 'var(--shape)' : '#fff'}" stroke="var(--shape)" stroke-width="1.4"/>`));
+    });
+    // construction geometry: endless lines, circles, points (and the one being placed)
+    const CC = '#5aa6d6', cp = HEMGeo.consParts(cfg.cons || []), far = 1e4;
+    cp.lines.forEach(l => parts.push(`<line x1="${X(l.p[0] - l.u[0] * far)}" y1="${Y(l.p[1] - l.u[1] * far)}" x2="${X(l.p[0] + l.u[0] * far)}" y2="${Y(l.p[1] + l.u[1] * far)}" stroke="${CC}" stroke-width="1" stroke-dasharray="8 4 2 4"/>`));
+    cp.circles.forEach(c => parts.push(`<circle cx="${X(c.c[0])}" cy="${Y(c.c[1])}" r="${c.r * s}" fill="none" stroke="${CC}" stroke-width="1" stroke-dasharray="8 4 2 4"/>`));
+    cp.pts.forEach(q => parts.push(`<path d="M${X(q[0]) - 4} ${Y(q[1]) - 4}L${X(q[0]) + 4} ${Y(q[1]) + 4}M${X(q[0]) - 4} ${Y(q[1]) + 4}L${X(q[0]) + 4} ${Y(q[1]) - 4}" stroke="${CC}" stroke-width="1.5"/>`));
+    if (ui.selCon != null && cfg.cons && cfg.cons[ui.selCon] && ui.tool === 'edit') {
+      const q = HEMGeo.consParts([cfg.cons[ui.selCon]]), HC = 'stroke="#e08a00" stroke-width="3" opacity=".7" fill="none"';
+      q.lines.forEach(l => parts.push(`<line x1="${X(l.p[0] - l.u[0] * far)}" y1="${Y(l.p[1] - l.u[1] * far)}" x2="${X(l.p[0] + l.u[0] * far)}" y2="${Y(l.p[1] + l.u[1] * far)}" ${HC}/>`));
+      q.circles.forEach(c => parts.push(`<circle cx="${X(c.c[0])}" cy="${Y(c.c[1])}" r="${c.r * s}" ${HC}/>`));
+      q.pts.forEach(c => parts.push(`<circle cx="${X(c[0])}" cy="${Y(c[1])}" r="6" ${HC}/>`));
+    }
+    if (hover && (ui.tool === 'chline' || ui.tool === 'cvline' || ui.tool === 'caline')) { const a = (ui.tool === 'chline' ? 0 : ui.tool === 'cvline' ? 90 : num(ui.conAng, 0)) * Math.PI / 180, u = [Math.cos(a), Math.sin(a)]; parts.push(`<line x1="${X(hover[0] - u[0] * far)}" y1="${Y(hover[1] - u[1] * far)}" x2="${X(hover[0] + u[0] * far)}" y2="${Y(hover[1] + u[1] * far)}" stroke="${CC}" stroke-width="1.5" opacity=".7"/>`); }
+    if (ui.cpend && hover) parts.push(ui.tool === 'cline' ? `<line x1="${X(ui.cpend[0])}" y1="${Y(ui.cpend[1])}" x2="${X(hover[0])}" y2="${Y(hover[1])}" stroke="${CC}" stroke-width="1.5"/>` : `<circle cx="${X(ui.cpend[0])}" cy="${Y(ui.cpend[1])}" r="${Math.hypot(hover[0] - ui.cpend[0], hover[1] - ui.cpend[1]) * s}" fill="none" stroke="${CC}" stroke-width="1.5"/>`);
+    // point numbers
+    if (ui.showNums) cfg.shapes.forEach((sh, i) => sh.pts.forEach((p, j) => parts.push(`<text x="${X(+p[0]) + 6}" y="${Y(+p[1]) - 6}" font-size="11" font-weight="600" fill="${sh.cut === false ? '#6b7780' : 'var(--shape)'}" paint-order="stroke" stroke="#fff" stroke-width="3">${i + 1}.${j + 1}</text>`)));
+    // the measurement
+    if (ui.tool === 'measure' && ui.mA) {
+      const b2 = ui.mB || hover;
+      if (b2) {
+        const m = CAD.measure(ui.mA, b2), mx = (X(ui.mA[0]) + X(b2[0])) / 2, my = (Y(ui.mA[1]) + Y(b2[1])) / 2;
+        parts.push(`<line x1="${X(ui.mA[0])}" y1="${Y(ui.mA[1])}" x2="${X(b2[0])}" y2="${Y(b2[1])}" stroke="#b85c00" stroke-width="1.6"/><line x1="${X(ui.mA[0])}" y1="${Y(ui.mA[1])}" x2="${X(b2[0])}" y2="${Y(ui.mA[1])}" stroke="#b85c00" stroke-width="1" stroke-dasharray="3 3"/><line x1="${X(b2[0])}" y1="${Y(ui.mA[1])}" x2="${X(b2[0])}" y2="${Y(b2[1])}" stroke="#b85c00" stroke-width="1" stroke-dasharray="3 3"/>`);
+        parts.push(`<text x="${mx + 8}" y="${my - 8}" font-size="12" font-weight="700" fill="#b85c00" paint-order="stroke" stroke="#fff" stroke-width="3">${f4(m.d)}  ∠${f4(m.angle)}°  ΔX ${f4(m.dx)}  ΔY ${f4(m.dy)}</text>`);
+      }
+      parts.push(`<circle cx="${X(ui.mA[0])}" cy="${Y(ui.mA[1])}" r="3.5" fill="#b85c00"/>`);
+    }
+    if (snapHit && hover) parts.push(`<rect x="${X(hover[0]) - 6}" y="${Y(hover[1]) - 6}" width="12" height="12" fill="none" stroke="#e08a00" stroke-width="2" transform="rotate(45 ${X(hover[0])} ${Y(hover[1])})"/>`);
+    const sh = ui.sel != null && cfg.shapes[ui.sel];
+    if (sh && ui.selSeg != null && ui.selSeg < nSegs(sh)) {
+      const j = ui.selSeg, Q = HEMGeo.filleted({ closed: false, pts: [sh.pts[j].slice(0, 4).map(Number).map((v, k) => k === 2 ? 0 : v), [+sh.pts[(j + 1) % sh.pts.length][0], +sh.pts[(j + 1) % sh.pts.length][1], 0, 0]] });
+      parts.push(`<path d="M${Q.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}" fill="none" stroke="#e08a00" stroke-width="5" stroke-linecap="round" opacity=".55"/>`);
+    }
+    if (sh && ui.tool === 'edit') segHandles(sh).forEach((h, j) => isFinite(h[0]) && parts.push(`<circle cx="${X(h[0])}" cy="${Y(h[1])}" r="4" fill="${sh.pts[j][3] ? 'var(--shape)' : '#fff'}" stroke="var(--shape)" stroke-width="1.2" opacity=".85"/>`));
+    if (drawing) {
+      let P = drawing.pts.map(p => [p[0], p[1], 0, p[3] || 0]);
+      if (hover) {
+        const l = P[P.length - 1];
+        if (drawing.pending && l) { const A = HEMGeo.arcThrough(l, hover, drawing.pending); l[3] = A ? A.r : 0; if (A) P.push(...A.mids.map(m => [m[0], m[1], 0, A.r])); P.push([drawing.pending[0], drawing.pending[1], 0, 0]); }
+        else if (drawing.pending) P.push([drawing.pending[0], drawing.pending[1], 0, 0]);
+        else if (ui.segMode === 'tangent' && l && P.length >= 2) { const d = HEMGeo.endDir(drawing.pts), T = d && HEMGeo.tangentArc(l, d, hover); if (T) { l[3] = T.r; P.push(...T.mids.map(m => [m[0], m[1], 0, T.r])); } P.push([hover[0], hover[1], 0, 0]); }
+        else P.push([hover[0], hover[1], 0, 0]);
+      }
+      const Q = P.length > 1 ? HEMGeo.filleted({ closed: false, pts: P }) : P;
+      if (Q.length) parts.push(`<path d="M${Q.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}" fill="none" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 3"/>`);
+      if (drawing.pending) parts.push(`<rect x="${X(drawing.pending[0]) - 4}" y="${Y(drawing.pending[1]) - 4}" width="8" height="8" fill="#fff" stroke="var(--red)" stroke-width="1.4"/>`);
+      drawing.pts.forEach((p, j) => parts.push(`<rect x="${X(p[0]) - 4}" y="${Y(p[1]) - 4}" width="8" height="8" fill="${j === 0 ? 'var(--red)' : '#fff'}" stroke="var(--red)" stroke-width="1.4"/>`));
+    }
+  }
+  const entryShown = cfg.entryOn && (cfg.op === 'profile' || (cfg.op === 'custom' && (cfg.cop === 'outside' || cfg.cop === 'pocket')));
+  if (entryShown && isFinite(parseFloat(cfg.entryX)) && isFinite(parseFloat(cfg.entryY))) {
+    const ex = X(parseFloat(cfg.entryX)), ey = Y(parseFloat(cfg.entryY));
+    parts.push(`<g stroke="#b85c00" stroke-width="2" fill="none"><circle cx="${ex}" cy="${ey}" r="7"/><line x1="${ex - 11}" y1="${ey}" x2="${ex + 11}" y2="${ey}"/><line x1="${ex}" y1="${ey - 11}" x2="${ex}" y2="${ey + 11}"/></g><text x="${ex + 10}" y="${ey - 10}" font-size="11" font-weight="700" fill="#b85c00">START</text>`);
+  }
+  if (ui.step != null && cur && !isNaN(cur.x)) parts.push(`<circle cx="${X(cur.x)}" cy="${Y(cur.y)}" r="${R.K.R * s}" fill="rgba(194,54,43,.15)" stroke="var(--red)" stroke-width="1.5"/><circle cx="${X(cur.x)}" cy="${Y(cur.y)}" r="2" fill="var(--red)"/>`);
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = parts.join('');
+  const sc = $('scrub'); sc.max = moves.length; sc.value = last;
+  const mm = ui.tool === 'measure' && ui.mA && (ui.mB || hover) ? CAD.measure(ui.mA, ui.mB || hover) : null;
+  const an = ui.tool !== 'measure' && ui.tool !== 'edit' && hover && anchorPt(), rel = an ? CAD.measure([+an[0], +an[1]], hover) : null;
+  $('readout').textContent = (rel ? 'From last point: length ' + f4(rel.d) + '  angle ' + f4(rel.angle) + '°   ' : '') + (mm ? 'Distance ' + f4(mm.d) + '  angle ' + f4(mm.angle) + '°  ΔX ' + f4(mm.dx) + '  ΔY ' + f4(mm.dy) + '   ' : '') + (hover && custom() ? 'Cursor X' + f4(hover[0]) + ' Y' + f4(hover[1]) + '   ' : '') + (ui.step == null ? (custom() ? '' : 'Drag the slider or press Play to step through the moves.') : describe(cur, last));
+}
+// A click (or a typed point) on the preview with a drawing tool. p: the point (snapped or typed); raw: the unsnapped
+// point (the point an arc passes through); onFirst: on the shape's first point (closes it).
+function clickAt(p, raw, onFirst) {
+  if (ui.tool === 'measure') { if (!ui.mA || ui.mB) { ui.mA = p; ui.mB = null; } else ui.mB = p; renderTools(); drawPlot(); return; }
+  if (CTOOL[ui.tool]) {
+    const add = g => { cfg.cons = (cfg.cons || []).concat([g]); ui.cpend = null; consChanged(true); renderTools(); };
+    if (ui.tool === 'cpoint') add({ t: 'point', x: p[0], y: p[1] });
+    else if (ui.tool === 'chline' || ui.tool === 'cvline') add({ t: 'line', x: p[0], y: p[1], a: ui.tool === 'chline' ? 0 : 90 });
+    else if (ui.tool === 'caline') { const a = parseFloat(ui.conAng); if (!isFinite(a)) { const b = $('conAng'); if (b) { b.style.borderColor = 'var(--red)'; b.focus(); } return; } add({ t: 'line', x: p[0], y: p[1], a }); }
+    else if (!ui.cpend) { ui.cpend = p; renderTools(); drawPlot(); }
+    else if (ui.tool === 'cline') { if (Math.hypot(p[0] - ui.cpend[0], p[1] - ui.cpend[1]) > 1e-6) add({ t: 'line2', x1: ui.cpend[0], y1: ui.cpend[1], x2: p[0], y2: p[1] }); }
+    else add({ t: 'circle', x: ui.cpend[0], y: ui.cpend[1], d: +(2 * Math.hypot(p[0] - ui.cpend[0], p[1] - ui.cpend[1])).toFixed(5) });
+    return;
+  }
+  if (ui.tool !== 'closed' && ui.tool !== 'open') return;
+  if (!drawing) drawing = { closed: ui.tool === 'closed', pts: [] };
+  const first = drawing.pts[0], l = drawing.pts[drawing.pts.length - 1];
+  if (drawing.pending) {                                   // third click of an arc: a point it passes through
+    const end = drawing.pending, A = HEMGeo.arcThrough(l, raw, end);
+    drawing.pending = null;
+    l[3] = A ? A.r : 0;
+    if (A) A.mids.forEach(m => drawing.pts.push([+m[0].toFixed(5), +m[1].toFixed(5), 0, A.r]));
+    if (drawing.closing) { drawing.closing = false; finishDrawing(); return; }
+    drawing.pts.push([end[0], end[1], 0, 0]);
+    renderTools(); drawPlot(); return;
+  }
+  if (ui.segMode === 'arc' && l) {                         // second click of an arc: where it ends
+    if (onFirst && drawing.closed && drawing.pts.length >= 1) { drawing.pending = [first[0], first[1]]; drawing.closing = true; }
+    else if (Math.hypot(l[0] - p[0], l[1] - p[1]) > 1e-6) drawing.pending = p;
+    renderTools(); drawPlot(); return;
+  }
+  if (ui.segMode === 'tangent' && l && drawing.pts.length >= 2) {
+    // an arc leaving the last point along the way the drawing was going, ending here
+    const end = onFirst && drawing.closed ? [first[0], first[1]] : p, d = HEMGeo.endDir(drawing.pts), T = d && HEMGeo.tangentArc(l, d, end);
+    if (T) { l[3] = T.r; T.mids.forEach(m => drawing.pts.push([+m[0].toFixed(5), +m[1].toFixed(5), 0, T.r])); }
+    if (onFirst && drawing.closed) { finishDrawing(); return; }
+    if (Math.hypot(l[0] - end[0], l[1] - end[1]) > 1e-6) drawing.pts.push([end[0], end[1], 0, 0]);
+    renderTools(); drawPlot(); return;
+  }
+  if (drawing.closed && onFirst && drawing.pts.length >= 3) { finishDrawing(); return; }
+  if (!l || Math.hypot(l[0] - p[0], l[1] - p[1]) > 1e-6) drawing.pts.push([p[0], p[1], 0, 0]);
+  renderTools(); drawPlot();
+}
+// the handle in the middle of each segment of a shape (on the arc for an arc)
+function segHandles(sh) {
+  const P = sh.pts, n = P.length, out = [];
+  for (let j = 0; j < n; j++) {
+    if (!sh.closed && j === n - 1) { out.push(null); continue; }   // an open path's last point starts no segment
+    const a = P[j], b = P[(j + 1) % n];
+    if (!(+a[3])) { out.push([(+a[0] + +b[0]) / 2, (+a[1] + +b[1]) / 2]); continue; }
+    const A = HEMGeo.arcSeg([+a[0], +a[1]], [+b[0], +b[1]], +a[3]), t = A.a0 + A.sweep / 2;
+    out.push([A.c[0] + A.R * Math.cos(t), A.c[1] + A.R * Math.sin(t)]);
+  }
+  return out.map(h => h || [NaN, NaN]);
+}
+function describe(m, i) {
+  if (!m) return '';
+  return `Move ${i} of ${R.moves.length}: ${m.t} X${f4(m.x)} Y${f4(m.y)}${isNaN(m.z) ? '' : ' Z' + f4(m.z)}${m.f ? ' F' + m.f : ''}   (${LABELS[m.k] || 'Rapid'})`;
+}
+$('scrub').addEventListener('input', e => { stop(); ui.step = +e.target.value >= R.moves.length ? null : +e.target.value; drawPlot(); });
+let raf = 0;
+function stop() { ui.playing = false; cancelAnimationFrame(raf); $('play').textContent = '▶ Play'; }
+$('play').onclick = () => {
+  if (ui.playing) { stop(); return; }
+  ui.playing = true; $('play').textContent = '❚❚ Pause';
+  if (ui.step == null || ui.step >= R.moves.length) ui.step = 0;
+  const per = Math.max(1, Math.round(R.moves.length / 600));
+  const tick = () => { if (!ui.playing) return; ui.step = Math.min(R.moves.length, ui.step + per); drawPlot(); if (ui.step >= R.moves.length) { stop(); return; } raf = requestAnimationFrame(tick); };
+  tick();
+};
+// mouse: pan, zoom, draw, edit
+(() => {
+  const svg = $('plot'); let act = null;
+  const capture = e => { try { svg.setPointerCapture(e.pointerId); } catch (er) { } };
+  const world = e => { const r = svg.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top; return [VIEW.mx + (sx - VIEW.W / 2 - ui.panX) / VIEW.s, VIEW.my - (sy - VIEW.H / 2 - ui.panY) / VIEW.s]; };
+  const scr = p => [VIEW.X(p[0]), VIEW.Y(p[1])];
+  const nearVertex = (e, px) => {
+    const r = svg.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top; let best = null, bd = px;
+    cfg.shapes.forEach((sh, i) => sh.pts.forEach((p, j) => { const q = scr(p), d = Math.hypot(q[0] - sx, q[1] - sy); if (d < bd) { bd = d; best = [i, j]; } }));
+    return best;
+  };
+  const nearEdge = (e, px) => {
+    const w = world(e); let best = null, bd = px / VIEW.s;
+    cfg.shapes.forEach((sh, i) => { const P = sh.pts, n = P.length; for (let j = 0; j < (sh.closed ? n : n - 1); j++) { const d = HEMGeo.segDist(w, P[j], P[(j + 1) % n]); if (d < bd) { bd = d; best = [i, j]; } } });
+    return best;
+  };
+  svg.addEventListener('pointerdown', e => {
+    if ((ui.pickEntry || ui.pickOrigin) && e.button === 0) { act = { pan: true, pick: true, click: true, x: e.clientX, y: e.clientY, px: ui.panX, py: ui.panY }; capture(e); return; }
+    const menuBtn = e.button === 2 || (e.button === 0 && e.ctrlKey && custom());
+    if (e.button === 1 || menuBtn || !custom()) { act = { pan: true, menu: menuBtn && custom(), click: true, x: e.clientX, y: e.clientY, px: ui.panX, py: ui.panY }; capture(e); return; }
+    if (ui.tool === 'edit' && e.shiftKey) {
+      const hit = nearVertex(e, 8) || nearEdge(e, 8);
+      if (hit) { const i = hit[0]; if (ui.bulk.has(i)) ui.bulk.delete(i); else ui.bulk.add(i); renderShapes(); drawPlot(); return; }
+    }
+    if (ui.tool === 'edit') {
+      const sh = ui.sel != null && cfg.shapes[ui.sel];
+      if (sh) {                                               // bend a segment by its middle handle
+        const r = svg.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
+        const hi = segHandles(sh).findIndex(h => isFinite(h[0]) && Math.hypot(VIEW.X(h[0]) - sx, VIEW.Y(h[1]) - sy) < 7);
+        if (hi >= 0 && !nearVertex(e, 5)) { act = { bend: [ui.sel, hi] }; ui.dragging = true; capture(e); return; }
+      }
+      const v = nearVertex(e, 8);
+      if (v) { ui.selSeg = null; ui.selCon = null; ui.sel = v[0]; ui.selPt = v[1]; act = { drag: v }; ui.dragging = true; capture(e); renderShapes(); drawPlot(); return; }
+      if (e.altKey) { const ed = nearEdge(e, 8); if (ed) { const p = snapPt(world(e)); cfg.shapes[ed[0]].pts.splice(ed[1] + 1, 0, [p[0], p[1], 0]); ui.selSeg = null; ui.selCon = null; ui.sel = ed[0]; ui.selPt = ed[1] + 1; act = { drag: [ed[0], ed[1] + 1] }; capture(e); shapesChanged(); ui.dragging = true; return; } }
+      const ed = nearEdge(e, 6);
+      if (ed) { ui.selCon = null; ui.sel = ed[0]; ui.selPt = null; ui.selSeg = ed[1]; renderShapes(); drawPlot(); }
+      else { const ci = consAt(e, 7); if (ci != null) { ui.selCon = ci; ui.selPt = null; ui.selSeg = null; renderSegEdit(); drawPlot(); } }
+    }
+    act = { pan: true, click: ui.tool !== 'edit', x: e.clientX, y: e.clientY, px: ui.panX, py: ui.panY }; capture(e);
+  });
+  svg.addEventListener('pointermove', e => {
+    if (custom()) { const w = world(e); hover = lockPt(w, snapPt(w), e.shiftKey && !act); }
+    if (act && act.bend) {
+      const [i, j] = act.bend, sh = cfg.shapes[i]; if (!sh) return;
+      const a = sh.pts[j], b = sh.pts[(j + 1) % sh.pts.length], m = world(e), A = [+a[0], +a[1]], Bp = [+b[0], +b[1]];
+      const chord = HEMGeo.dist(A, Bp), sag = HEMGeo.segDist(m, A, Bp);
+      let r = 0;
+      if (sag > Math.max(2 / VIEW.s, chord * 0.002)) {
+        const T = HEMGeo.arcThrough(A, m, Bp);
+        if (T) r = T.mids.length ? Math.sign(T.r) * chord / 2 : T.r;    // the short way: a half circle at most
+      }
+      while (a.length < 3) a.push(0);
+      a[3] = +r.toFixed(4); save(); drawPlot(); return;
+    }
+    if (act && act.drag) {
+      const [i, j] = act.drag, p = cfg.shapes[i] && cfg.shapes[i].pts[j]; if (!p) return;
+      const q = snapPt(world(e), true); p[0] = q[0]; p[1] = q[1]; save(); drawPlot(); return;
+    }
+    if (act && act.pan) {
+      const dx = e.clientX - act.x, dy = e.clientY - act.y;
+      if (Math.hypot(dx, dy) > 4) act.click = false;
+      if (!act.click) { ui.panX = act.px + dx; ui.panY = act.py + dy; }
+    }
+    if (custom() || (act && act.pan)) drawPlot();
+  });
+  svg.addEventListener('pointerup', e => {
+    const a = act; act = null; ui.dragging = false;
+    if (a && a.menu) { if (a.click) { const v = nearVertex(e, 8), ed = !v && nearEdge(e, 8), ci = !v && !ed ? consAt(e, 7) : null, w = world(e); plotMenu(e.clientX, e.clientY, v ? { pt: v } : ed ? { seg: ed } : ci != null ? { con: ci } : { shape: shapeAt(w) }, w); } return; }
+    if (a && a.pick && ui.pickOrigin) { if (a.click) { const p = snapPt(world(e)); applyOrigin(p[0], p[1]); } return; }
+    if (a && a.pick) {
+      if (a.click) { const p = snapPt(world(e)); ui.pickEntry = false; cfg.entryX = String(+p[0].toFixed(4)); cfg.entryY = String(+p[1].toFixed(4)); set('entryOn', true); renderForm(); renderTools(); }
+      return;
+    }
+    if (a && (a.drag || a.bend)) { save(); renderShapes(); schedule(); return; }
+    if (a && a.click && custom() && ui.tool !== 'edit') {
+      const first = drawing && drawing.pts[0], rc = svg.getBoundingClientRect();
+      const onFirst = !!first && (() => { const q = scr(first); return Math.hypot(q[0] - (e.clientX - rc.left), q[1] - (e.clientY - rc.top)) < 9; })();
+      const w = world(e); clickAt(lockPt(w, snapPt(w), e.shiftKey), w, onFirst);
+    }
+  });
+  svg.addEventListener('dblclick', e => { if (drawing) { finishDrawing(); return; } if (!custom()) { fitView(); drawPlot(); } });
+  // the construction item nearest the pointer (points first), within px on screen
+  const consAt = (e, px) => {
+    const w = world(e), sc = VIEW.s; let best = null, bd = px;
+    (cfg.cons || []).forEach((g, i) => {
+      const P = HEMGeo.consParts([g]); let d = Infinity;
+      P.pts.forEach(q => { d = Math.min(d, HEMGeo.dist(q, w) * sc - 2); });
+      P.lines.forEach(l => { d = Math.min(d, Math.abs((w[0] - l.p[0]) * l.u[1] - (w[1] - l.p[1]) * l.u[0]) * sc); });
+      P.circles.forEach(c => { d = Math.min(d, Math.abs(HEMGeo.dist(c.c, w) - c.r) * sc); });
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  };
+  // the smallest closed shape the point is inside
+  const inPoly = (p, P) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const a = P[i], b = P[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; };
+  const shapeAt = w => { let best = null, ba = Infinity; cfg.shapes.forEach((sh, i) => { if (!sh.closed || sh.pts.length < 2) return; const f = HEMGeo.filleted(sh); if (inPoly(w, f)) { const A = Math.abs(HEMGeo.area(f)); if (A < ba) { ba = A; best = i; } } }); return best; };
+  svg.addEventListener('pointerleave', () => { hover = null; if (custom()) drawPlot(); });
+  svg.addEventListener('contextmenu', e => e.preventDefault());
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    const r = svg.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top, k = Math.exp(-e.deltaY * 0.0015);
+    const nz = Math.min(400, Math.max(0.1, ui.zoom * k)), f = nz / ui.zoom;
+    ui.panX = sx - VIEW.W / 2 - (sx - VIEW.W / 2 - ui.panX) * f; ui.panY = sy - VIEW.H / 2 - (sy - VIEW.H / 2 - ui.panY) * f; ui.zoom = nz; drawPlot();
+  }, { passive: false });
+  new ResizeObserver(() => R && drawPlot()).observe(svg);
+})();
+
+// ---------------------------------------------------------------- the selected segment or point: its numbers
+// ui.selSeg: segment j of shape ui.sel (point j to the next); ui.selPt: a point. The panel above the preview edits it.
+const nSegs = sh => sh.closed ? sh.pts.length : sh.pts.length - 1;
+function selShape() { const sh = ui.sel != null && cfg.shapes[ui.sel]; if (!sh) return null; if (ui.selSeg != null && ui.selSeg >= nSegs(sh)) ui.selSeg = null; if (ui.selPt != null && ui.selPt >= sh.pts.length) ui.selPt = null; return sh; }
+function renderSegEdit() {
+  const el = $('segEdit'); if (!el) return;
+  const focus = document.activeElement && el.contains(document.activeElement) ? document.activeElement.dataset.se || document.activeElement.dataset.ce : null;
+  const g = ui.selCon != null && (cfg.cons || [])[ui.selCon];
+  if (custom() && ui.tool === 'edit' && g && CONS_T[g.t]) {
+    const T = CONS_T[g.t], ci = (k, v) => `<label style="display:flex;gap:3px;align-items:center">${k[1]}<input data-ce="${k[0]}" value="${esc(v)}" inputmode="decimal"></label>`, line = g.t === 'line' || g.t === 'line2';
+    el.innerHTML = `<div class="r"><b style="color:#2f7fb8">Construction ${ui.selCon + 1} · ${T.name}</b> ${T.f.map(k => ci(k, f4(+g[k[0]] || 0))).join('')}</div>
+      <div class="r">${line ? `Parallel at ${`<input data-ce="off" value="${esc(ui.conOff || '0.5')}" inputmode="decimal">`} <button type="button" class="btn sm" data-ca="par" title="A new line this far to the left of it (− for the right)">Add parallel</button><button type="button" class="btn sm" data-ca="perp" title="A new line square to it, through its point">Add perpendicular</button>` : g.t === 'circle' ? `Ø <input data-ce="cd" value="${esc(ui.conD || '1')}" inputmode="decimal"> <button type="button" class="btn sm" data-ca="conc">Add concentric circle</button>` : ''}
+        <button type="button" class="btn sm" data-ca="del" style="color:var(--red)">Delete</button><button type="button" class="btn sm" data-ca="done">Done</button></div>`;
+    el.hidden = false;
+    if (focus) { const f = el.querySelector(`[data-ce="${focus}"]`); if (f) f.focus(); }
+    return;
+  }
+  const sh = selShape();
+  if (!custom() || ui.tool !== 'edit' || !sh || (ui.selSeg == null && ui.selPt == null)) { el.hidden = true; el.innerHTML = ''; return; }
+  const inp = (k, v) => `<input data-se="${k}" value="${esc(v)}" inputmode="decimal">`, bt = (k, l, t, x) => `<button type="button" class="btn sm" data-sa="${k}"${t ? ` title="${t}"` : ''}${x || ''}>${l}</button>`;
+  const name = `<b>Shape ${ui.sel + 1}</b>${sh.cut === false ? ' <span class="note">CAD only</span>' : ''}`;
+  if (ui.selSeg != null) {
+    const j = ui.selSeg, k = (j + 1) % sh.pts.length, I = HEMGeo.segInfo(sh, j), kind = !I.r ? 'line' : I.r > 0 ? 'ccw' : 'cw', a = sh.pts[j];
+    el.innerHTML = `<div class="r">${name} · <b>segment ${j + 1}</b> <span class="note">point ${j + 1} → ${k + 1}</span>
+        <span class="seg">${[['line', 'Straight'], ['ccw', 'Arc ↺ G3'], ['cw', 'Arc ↻ G2']].map(([v, l]) => `<button type="button" data-sa="${v}" class="${kind === v ? 'on' : ''}">${l}</button>`).join('')}</span>
+        ${I.r ? 'R ' + inp('r', f4(Math.abs(I.r))) : ''}${I.tooSmall ? `<span class="msg">R is less than half the chord (${f4(I.chord / 2)}): it is cut as a half circle</span>` : ''}</div>
+      <div class="r">From X ${inp('ax', f4(I.a[0]))} Y ${inp('ay', f4(I.a[1]))} &nbsp; To X ${inp('bx', f4(I.b[0]))} Y ${inp('by', f4(I.b[1]))}</div>
+      <div class="r">${I.r ? 'Chord' : 'Length'} ${inp('len', f4(I.chord))} Angle ${inp('ang', f4(I.angle))}° ${I.r ? `<span class="note">arc length ${f4(I.len)}</span>` : ''}<span class="note">length and angle move the end point</span></div>
+      <div class="r">${sh.closed ? `<label class="chk" style="font-size:13px"><input type="checkbox" data-se="open" ${+a[4] ? 'checked' : ''} style="width:15px;height:15px;accent-color:#b85c00">Open edge (air beyond it)</label>` : ''}
+        ${bt('ins', 'Insert point', 'A new point in the middle of this segment')}${bt('delseg', 'Delete segment', sh.closed ? 'The shape opens here: it becomes an open path' : 'The path splits in two here', ' style="color:var(--red)"')}${bt('done', 'Done', 'Deselect (Esc)')}</div>`;
+  } else {
+    const j = ui.selPt, p = sh.pts[j], mid = !sh.closed && j > 0 && j < sh.pts.length - 1;
+    el.innerHTML = `<div class="r">${name} · <b>point ${j + 1}</b> &nbsp; X ${inp('px', f4(+p[0]))} Y ${inp('py', f4(+p[1]))} Fillet R ${inp('fr', +p[2] ? f4(+p[2]) : '')}</div>
+      <div class="r">${sh.closed ? bt('start', 'Start the shape here', 'Make this the first point (same outline)') + bt('opn', 'Open the shape here', 'It becomes an open path starting and ending at this point') : mid ? bt('split', 'Split the path here', 'Two paths that meet at this point') : ''}
+        ${bt('delpt', 'Delete point', '', ' style="color:var(--red)"')}${bt('done', 'Done', 'Deselect (Esc)')}</div>`;
+  }
+  el.hidden = false;
+  if (focus) { const f = el.querySelector(`[data-se="${focus}"]`); if (f) { f.focus(); if (f.select) f.select(); } }
+}
+// replace shape i by the shapes given (0, 1 or 2 of them); the first stays selected
+function replaceShape(i, list, keepSel) {
+  cfg.shapes.splice(i, 1, ...list); ui.bulk.clear(); delete ui.txt[i];
+  if (!list.length) { ui.sel = null; ui.selPt = null; ui.selSeg = null; }
+  else if (!keepSel) { ui.sel = i; ui.selPt = null; ui.selSeg = null; }
+  shapesChanged(); drawPlot();
+}
+// one edit to a shape (by index), then everything that shows it
+function editShape(i, fn) { const sh = cfg.shapes[i]; if (!sh) return; const out = fn(sh); if (out && out !== sh) cfg.shapes[i] = out; shapesChanged(); drawPlot(); }
+const SEGACT = {
+  line: (i, j) => editShape(i, sh => { sh.pts[j][3] = 0; }),
+  ccw: (i, j) => editShape(i, sh => { const I = HEMGeo.segInfo(sh, j); while (sh.pts[j].length < 4) sh.pts[j].push(0); sh.pts[j][3] = +(Math.abs(I.r) || I.chord).toFixed(4); }),
+  cw: (i, j) => editShape(i, sh => { const I = HEMGeo.segInfo(sh, j); while (sh.pts[j].length < 4) sh.pts[j].push(0); sh.pts[j][3] = -(+(Math.abs(I.r) || I.chord).toFixed(4)); }),
+  flip: (i, j) => editShape(i, sh => { sh.pts[j][3] = -(+sh.pts[j][3] || 0); }),
+  ins: (i, j) => { editShape(i, sh => HEMGeo.insertMid(sh, j)); ui.selSeg = null; ui.selPt = j + 1; renderShapes(); drawPlot(); },
+  delseg: (i, j) => replaceShape(i, HEMGeo.deleteSegment(cfg.shapes[i], j)),
+  openedge: (i, j) => editShape(i, sh => { const p = sh.pts[j]; while (p.length < 4) p.push(0); if (+p[4]) p.length = 4; else p[4] = 1; }),
+  delpt: (i, j) => { const sh = cfg.shapes[i]; sh.pts.splice(j, 1); if (sh.pts.length < 2) replaceShape(i, []); else { ui.selPt = null; ui.selSeg = null; shapesChanged(); drawPlot(); } },
+  start: (i, j) => { editShape(i, sh => HEMGeo.startAt(sh, j)); ui.selPt = 0; renderShapes(); drawPlot(); },
+  opn: (i, j) => replaceShape(i, HEMGeo.splitAt(cfg.shapes[i], j)),
+  split: (i, j) => replaceShape(i, HEMGeo.splitAt(cfg.shapes[i], j)),
+  reverse: i => { editShape(i, sh => HEMGeo.reverseShape(sh)); ui.selPt = null; ui.selSeg = null; renderShapes(); drawPlot(); },
+  close: i => editShape(i, sh => { sh.closed = !sh.closed; }),
+  cut: i => editShape(i, sh => { if (sh.cut === false) delete sh.cut; else sh.cut = false; }),
+  bulk: i => { if (ui.bulk.has(i)) ui.bulk.delete(i); else ui.bulk.add(i); renderShapes(); drawPlot(); },
+  text: i => { ui.txt[i] = true; ui.sel = i; renderShapes(); const b = document.querySelector(`[data-tbox="s${i}"]`); if (b) { b.scrollIntoView({ block: 'center', behavior: 'smooth' }); const ta = b.querySelector('textarea'); if (ta) ta.focus({ preventScroll: true }); } },
+  delshape: i => replaceShape(i, []),
+  done: () => { ui.selPt = null; ui.selSeg = null; renderShapes(); drawPlot(); },
+};
+// construction: parallel / perpendicular lines, concentric circles, delete
+const conLine = g => { const L = HEMGeo.consParts([g]).lines[0]; return L; };
+const CONACT = {
+  del: i => { cfg.cons.splice(i, 1); ui.selCon = null; consChanged(true); },
+  delAll: () => { if (!confirm('Delete all ' + cfg.cons.length + ' construction items?')) return; cfg.cons = []; ui.selCon = null; consChanged(true); },
+  par: (i, d) => { const L = conLine(cfg.cons[i]); if (!L) return; const n = [-L.u[1], L.u[0]]; CONACT.add({ t: 'line', x: +(L.p[0] + n[0] * d).toFixed(5), y: +(L.p[1] + n[1] * d).toFixed(5), a: +(Math.atan2(L.u[1], L.u[0]) * 180 / Math.PI).toFixed(6) }); },
+  perp: i => { const L = conLine(cfg.cons[i]); if (!L) return; CONACT.add({ t: 'line', x: L.p[0], y: L.p[1], a: +(Math.atan2(L.u[1], L.u[0]) * 180 / Math.PI + 90).toFixed(6) }); },
+  conc: (i, d) => { const g = cfg.cons[i]; if (d > 0) CONACT.add({ t: 'circle', x: +g.x, y: +g.y, d }); },
+  add: g => { cfg.cons = (cfg.cons || []).concat([g]); ui.selCon = cfg.cons.length - 1; consChanged(true); },
+  done: () => { ui.selCon = null; renderSegEdit(); drawPlot(); },
+};
+$('segEdit').addEventListener('click', e => {
+  const c = e.target.closest('[data-ca]');
+  if (c) { const k = c.dataset.ca, i = ui.selCon; if (k === 'par') CONACT.par(i, parseFloat(ui.conOff || '0.5') || 0); else if (k === 'conc') CONACT.conc(i, parseFloat(ui.conD || '1')); else CONACT[k](i); return; }
+  const b = e.target.closest('[data-sa]'); if (!b || !SEGACT[b.dataset.sa]) return;
+  SEGACT[b.dataset.sa](ui.sel, ui.selSeg != null ? ui.selSeg : ui.selPt);
+});
+$('segEdit').addEventListener('input', e => { const k = e.target.dataset.ce; if (k === 'off') ui.conOff = e.target.value; else if (k === 'cd') ui.conD = e.target.value; });
+$('segEdit').addEventListener('change', e => {
+  const ck = e.target.dataset.ce;
+  if (ck && ck !== 'off' && ck !== 'cd') { const g = cfg.cons[ui.selCon], v = parseFloat(e.target.value); if (g && isFinite(v)) { g[ck] = v; consChanged(true); } else e.target.style.borderColor = 'var(--red)'; return; }
+  const t = e.target, k = t.dataset.se, i = ui.sel, sh = cfg.shapes[i]; if (!k || !sh) return;
+  if (k === 'open') { SEGACT.openedge(i, ui.selSeg); renderForm(); return; }
+  const v = parseFloat(t.value), j = ui.selSeg != null ? ui.selSeg : ui.selPt, nx = (j + 1) % sh.pts.length;
+  if (k === 'fr') { editShape(i, s => { const p = s.pts[j]; while (p.length < 3) p.push(0); p[2] = isFinite(v) ? Math.abs(v) : 0; }); return; }
+  if (!isFinite(v)) { t.style.borderColor = 'var(--red)'; return; }
+  if (k === 'ax' || k === 'ay' || k === 'px' || k === 'py') editShape(i, s => { s.pts[j][k[1] === 'x' ? 0 : 1] = v; });
+  else if (k === 'bx' || k === 'by') editShape(i, s => { s.pts[nx][k === 'bx' ? 0 : 1] = v; });
+  else if (k === 'len') { if (v > 0) editShape(i, s => HEMGeo.setSegLength(s, j, v)); else t.style.borderColor = 'var(--red)'; }
+  else if (k === 'ang') editShape(i, s => HEMGeo.setSegAngle(s, j, v));
+  else if (k === 'r') { if (v > 0) editShape(i, s => { s.pts[j][3] = Math.sign(+s.pts[j][3] || 1) * v; }); else SEGACT.line(i, j); }
+});
+$('segEdit').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.target.dataset.se || e.target.dataset.ce)) { e.preventDefault(); e.target.dispatchEvent(new Event('change', { bubbles: true })); } });
+
+// ---------------------------------------------------------------- right-click menu on the preview
+function closeMenu() { const m = $('ctx'); if (!m.hidden) { m.hidden = true; m.innerHTML = ''; MENU = []; } }
+let MENU = [], MENUAT = [0, 0];
+// items: [label, action] rows, '-' lines, or {h: heading}
+function openMenu(x, y, items) {
+  const m = $('ctx'); MENU = []; MENUAT = [scrollX, scrollY];
+  m.innerHTML = items.map(it => it === '-' ? '<hr>' : it.h ? `<div class="h">${esc(it.h)}</div>` : `<button type="button" role="menuitem" data-mi="${MENU.push(it) - 1}"${it[2] ? ' class="danger"' : ''}>${it[0]}</button>`).join('');
+  m.hidden = false;
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(4, Math.min(x, innerWidth - w - 4)) + 'px'; m.style.top = Math.max(4, Math.min(y, innerHeight - h - 4)) + 'px';
+  const f = m.querySelector('button'); if (f) f.focus({ preventScroll: true });
+}
+$('ctx').addEventListener('click', e => { const b = e.target.closest('[data-mi]'); if (!b) return; const it = MENU[+b.dataset.mi]; closeMenu(); if (it) it[1](); });
+$('ctx').addEventListener('keydown', e => {
+  const bs = [...$('ctx').querySelectorAll('button')], k = bs.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); bs[(k + (e.key === 'ArrowDown' ? 1 : -1) + bs.length) % bs.length].focus(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); $('plot').focus && $('plot').focus(); }
+});
+document.addEventListener('pointerdown', e => { if (!e.target.closest('#ctx')) closeMenu(); }, true);
+addEventListener('scroll', () => { if (!$('ctx').hidden && (scrollX !== MENUAT[0] || scrollY !== MENUAT[1])) closeMenu(); }); addEventListener('resize', closeMenu); addEventListener('blur', closeMenu);
+// the menu for what is under the pointer: a point, a segment, inside a shape, or empty space. w: where, in inches.
+function plotMenu(x, y, hit, w) {
+  const it = [];
+  if (drawing) {
+    it.push({ h: 'Drawing' }, ['Finish', () => finishDrawing()]);
+    if (drawing.pts.length > 1) it.push(['Undo last point', () => { drawing.pts.pop(); drawing.pending = null; renderTools(); drawPlot(); }]);
+    it.push(['Cancel', () => { drawing = null; renderTools(); drawPlot(); }, 1]);
+    return openMenu(x, y, it);
+  }
+  const shapeItems = i => {
+    const sh = cfg.shapes[i];
+    return ['-', { h: 'Shape ' + (i + 1) + (sh.closed ? ' · closed' : ' · open path') }, [ui.bulk.has(i) ? 'Remove from bulk selection' : 'Add to bulk selection (move, rotate…)', () => SEGACT.bulk(i)],
+      [sh.cut === false ? 'Machine it (now CAD only)' : 'CAD only: keep out of the toolpath', () => SEGACT.cut(i)],
+      [sh.closed ? 'Make it an open path' : 'Close it', () => { SEGACT.close(i); renderForm(); }], ['Reverse direction', () => SEGACT.reverse(i)],
+      ['Edit as text…', () => SEGACT.text(i)], ['Delete shape', () => SEGACT.delshape(i), 1]];
+  };
+  const edit = () => { if (ui.tool !== 'edit') { finishDrawing(); ui.tool = 'edit'; renderTools(); } };
+  if (hit && hit.pt) {
+    const [i, j] = hit.pt, sh = cfg.shapes[i], mid = !sh.closed && j > 0 && j < sh.pts.length - 1;
+    ui.sel = i; ui.selPt = j; ui.selSeg = null; renderShapes(); drawPlot();
+    it.push({ h: 'Point ' + (j + 1) }, ['Edit point…', () => { edit(); renderSegEdit(); const f = document.querySelector('[data-se="px"]'); if (f) { f.focus(); f.select(); } }],
+      ['Set fillet R…', () => { edit(); renderSegEdit(); const f = document.querySelector('[data-se="fr"]'); if (f) f.focus(); }]);
+    if (sh.closed) it.push(['Start the shape here', () => SEGACT.start(i, j)], ['Open the shape here', () => SEGACT.opn(i, j)]);
+    else if (mid) it.push(['Split the path here', () => SEGACT.split(i, j)]);
+    it.push(['Delete point', () => SEGACT.delpt(i, j), 1], ...shapeItems(i));
+  } else if (hit && hit.seg) {
+    const [i, j] = hit.seg, sh = cfg.shapes[i], r = +sh.pts[j][3] || 0;
+    ui.sel = i; ui.selPt = null; ui.selSeg = j; renderShapes(); drawPlot();
+    it.push({ h: 'Segment ' + (j + 1) + (r ? ' · arc R' + f4(Math.abs(r)) : ' · straight') }, ['Edit segment…', () => { edit(); renderSegEdit(); const f = document.querySelector('[data-se="len"]'); if (f) { f.focus(); f.select(); } }],
+      ['Insert point here', () => {
+        const a = sh.pts[j], b = sh.pts[(j + 1) % sh.pts.length];
+        if (r || !w) return SEGACT.ins(i, j);
+        const A = [+a[0], +a[1]], B = [+b[0], +b[1]], L2 = (B[0] - A[0]) ** 2 + (B[1] - A[1]) ** 2, t = L2 ? Math.max(0.02, Math.min(0.98, ((w[0] - A[0]) * (B[0] - A[0]) + (w[1] - A[1]) * (B[1] - A[1])) / L2)) : 0.5;
+        const q = [+(A[0] + (B[0] - A[0]) * t).toFixed(5), +(A[1] + (B[1] - A[1]) * t).toFixed(5), 0, 0]; if (+a[4]) q[4] = 1;
+        sh.pts.splice(j + 1, 0, q); ui.selSeg = null; ui.selPt = j + 1; shapesChanged(); drawPlot();
+      }]);
+    it.push([r ? 'Construction circle on this arc' : 'Construction line along this segment', () => { const I = HEMGeo.segInfo(sh, j); if (r) { const A = HEMGeo.arcSeg(I.a, I.b, r); CONACT.add({ t: 'circle', x: +A.c[0].toFixed(5), y: +A.c[1].toFixed(5), d: +(2 * A.R).toFixed(5) }); } else CONACT.add({ t: 'line2', x1: I.a[0], y1: I.a[1], x2: I.b[0], y2: I.b[1] }); ui.selCon = null; drawPlot(); }]);
+    if (r) it.push(['Make straight', () => SEGACT.line(i, j)], ['Flip arc direction', () => SEGACT.flip(i, j)]);
+    else it.push(['Make arc ↺ (counter-clockwise)', () => SEGACT.ccw(i, j)], ['Make arc ↻ (clockwise)', () => SEGACT.cw(i, j)]);
+    if (sh.closed) it.push([(+sh.pts[j][4] ? '✓ ' : '') + 'Open edge (air beyond it)', () => { SEGACT.openedge(i, j); renderForm(); }]);
+    it.push(['Delete segment' + (sh.closed ? ' (opens the shape)' : ' (splits the path)'), () => SEGACT.delseg(i, j), 1], ...shapeItems(i));
+  } else if (hit && hit.con != null) {
+    const i = hit.con, g = cfg.cons[i], T = CONS_T[g.t], line = g.t === 'line' || g.t === 'line2';
+    ui.selCon = i; ui.sel = null; ui.selPt = null; ui.selSeg = null; renderShapes(); drawPlot();
+    const focusCe = k => () => { edit(); ui.selCon = i; renderSegEdit(); const f = document.querySelector(`[data-ce="${k}"]`); if (f) { f.focus(); f.select(); } };
+    it.push({ h: 'Construction ' + (i + 1) + ' · ' + T.name }, ['Edit…', focusCe(T.f[0][0])]);
+    if (line) it.push(['Parallel line at a distance…', focusCe('off')], ['Perpendicular line through its point', () => CONACT.perp(i)]);
+    if (g.t === 'circle') it.push(['Concentric circle…', focusCe('cd')]);
+    it.push(['Delete', () => CONACT.del(i), 1], '-', ['Delete all construction (' + cfg.cons.length + ')', () => CONACT.delAll(), 1]);
+  } else if (hit && hit.shape != null) {
+    const i = hit.shape; ui.sel = i; ui.selPt = null; ui.selSeg = null; renderShapes(); drawPlot();
+    it.push(...shapeItems(i).slice(1));
+  } else {
+    it.push(['Fit view', () => { fitView(); drawPlot(); }], [(ui.showNums ? '✓ ' : '') + 'Point numbers', () => { ui.showNums = !ui.showNums; save(); renderTools(); drawPlot(); }]);
+    if (w) it.push(['Measure from here', () => { finishDrawing(); ui.tool = 'measure'; ui.mA = snapPt(w); ui.mB = null; renderTools(); drawPlot(); }]);
+    if (ui.sel != null || ui.selPt != null || ui.selCon != null) it.push(['Deselect', () => { ui.selCon = null; SEGACT.done(); }]);
+    if ((cfg.cons || []).length) it.push(['Delete all construction (' + cfg.cons.length + ')', () => CONACT.delAll(), 1]);
+  }
+  openMenu(x, y, it);
+}
+
+// ---------------------------------------------------------------- output
+function dl(name, data, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type })); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}
+// ---------------------------------------------------------------- dimensions
+const DF = v => (v === null || v === undefined || v === '' ? '' : f4(v));
+function dimsHtml(d) {
+  const T = (head, rows) => `<table class="dims"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(v => `<td>${v}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const sec = (h, body) => `<div class="dimsec"><h3>${h}</h3>${body}</div>`;
+  let html = '';
+  if (!d.points.length && !d.cons.length) return '<p class="note">Nothing drawn yet: draw shapes or construction geometry under Your shape.</p>';
+  html += sec('Shapes', T(['Shape', 'Kind', 'Width', 'Height', 'Min X', 'Min Y', 'Max X', 'Max Y', 'Perimeter', 'Area'], d.shapes.map(q => [q.s + (q.cut ? '' : ' (CAD only)'), q.closed ? 'closed' : 'open', DF(q.width), DF(q.height), DF(q.minX), DF(q.minY), DF(q.maxX), DF(q.maxY), DF(q.perimeter), q.area === null ? '' : DF(q.area)])));
+  html += sec('Points (from X0 Y0)', T(['Point', 'X', 'Y', 'Fillet R', 'Open edge after'], d.points.map(p => [p.s + '.' + p.n, DF(p.x), DF(p.y), p.fillet ? DF(p.fillet) : '', p.open ? 'open' : ''])));
+  html += sec('Segments', T(['From', 'To', 'Kind', 'Length', 'Angle °', 'Radius', 'Centre X', 'Centre Y', 'Dir.', 'Sweep °'], d.segments.map(g => [g.s + '.' + g.from, g.s + '.' + g.to, g.kind, DF(g.length), DF(g.angle), g.kind === 'arc' ? DF(g.r) + (Math.abs(g.asked - g.r) > 1e-6 ? ' <span class="note">(asked ' + f4(g.asked) + ', too small for the chord)</span>' : '') : '', g.kind === 'arc' ? DF(g.cx) : '', g.kind === 'arc' ? DF(g.cy) : '', g.dir || '', g.kind === 'arc' ? DF(g.sweep) : ''])));
+  if (d.fillets.length) html += sec('Fillets', T(['At point', 'Radius', 'Centre X', 'Centre Y', 'Starts X', 'Starts Y', 'Ends X', 'Ends Y'], d.fillets.map(q => [q.s + '.' + q.n, DF(q.r) + (Math.abs(q.asked - q.r) > 1e-6 ? ' <span class="note">(asked ' + f4(q.asked) + ', no room)</span>' : ''), DF(q.cx), DF(q.cy), DF(q.x1), DF(q.y1), DF(q.x2), DF(q.y2)])));
+  if (d.cons.length) html += sec('Construction geometry', T(['#', 'Kind', 'X', 'Y', 'Angle °', 'X2', 'Y2', 'Ø'], d.cons.map(g => [g.n, (CONS_T[g.t] || {}).name || g.t, DF(g.x ?? g.x1), DF(g.y ?? g.y1), g.a !== undefined ? DF(g.a) : '', DF(g.x2), DF(g.y2), DF(g.d)])));
+  if (d.crossings.length) html += sec('Construction crossings', T(['#', 'X', 'Y'], d.crossings.map((p, i) => [i + 1, DF(p[0]), DF(p[1])])));
+  return html;
+}
+function renderDims() {
+  const d = CAD.dimensions(cfg.shapes || [], cfg.cons || []), btn = (id, l, p) => `<button class="btn${p ? ' primary' : ''}" id="${id}">${esc(l)}</button>`;
+  $('dls').innerHTML = btn('dlCsv', 'Download CSV', true) + btn('prDims', 'Print');
+  $('out').innerHTML = `<p class="note" style="margin:0 0 6px">Inches from work zero; angles counter-clockwise from +X. Points are numbered shape.point, as on the preview with Numbers on.</p>` + dimsHtml(d);
+  $('dlCsv').onclick = () => dl((HEM.fileBase(Object.assign({}, cfg, { fileName: cfg.fileName || '' })) || 'drawing').replace(/-\d.*$/, '') + '-dimensions.csv', CAD.dimensionsCSV(d), 'text/csv');
+  $('prDims').onclick = () => {
+    const was = ui.showNums; ui.showNums = true; drawPlot();
+    const svg = $('plot').outerHTML.replace(/ id="plot"/, '').replace(/class="[^"]*"/, '');
+    ui.showNums = was; drawPlot();
+    const now = new Date(), p2 = n => String(n).padStart(2, '0');
+    $('printArea').innerHTML = `<h2 style="font:600 16px Barlow,sans-serif;margin:0 0 4px">${esc(cfg.fileName || 'Drawing')} — dimensions</h2><p style="font-size:11px;margin:0 0 6px">Inches from work zero · ${now.getFullYear()}-${p2(now.getMonth() + 1)}-${p2(now.getDate())}</p>${svg}` + dimsHtml(d);
+    window.print();
+  };
+}
+function renderOut() {
+  if (ui.drawOnly) ui.tab = 'dims';
+  $('tabs').innerHTML = (ui.drawOnly ? [['dims', 'Dimensions']] : [['g', 'G-code'], ['maz', 'Mazatrol'], ['data', 'Cutting data'], ['dims', 'Dimensions']]).map(([k, l]) => `<button type="button" data-t="${k}" class="${ui.tab === k ? 'on' : ''}">${l}</button>`).join('');
+  const base = HEM.fileBase(R.cfg), out = $('out'), btn = (id, l, p) => `<button class="btn${p ? ' primary' : ''}" id="${id}">${esc(l)}</button>`;
+  const empty = !R.moves.some(m => m.t === 'G1' || m.t === 'G2' || m.t === 'G3');
+  if (ui.tab === 'dims') { renderDims(); return; }
+  if (ui.tab === 'g') {
+    if (empty) { $('dls').innerHTML = ''; out.innerHTML = '<p class="note">Nothing to cut yet.</p>'; return; }
+    const g = getG();
+    $('dls').innerHTML = btn('dlG', 'Download ' + base + '.nc', true) + btn('cpG', 'Copy');
+    out.innerHTML = `<pre class="code">${esc(g.length > 400000 ? g.slice(0, 400000) + '\n… (' + g.split('\n').length + ' lines; the download has them all)' : g)}</pre><p class="note" style="margin-top:8px">${g.split('\n').length} lines. Every setting (and your shapes) is saved in comments after M30, in plain words and as exact data: <b>Open .nc…</b> or drop the file on this page to get them all back.</p>`;
+    $('dlG').onclick = () => dl(base + '.nc', g, 'text/plain');
+    $('cpG').onclick = () => navigator.clipboard && navigator.clipboard.writeText(g).then(() => { $('cpG').textContent = 'Copied'; setTimeout(() => $('cpG') && ($('cpG').textContent = 'Copy'), 1200); });
+  } else if (ui.tab === 'maz') {
+    if (empty) { $('dls').innerHTML = ''; out.innerHTML = '<p class="note">Nothing to cut yet.</p>'; return; }
+    const view = R.cfg.mazCtl === 'SmoothM' ? 'SmoothM' : 'MatrixM', M = getMZ(view);
+    $('dls').innerHTML = btn('dlPBD', 'Matrix .PBD', view === 'MatrixM') + btn('dlPBM', 'Smooth .PBM', view === 'SmoothM');
+    $('dlPBD').onclick = () => { const m = getMZ('MatrixM'); if (m.units) dl(m.fileName, m.bytes(), 'application/octet-stream'); };
+    $('dlPBM').onclick = () => { const m = getMZ('SmoothM'); if (m.units) dl(m.fileName, m.bytes(), 'application/octet-stream'); };
+    if (M.error) { out.innerHTML = `<div class="warn">${esc(M.error)}</div>`; return; }
+    const w = M.warn.length ? `<div class="warn" style="margin-bottom:10px"><ul>${M.warn.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+    const seg = `<div class="seg" id="mazView" style="max-width:320px;margin-bottom:10px">${[['MatrixM', 'Matrix .PBD'], ['SmoothM', 'Smooth .PBM']].map(([v, l]) => `<button type="button" data-v="${v}" class="${view === v ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+    const lst = M.listing();
+    out.innerHTML = seg + w + `<p class="note" style="margin:0 0 8px">${view === 'SmoothM' ? 'Smooth' : 'Matrix'} · ${M.fileName} · ${M.units} MANL PRG unit${M.units === 1 ? '' : 's'} · ${M.seqs} lines · ${M.nRec} records. Matrix holds 255 lines a unit, Smooth 999, so Matrix splits into more units.</p><pre class="code">${esc(lst.length > 400000 ? lst.slice(0, 400000) + '\n…' : lst)}</pre>`;
+    $('mazView').onclick = e => { const b = e.target.closest('button'); if (b) set('mazCtl', b.dataset.v); };
+  } else {
+    $('dls').innerHTML = '';
+    const K = R.K, row = (l, r, f) => `<tr><td>${l}</td><td>${r}</td><td>${f}</td></tr>`, fin = R.cfg.finish;
+    out.innerHTML = `<table class="data"><thead><tr><th></th><th>Roughing</th><th>Finishing</th></tr></thead><tbody>
+      ${row('Spindle', K.rough.rpm + ' RPM', fin ? K.fin.rpm + ' RPM' : '—')}
+      ${row('Surface speed', Math.round(K.rough.sfm) + ' SFM', fin ? Math.round(K.fin.sfm) + ' SFM' : '—')}
+      ${row('Radial (ae)', f4(K.ae) + ' in · ' + Math.round(K.ae / K.D * 1000) / 10 + '%', fin ? f4(K.finStock) + ' in' : '—')}
+      ${row('Axial (ap)', f4(K.ap) + ' in' + (K.levels > 1 ? ' × ' + K.levels : ''), fin ? f4(K.depth) + ' in' : '—')}
+      ${row('Chip thinning factor', K.thin.toFixed(2) + '×', '1× (as entered)')}
+      ${row('Chip load programmed', K.rough.fzProg.toFixed(4), fin ? K.fin.fzProg.toFixed(4) : '—')}
+      ${row('Actual chip', K.rough.fzReal.toFixed(4), fin ? K.fin.fzReal.toFixed(4) : '—')}
+      ${row('Feed', K.rough.feed + ' ipm', fin ? K.fin.feed + ' ipm' : '—')}
+      ${row('Metal removal', K.mrr.toFixed(2) + ' in³/min', fin ? K.mrrFin.toFixed(2) + ' in³/min' : '—')}
+      ${row('Spindle power', '≈ ' + K.hpNeed.toFixed(1) + ' hp', fin ? '≈ ' + (K.mrrFin * K.unitHp).toFixed(1) + ' hp' : '—')}
+      ${row('Helix / ramp feed', K.helixFeed + ' ipm', '')}
+      ${row('Stick-out', f4(K.stick) + ' in · ' + (K.stick / K.D).toFixed(1) + '× D', '')}
+    </tbody></table>
+    <div class="explain">
+      <div><b>RPM</b> = SFM × 3.82 ÷ D <code>${Math.round(K.rough.sfm)} × 3.82 ÷ ${f4(K.D)}</code>, capped at the spindle's maximum.</div>
+      <div><b>Chip thinning</b>: at a stepover under half the diameter the chip is thinner than the feed per tooth. Factor = D ÷ (2·√(D·ae − ae²)) <code>= ${K.thin.toFixed(3)}</code>; the target chip is multiplied by it.</div>
+      <div><b>Feed</b> = RPM × flutes × programmed chip load <code>${K.rough.rpm} × ${K.Z} × ${K.rough.fzProg.toFixed(4)}</code>.</div>
+      <div><b>Removal</b> = ae × ap × feed; <b>power</b> = removal × unit power (${K.unitHp} hp per in³/min). Keep under about 80% of the spindle.</div>
+      <div>Start with the feed override at 80–90%, listen, watch the load meter, and bring it up. If it chatters, move RPM ±5–10% before lowering the feed.</div>
+    </div>`;
+  }
+}
+$('tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; ui.tab = b.dataset.t; save(); renderOut(); });
+
+// ---------------------------------------------------------------- open / reset
+// Read the settings back from a .nc this app wrote: the button, or drop the file anywhere on the page
+async function openNc(fl) {
+  const m = $('openMsg');
+  const say = (text, ok) => { m.hidden = false; m.style.color = ok ? 'var(--finish)' : ''; m.textContent = text; };
+  try {
+    const o = HEM.openSettings(await fl.text());
+    if (!o) { say(fl.name + ' has no saved settings. Only G-code this app wrote has them.'); return; }
+    cfg = Object.assign(clone(HEM.DEFAULTS), o.cfg); if (!Array.isArray(cfg.shapes)) cfg.shapes = [];
+    if (o.cfg.passes === undefined && o.cfg.finish === false) cfg.passes = 'rough';
+    drawing = null; ui.selSeg = null; ui.selCon = null; ui.sel = null; ui.selPt = null; ui.open = {};
+    save(); ui.fitNext = true; renderForm(); renderTools(); update();
+    const n = cfg.shapes.length;
+    say('Opened ' + fl.name + ': every setting restored' + (cfg.op === 'custom' ? ', with ' + n + ' shape' + (n === 1 ? '' : 's') : '') + '.' + (o.note ? ' ' + o.note : ''), true);
+  } catch (er) { say(fl.name + ': the saved settings could not be read (' + er.message + ').'); }
+}
+$('openNc').addEventListener('change', e => { const fl = e.target.files[0]; e.target.value = ''; if (fl) openNc(fl); });
+document.addEventListener('dragover', e => { if ([...e.dataTransfer.items].some(i => i.kind === 'file')) e.preventDefault(); });
+document.addEventListener('drop', e => {
+  const fl = e.dataTransfer.files[0]; if (!fl) return;
+  e.preventDefault();
+  if (/\.dxf$/i.test(fl.name)) { const inp = $('dxfIn'); if (inp && custom()) { const dt = new DataTransfer(); dt.items.add(fl); inp.files = dt.files; inp.dispatchEvent(new Event('change', { bubbles: true })); } return; }
+  openNc(fl);
+});
+// every setting back to its default, keeping the shapes and the operation they are for
+$('drawOnly').onclick = () => {
+  ui.drawOnly = !ui.drawOnly;
+  if (ui.drawOnly) { if (cfg.op !== 'custom') { cfg.op = 'custom'; ui.fitNext = true; } ui.tab = 'dims'; }
+  else if (ui.tab === 'dims') ui.tab = 'g';
+  save(); renderForm(); renderTools(); update();
+};
+$('resetSettings').onclick = () => {
+  const n = (cfg.shapes || []).length;
+  if (!confirm('Put every setting back to its default?' + (n ? ' Your ' + n + ' shape' + (n > 1 ? 's stay' : ' stays') + '.' : ''))) return;
+  const keep = { shapes: clone(cfg.shapes || []), op: cfg.op, cop: cfg.cop };
+  cfg = Object.assign(clone(HEM.DEFAULTS), keep); ui.pickEntry = false; drawing = null;
+  save(); renderForm(); renderTools(); update();
+  const m = $('openMsg'); m.hidden = false; m.style.color = 'var(--finish)'; m.textContent = 'Settings reset to their defaults' + (n ? '; your ' + n + ' shape' + (n > 1 ? 's were' : ' was') + ' kept.' : '.');
+};
+$('reset').onclick = () => { if (!confirm('Put every setting back to its default and delete your shapes?')) return; cfg = clone(HEM.DEFAULTS); drawing = null; ui.selSeg = null; ui.selCon = null; ui.sel = null; save(); ui.fitNext = true; renderForm(); renderTools(); update(); };
+
+hist.last = geoNow();
+renderForm();
+renderTools();
+update();
+</script>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feeds and Speeds</title>
+<style>
+:root{--ink:#1d2a33;--mute:#6b7780;--line:#e3e7ea;--line2:#d5dbdf;--bg:#f6f7f8;--card:#fff;--red:#c2362b;--warnbg:#fff6e5;--warnln:#f0d9a8;--warnink:#7a5200;--ok:#1e8a4c}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Barlow,'Segoe UI',system-ui,sans-serif}
+button,input,select{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.wrap{max-width:1400px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:20px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h1{font-weight:600;font-size:24px;letter-spacing:-.01em;margin:0;line-height:1.2}
+header p{color:var(--mute);margin:2px 0 0;max-width:760px}
+.btn{background:#fff;border:1px solid var(--line2);border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:500;font-size:14px;white-space:nowrap}
+.btn:hover{border-color:#aeb8bf}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.sm{padding:3px 9px;font-size:13px}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:380px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px}
+aside.card{display:flex;flex-direction:column;padding:4px 20px 20px}
+aside section{display:flex;flex-direction:column;gap:10px;padding-top:18px;margin-top:16px;border-top:1px solid var(--line)}
+aside section:first-child{border-top:0;margin-top:0}
+h2{margin:0;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.f>span{font-size:13px;font-weight:500;color:#3b4a55;display:flex;justify-content:space-between;gap:6px}
+.f>span em{font-style:normal;color:var(--mute);font-weight:400}
+.f input,.f select{width:100%;border:1px solid var(--line2);border-radius:6px;padding:6px 9px;background:#fff;font-variant-numeric:tabular-nums}
+.f input:focus,.f select:focus{border-color:var(--ink);outline:none}
+.f input::placeholder{color:#9aa6ae}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--ink)}
+.seg{display:flex;background:#eef1f3;border-radius:7px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg button{flex:1;border:0;background:transparent;border-radius:5px;padding:5px 8px;font-size:13px;font-weight:500;color:var(--mute);cursor:pointer;white-space:nowrap}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(29,42,51,.12)}
+.note{font-size:12.5px;color:var(--mute);line-height:1.4;margin:0}
+main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;min-width:0}
+.tile .k{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--mute);font-weight:600}
+.tile .v{font-size:24px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .v small{font-size:14px;font-weight:500}
+.tile .s{font-size:12.5px;color:var(--mute);font-variant-numeric:tabular-nums}
+.tile.bad .v{color:var(--red)}
+.tile.big .v{font-size:30px}
+.warn{background:var(--warnbg);border:1px solid var(--warnln);color:var(--warnink);border-radius:10px;padding:10px 14px;font-size:14px}
+.warn ul{margin:0;padding-left:18px}
+.explain{font-size:14px;color:#3b4a55;display:grid;gap:6px;margin:10px 0 0;padding-left:18px}
+pre.code{margin:10px 0 0;background:#1d2a33;color:#e6ecef;border-radius:8px;padding:12px 14px;font:13px/1.5 'IBM Plex Mono',Consolas,monospace;overflow:auto;white-space:pre}
+table.data{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:14px}
+table.data th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute);text-align:right;padding:6px 8px;border-bottom:1px solid #9aa6ae;font-weight:600}
+table.data th:first-child,table.data td:first-child,table.data th:nth-child(2),table.data td:nth-child(2){text-align:left}
+table.data td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right}
+table.data td.act{white-space:nowrap}
+.head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.drills{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.drills span{background:#eef1f3;border-radius:6px;padding:3px 9px;font-size:13.5px;font-variant-numeric:tabular-nums}
+.foot{font-size:12.5px;color:var(--mute)}
+#printArea{display:none}
+@media print{
+  body{background:#fff}
+  .wrap{display:none}
+  #printArea{display:block;font:11pt/1.4 'Segoe UI',system-ui,sans-serif;color:#000}
+  #printArea h1{font-size:15pt;margin:0 0 4pt}
+  #printArea table{width:100%;border-collapse:collapse;margin-top:8pt}
+  #printArea th,#printArea td{border-bottom:1px solid #999;padding:3pt 5pt;text-align:right;font-size:10pt}
+  #printArea th:first-child,#printArea td:first-child,#printArea th:nth-child(2),#printArea td:nth-child(2){text-align:left}
+  #printArea thead{display:table-header-group}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Feeds and Speeds</h1>
+      <p>Speeds and feeds for high-efficiency machining: end mills (HEM, profiling, slotting, finish and spring passes), ball and tapered end mills, any coating, helical and circular interpolation of bores, high-feed, face and chamfer mills, drills, taps and reamers. Chip thinning, power, torque and tool deflection are worked out and checked against your machine. Inch.</p>
+    </div>
+    <div class="btns">
+      <button class="btn" id="reset">Reset tool</button>
+    </div>
+  </header>
+  <div class="grid">
+    <aside class="card" id="form"></aside>
+    <main>
+      <div class="tiles" id="tiles"></div>
+      <div class="warn" id="warn" hidden></div>
+      <div class="card" id="extra" hidden></div>
+      <div class="card">
+        <h2>How it is worked out</h2>
+        <ul class="explain" id="how"></ul>
+        <pre class="code" id="gcode"></pre>
+      </div>
+      <div class="card">
+        <div class="head">
+          <h2>Tool list</h2>
+          <div class="btns">
+            <input id="listName" placeholder="name for this tool" style="border:1px solid var(--line2);border-radius:6px;padding:5px 9px;width:240px">
+            <button class="btn primary sm" id="add">Add to list</button>
+            <button class="btn sm" id="print">Print list</button>
+            <button class="btn sm" id="export">Export</button>
+            <label class="btn sm">Import<input id="import" type="file" accept=".json" hidden></label>
+          </div>
+        </div>
+        <div id="list"></div>
+      </div>
+      <p class="foot">Starting points for the material and tool, not guarantees: check them against your tool maker's numbers and start a new tool or material on the low side. The machine limits and the tool list are kept in this browser.</p>
+    </main>
+  </div>
+</div>
+<div id="printArea"></div>
+<script>/*@@FEEDS@@*/</script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s), esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
+const KEY = 'feeds-v1', LIST = 'feeds-list-v1', MACHINE = ['maxRpm', 'hp', 'maxFeed', 'tapRpm', 'eff'];
+const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } };
+let cfg = Object.assign({}, FEEDS.DEFAULTS, load(KEY, {}));
+let list = load(LIST, []);
+let res = null;
+const trim = s => (s.indexOf('.') >= 0 ? s.replace(/0+$/, '').replace(/\.$/, '') : s);
+const num = (v, d = 0) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
+const f3 = v => (+v).toFixed(3), f4 = v => (+v).toFixed(4), f1 = v => (+v).toFixed(1), f0 = v => Math.round(v).toLocaleString('en-US');
+
+// ---- the form: one set of fields per tool type
+function field(key, label, opts = {}) {
+  const ph = opts.ph !== undefined ? ` placeholder="${esc(opts.ph)}"` : '';
+  return `<label class="f"><span>${label}${opts.unit ? ` <em>${opts.unit}</em>` : ''}</span><input data-k="${key}" value="${esc(cfg[key] ?? '')}"${ph} inputmode="decimal"></label>`;
+}
+function select(key, label, options) {
+  return `<label class="f"><span>${label}</span><select data-k="${key}">${options.map(([v, t]) => `<option value="${esc(v)}"${String(cfg[key]) === String(v) ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select></label>`;
+}
+const seg = (key, options) => `<div class="seg" data-seg="${key}">${options.map(([v, t]) => `<button type="button" data-v="${v}" class="${cfg[key] === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
+function renderForm() {
+  const t = cfg.tool, mill = t === 'endmill' || t === 'ball' || t === 'taper', ind = t === 'feedmill' || t === 'facemill' || t === 'chamfer', r = res || {};
+  const ph = (v, d = 4) => (typeof v === 'number' && isFinite(v) ? trim((+v).toFixed(d)) : '');
+  let h = `<section><h2>Tool</h2>${seg('tool', Object.entries(FEEDS.TOOLS))}
+    ${select('mat', 'Material', Object.entries(FEEDS.MATERIALS).map(([k, m]) => [k, m.name]))}`;
+  if (!ind) h += `${select('toolMat', 'Tool material', t === 'tap' ? [['hss', 'HSS / cobalt'], ['carbide', 'Carbide']] : [['carbide', 'Carbide'], ['cobalt', 'Cobalt HSS'], ['hss', 'HSS']])}${select('coating', 'Coating', Object.entries(FEEDS.COATINGS).map(([k, x]) => [k, x.name]))}
+    <p class="note">${esc((FEEDS.COATINGS[cfg.coating] || FEEDS.COATINGS.auto).full + ((FEEDS.COATINGS[cfg.coating] || {}).aka ? '. Also sold as ' + FEEDS.COATINGS[cfg.coating].aka + '.' : '.'))}</p>`;
+  if (t === 'tap') {
+    const groups = { 'UNC': [], 'UNF': [], 'Metric': [] };
+    for (const [n, x] of Object.entries(FEEDS.THREADS)) (x.metric ? groups.Metric : n.match(/-(\d+)$/) && FEEDS.THREADS[n] && isUNF(n) ? groups.UNF : groups.UNC).push(n);
+    h += `<label class="f"><span>Thread <em>or type one: 3/8-16, M10x1.5</em></span><input data-k="thread" list="threads" value="${esc(cfg.thread)}"><datalist id="threads">${Object.keys(FEEDS.THREADS).map(n => `<option value="${esc(n)}">`).join('')}</datalist></label>`;
+    h += seg('tapType', [['cut', 'Cut tap'], ['form', 'Form (roll) tap']]);
+    h += `<div class="row">${field('pct', 'Thread', { unit: '%', ph: cfg.tapType === 'form' ? '65' : '75' })}${field('depth', 'Thread depth', { unit: 'in', ph: '' })}</div>`;
+  } else {
+    h += `<div class="row">${field('D', t === 'chamfer' ? 'Smallest diameter' : t === 'taper' ? 'Tip diameter' : t === 'feedmill' || t === 'facemill' ? 'Cutter diameter' : t === 'helix' ? 'Tool diameter' : 'Diameter', { unit: 'in' })}${t === 'drill' || t === 'reamer' ? field('depth', 'Hole depth', { unit: 'in', ph: t === 'drill' ? ph(r.depth, 3) : '' }) : field('Z', ind ? 'Inserts' : 'Flutes')}</div>`;
+  }
+  h += '</section>';
+  if (t === 'helix') {
+    h += `<section><h2>Hole</h2>${seg('hmode', [['helix', 'Helix down'], ['circle', 'Circular at full depth']])}
+      <div class="row">${field('bore', 'Hole diameter', { unit: 'in' })}${field('depth', 'Depth', { unit: 'in' })}</div>
+      <div class="row">${field('pre', 'Pre-drilled hole', { unit: 'in', ph: 'solid' })}${cfg.hmode === 'circle' ? '<span></span>' : field('ramp', 'Ramp angle', { unit: '°', ph: r.ramp ? r.ramp.toFixed(1) : '' })}</div>
+      <div class="row">${field('loc', 'Flute length', { unit: 'in' })}${field('stick', 'Stick-out', { unit: 'in' })}</div>
+      <label class="chk"><input type="checkbox" data-k="finish"${cfg.finish ? ' checked' : ''}> Finish pass (light stock, faster; spring pass after)</label>
+      <label class="chk"><input type="checkbox" data-k="thin"${cfg.thin ? ' checked' : ''}> Chip thinning</label>
+      <p class="note">The program feeds the tool centre, which travels slower than the cutting edge in a hole: program the centre feed unless the control corrects arc feeds itself.</p></section>`;
+  } else if (t === 'chamfer') {
+    h += `<section><h2>Cut</h2><div class="row">${field('angle', 'Edge angle', { unit: '° from axis' })}${field('maxap', 'Insert edge (max depth)', { unit: 'in' })}</div>
+      <div class="row">${field('ap', 'Depth (ap)', { unit: 'in', ph: ph(r.ap, 3) })}${field('ae', 'Width (angled shoulder)', { unit: 'in', ph: 'chamfer only' })}</div>
+      <p class="note">Edge angle from the tool's axis: 45° for a 90° chamfer mill; 15° for a steep 30° included cutter like a CoroMill 495 -7509. Leave the width blank for a chamfer; enter it for an angled shoulder.</p></section>`;
+  } else if (mill) {
+    if (t === 'taper') h += `<section><h2>Taper</h2><div class="row">${field('taper', 'Angle per side', { unit: '°' })}${select('tip', 'Tip', [['square', 'Square'], ['ball', 'Ball']])}</div>
+      ${cfg.tip === 'ball' ? `<div class="row">${field('tipR', 'Tip radius', { unit: 'in', ph: 'D ÷ 2' })}<span></span></div>` : ''}<p class="note">Tip diameter at the end; the side grows by the angle per side. RPM comes from the widest point in the cut.</p></section>`;
+    h += `<section><h2>Cut</h2>${t === 'endmill' || t === 'taper' ? seg('op', Object.entries(FEEDS.OPS).map(([k, o]) => [k, k === 'hem' ? 'HEM' : k === 'profile' ? 'Profile' : k === 'slot' ? 'Slot' : 'Finish'])) : ''}
+      <div class="row">${field('ae', cfg.op === 'finish' && t !== 'ball' ? 'Finish stock' : 'Stepover (ae)', { unit: 'in', ph: ph(r.ae) })}${field('ap', cfg.op === 'finish' && t !== 'ball' ? 'Wall depth' : 'Depth (ap)', { unit: 'in', ph: ph(r.ap) })}</div>
+      <div class="row">${field('loc', 'Flute length', { unit: 'in' })}${field('stick', 'Stick-out', { unit: 'in' })}</div>
+      <label class="chk"><input type="checkbox" data-k="thin"${cfg.thin ? ' checked' : ''}> Chip thinning (raise the feed at a light stepover)</label></section>`;
+  } else if (t === 'feedmill' || t === 'facemill') {
+    h += `<section><h2>Cut</h2><div class="row">${field('lead', 'Lead angle', { unit: '°', ph: t === 'feedmill' ? '15' : '45' })}${field('ap', 'Depth (ap)', { unit: 'in', ph: ph(r.ap, 3) })}</div>
+      <div class="row">${field('ae', 'Width of cut (ae)', { unit: 'in', ph: ph(r.ae, 3) })}<span></span></div>
+      <label class="chk"><input type="checkbox" data-k="thin"${cfg.thin ? ' checked' : ''}> Radial chip thinning</label>
+      <p class="note">Lead angle: from the face (90° square shoulder, 45° face mill, 10–20° high-feed). Round inserts: use the angle at your depth.</p></section>`;
+  } else if (t === 'drill') {
+    h += `<section><h2>Drill</h2><div class="row">${field('point', 'Point angle', { unit: '°', ph: cfg.toolMat === 'carbide' ? '135' : '118' })}<span></span></div></section>`;
+  }
+  const chipLabel = t === 'drill' || t === 'reamer' ? ['Feed per rev', 'in/rev'] : ind ? ['Chip thickness', 'in'] : ['Chip per tooth (real)', 'in'];
+  const feedLabel = t === 'helix' ? 'Centre feed' : 'Feed';
+  h += `<section><h2>Overrides <em style="font-weight:400;text-transform:none;letter-spacing:0">(blank = calculated)</em></h2>
+    <div class="row">${field('sfm', 'Surface speed', { unit: 'SFM', ph: ph(r.sfm, 0) })}${t === 'tap' ? '<span></span>' : field('fz', chipLabel[0], { unit: chipLabel[1], ph: t === 'drill' || t === 'reamer' ? ph(r.ipr) : ph(r.fzActual) })}</div>
+    <div class="row">${field('rpm', 'RPM', { ph: r.rpm ? String(r.rpm) : '' })}${t === 'tap' ? '<span></span>' : field('feed', feedLabel, { unit: 'in/min', ph: ph(r.feed, 1) })}</div></section>`;
+  h += `<section><h2>Machine</h2>
+    <div class="row">${field('maxRpm', 'Max spindle', { unit: 'RPM' })}${field('hp', 'Spindle power', { unit: 'hp' })}</div>
+    <div class="row">${field('maxFeed', 'Max feed', { unit: 'in/min' })}${field('tapRpm', 'Max tapping', { unit: 'RPM' })}</div>
+    <div class="row">${field('eff', 'Drive efficiency', { unit: '%' })}<span></span></div></section>`;
+  $('#form').innerHTML = h;
+}
+function isUNF(n) { return ['#4-48', '#6-40', '#8-36', '#10-32', '1/4-28', '5/16-24', '3/8-24', '7/16-20', '1/2-20', '9/16-18', '5/8-18', '3/4-16', '7/8-14', '1-12', '1-14'].includes(n); }
+
+// ---- results
+const tile = (k, v, s, bad, big) => `<div class="tile${bad ? ' bad' : ''}${big ? ' big' : ''}"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || '&nbsp;'}</div></div>`;
+function renderResult() {
+  const r = res, t = r.tool, T = [];
+  T.push(tile('Spindle', f0(r.rpm) + ' <small>RPM</small>', f0(r.sfm) + ' SFM' + (r.rpmWant > r.rpm ? ' · wants ' + f0(r.rpmWant) : ''), false, true));
+  T.push(tile(t === 'helix' ? 'Program feed (centre)' : 'Feed', (t === 'tap' ? (+r.feed).toFixed(2) : f1(r.feed)) + ' <small>in/min</small>', t === 'tap' ? 'pitch ' + f4(r.pitch) + ' (' + +r.tpi.toFixed(2) + ' TPI)' : f4(r.ipr) + ' in/rev', false, true));
+  if (t === 'helix' && r.Dc > 0) {
+    T.push(tile('Edge feed', f1(r.edgeFeed) + ' <small>in/min</small>', f4(r.edgeIpr) + ' in/rev · ' + f4(r.fzProg) + ' per tooth'));
+    T.push(tile('Tool path', 'Ø' + f4(r.Dc), 'the tool ' + Math.round(r.D / r.bore * 100) + '% of the hole'));
+    if (r.hmode === 'helix') T.push(tile('Step down', f4(r.pitch) + ' <small>/turn</small>', 'ramp ' + r.ramp.toFixed(1) + '° · ' + Math.round(r.revs) + ' turns · ' + r.minutes.toFixed(1) + ' min'));
+    else T.push(tile('Stock', f4(r.ae) + ' <small>/side</small>', 'one turn ' + (r.minutes / 2).toFixed(2) + ' min' + (r.finish ? ' + spring pass' : '')));
+  }
+  if (t === 'chamfer') {
+    T.push(tile('Per tooth', f4(r.fzProg), 'real chip ' + f4(r.fzActual) + ' · edge at ' + r.alpha + '°'));
+    T.push(tile('Diameter in cut', f3(r.D) + '–' + f3(r.Dmax), 'RPM from ' + f4(r.Davg)));
+    T.push(tile('Depth (ap)', f3(r.ap) + ' <small>in</small>', Math.round(r.ap / r.maxap * 100) + '% of the edge · ' + (r.shoulder ? 'shoulder ' + f3(r.ae) + ' wide' : 'chamfer ' + f3(r.ae) + ' wide')));
+  }
+  if (t === 'taper') T.push(tile('Diameter in cut', f3(r.D) + '–' + f3(r.Dtop), r.taper.toFixed(1) + '° per side' + (r.tipR ? ' · ball tip R' + f4(r.tipR) : '')));
+  if (t === 'endmill' || t === 'ball' || t === 'taper' || t === 'feedmill' || t === 'facemill') {
+    T.push(tile('Per tooth', f4(r.fzProg), r.thin > 1.0001 ? 'real chip ' + f4(r.fzActual) + ' · thinning ×' + r.thin.toFixed(2) : 'real chip ' + f4(r.fzActual)));
+    T.push(tile(t === 'feedmill' || t === 'facemill' ? 'Width (ae)' : 'Stepover (ae)', f3(r.ae) + ' <small>in</small>', Math.round(r.ae / r.D * 100) + '% of D'));
+    T.push(tile('Depth (ap)', f3(r.ap) + ' <small>in</small>', (r.ap / r.D).toFixed(2) + '× D' + (r.Deff && r.Deff < r.D ? ' · cuts at Ø' + f4(r.Deff) : '')));
+  }
+  if (t === 'drill') {
+    T.push(tile('Cycle', r.peck ? 'G83' : r.cycle.split(' ')[0], r.peck ? 'peck ' + f4(r.peck) + ' · ' + r.ratio.toFixed(1) + '× D deep' : r.ratio.toFixed(1) + '× D deep'));
+    T.push(tile('Depth to point', f4(r.depth + r.tip), 'full diameter ' + f4(r.depth) + ' + point ' + f4(r.tip)));
+  }
+  if (t === 'reamer' && r.pre) T.push(tile('Drill first', esc(r.pre.name), f4(r.pre.d) + ' · leaves ' + f4(r.pre.left)));
+  if (t === 'tap') T.push(tile('Tap drill', r.drills.length ? esc(r.drills.map(d => d.name).join(' / ')) : '—', 'for ' + r.pct + '%: ' + f4(r.hole)));
+  if (r.mrr) T.push(tile('Removal', r.mrr.toFixed(2) + ' <small>in³/min</small>', ''));
+  if (r.hp) T.push(tile('Spindle power', r.hp.toFixed(1) + ' <small>hp</small>', Math.round(r.hpPct) + '% of ' + r.machine.hp + ' hp · ' + r.torque.toFixed(1) + ' ft·lb', r.hpPct > 80));
+  if (r.deflection !== undefined) T.push(tile('Tool bends', f4(r.deflection) + ' <small>in</small>', Math.round(r.force) + ' lbf cutting force', r.deflection > 0.001));
+  $('#tiles').innerHTML = T.join('');
+  $('#warn').hidden = !r.warnings.length;
+  $('#warn').innerHTML = '<ul>' + r.warnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul>';
+  if (t === 'tap') {
+    $('#extra').hidden = false;
+    $('#extra').innerHTML = `<h2>Tap drills for ${esc(r.thread.name)} (${r.form ? 'form' : 'cut'} tap)</h2><div class="drills">${r.drills.map(d => `<span><b>${esc(d.name)}</b> ${f4(d.d)} → ${Math.round(d.pct)}% thread</span>`).join('')}</div>
+      <p class="note" style="margin-top:8px">The nearest standard drills to ${f4(r.hole)} (${r.pct}% thread). A bigger drill gives less thread and an easier tap.</p>`;
+  } else $('#extra').hidden = true;
+  $('#how').innerHTML = r.how.map(x => '<li>' + esc(x) + '</li>').join('');
+  $('#gcode').textContent = FEEDS.gcode(r, cfg).join('\n');
+}
+function renderList() {
+  if (!list.length) { $('#list').innerHTML = '<p class="note" style="margin-top:10px">Tools you add are kept here (in this browser) to print as a sheet or load again.</p>'; return; }
+  $('#list').innerHTML = `<table class="data" style="margin-top:10px"><thead><tr><th>Name</th><th>Tool</th><th>RPM</th><th>Feed</th><th>Per tooth / rev</th><th>Cut</th><th>hp</th><th></th></tr></thead><tbody>${list.map((e, i) => {
+    const r = e.r;
+    return `<tr><td>${esc(e.name)}</td><td>${esc(r.toolName + ' ' + (r.tool === 'tap' ? r.thread : f4(r.D)) + ' · ' + FEEDS.MATERIALS[r.mat].name)}</td><td>${f0(r.rpm)}</td><td>${r.tool === 'tap' ? (+r.feed).toFixed(2) : f1(r.feed)}</td><td>${r.fz ? f4(r.fz) : ''}</td><td>${r.cut || ''}</td><td>${r.hp ? r.hp.toFixed(1) : ''}</td>
+      <td class="act"><button class="btn sm" data-load="${i}">Load</button> <button class="btn sm" data-del="${i}">✕</button></td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+function summary(r) {
+  return { tool: r.tool, toolName: r.toolName, mat: r.mat, D: r.D, thread: r.thread ? r.thread.name : '', rpm: r.rpm, feed: r.feed,
+    fz: r.tool === 'drill' || r.tool === 'reamer' ? r.ipr : r.tool === 'tap' ? 0 : r.fzProg,
+    cut: r.tool === 'helix' ? 'Ø' + r.bore + (r.hmode === 'helix' ? ' step ' + f4(r.pitch) : ' circle') : r.ae ? f4(r.ae) + ' × ' + f4(r.ap) : r.tool === 'drill' ? 'Z-' + f4(r.depth + r.tip) + (r.peck ? ' Q' + f4(r.peck) : '') : r.tool === 'tap' ? 'drill ' + (r.drills[0] ? r.drills[0].name : '') : '',
+    hp: r.hp || 0 };
+}
+function autoName() {
+  const r = res;
+  if (r.tool === 'tap') return r.thread.name + ' ' + (r.form ? 'FORM' : '') + ' TAP';
+  const d = (+r.D.toFixed(4)).toString();
+  return d + ' ' + ({ endmill: (cfg.Z || 4) + 'FL EM ' + (cfg.op || '').toUpperCase(), ball: (cfg.Z || 2) + 'FL BALL', taper: (cfg.Z || 3) + 'FL ' + cfg.taper + '° TAPER ' + (cfg.op || '').toUpperCase(), helix: (cfg.Z || 4) + 'FL EM ' + (r.hmode === 'circle' ? 'CIRCLE' : 'HELIX') + ' Ø' + r.bore, feedmill: 'HIGH-FEED', facemill: 'FACE MILL', chamfer: 'CHAMFER MILL', drill: 'DRILL', reamer: 'REAMER' }[r.tool]) + ' · ' + r.mat.toUpperCase();
+}
+
+// ---- events
+function update(formToo) {
+  res = FEEDS.calc(cfg);
+  if (formToo) renderForm();
+  else {                                      // refresh the placeholders that show calculated values
+    document.querySelectorAll('#form input[data-k]').forEach(inp => { inp.placeholder = placeholderFor(inp.dataset.k) ?? inp.placeholder; });
+  }
+  renderResult();
+  $('#listName').placeholder = autoName();
+  const save = {};
+  for (const k of Object.keys(FEEDS.DEFAULTS)) save[k] = cfg[k];
+  store(KEY, save);
+}
+function placeholderFor(k) {
+  const r = res, ph = (v, d = 4) => (typeof v === 'number' && isFinite(v) ? trim((+v).toFixed(d)) : undefined);
+  return { ae: ph(r.ae, r.tool === 'endmill' || r.tool === 'ball' ? 4 : 3), ap: ph(r.ap, r.tool === 'endmill' || r.tool === 'ball' ? 4 : 3), sfm: ph(r.sfm, 0), rpm: r.rpm ? String(r.rpm) : undefined,
+    feed: ph(r.feed, 1), fz: r.tool === 'drill' || r.tool === 'reamer' ? ph(r.ipr) : ph(r.fzActual), depth: r.tool === 'drill' ? ph(r.depth, 3) : undefined }[k];
+}
+$('#form').addEventListener('input', e => {
+  const k = e.target.dataset.k;
+  if (!k) return;
+  cfg[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  update(e.target.tagName === 'SELECT');
+});
+$('#form').addEventListener('change', e => { if (e.target.tagName === 'SELECT') { cfg[e.target.dataset.k] = e.target.value; update(true); } });
+$('#form').addEventListener('click', e => {
+  const b = e.target.closest('[data-seg] button');
+  if (!b) return;
+  const key = b.parentElement.dataset.seg;
+  cfg[key] = b.dataset.v;
+  if (key === 'tool' || key === 'op' || key === 'tapType' || key === 'hmode') for (const k of ['ae', 'ap', 'sfm', 'fz', 'rpm', 'feed', 'lead', 'pct', 'ramp']) cfg[k] = '';
+  if (key === 'tool' && cfg.tool === 'taper' && num(cfg.D) > 0.25) cfg.D = '0.125';
+  if (key === 'tool') { cfg.Z = { endmill: '4', ball: '2', taper: '3', helix: '4', feedmill: '4', facemill: '5', chamfer: '3' }[cfg.tool] || cfg.Z; if (cfg.tool === 'chamfer' && num(cfg.D) < 0.5) cfg.D = '1'; if (cfg.tool === 'tap' && cfg.toolMat !== 'carbide') cfg.toolMat = 'hss'; if (cfg.tool !== 'tap' && cfg.toolMat === 'hss' && (cfg.tool === 'endmill' || cfg.tool === 'ball')) cfg.toolMat = 'carbide'; }
+  update(true);
+});
+$('#reset').onclick = () => { const m = {}; for (const k of MACHINE) m[k] = cfg[k]; cfg = Object.assign({}, FEEDS.DEFAULTS, m); update(true); };
+$('#add').onclick = () => {
+  list.push({ name: $('#listName').value.trim() || autoName(), cfg: Object.assign({}, cfg), r: summary(res) });
+  $('#listName').value = '';
+  store(LIST, list); renderList();
+};
+$('#list').addEventListener('click', e => {
+  const l = e.target.dataset.load, d = e.target.dataset.del;
+  if (l !== undefined) { const m = {}; for (const k of MACHINE) m[k] = cfg[k]; cfg = Object.assign({}, FEEDS.DEFAULTS, list[+l].cfg, m); update(true); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  if (d !== undefined && confirm('Remove ' + list[+d].name + ' from the list?')) { list.splice(+d, 1); store(LIST, list); renderList(); }
+});
+$('#print').onclick = () => {
+  if (!list.length) return alert('Add tools to the list first.');
+  $('#printArea').innerHTML = `<h1>Feeds and speeds</h1><div>${new Date().toLocaleDateString()} · machine ${esc(cfg.maxRpm)} RPM, ${esc(cfg.hp)} hp</div>` + $('#list').innerHTML.replace(/<td class="act">[\s\S]*?<\/td>/g, '').replace('<th></th>', '');
+  window.print();
+};
+$('#export').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(list, null, 1)], { type: 'application/json' }));
+  a.download = 'feeds-and-speeds.json'; a.click();
+};
+$('#import').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try { const add = JSON.parse(await f.text()); if (!Array.isArray(add)) throw new Error('not a tool list'); list = list.concat(add.filter(x => x && x.cfg && x.r)); store(LIST, list); renderList(); }
+  catch (err) { alert('Could not read that file: ' + err.message); }
+};
+update(true);
+renderList();
+</script>
+</body>
+</html>

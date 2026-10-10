@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Probing Program Generator</title>
+<style>
+:root{--ink:#1d2a33;--mute:#6b7780;--line:#e3e7ea;--line2:#d5dbdf;--bg:#f6f7f8;--card:#fff;--red:#c2362b;--warnbg:#fff6e5;--warnln:#f0d9a8;--warnink:#7a5200;--errbg:#fdecea;--errln:#f2c1bc;
+  --feat:#0f6e8c;--touch:#c2362b;--start:#8a5cc2;--sel:#d08a1e;--grid:#eef1f3}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Barlow,'Segoe UI',system-ui,sans-serif}
+button,input,select,textarea{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--red);outline-offset:2px}
+.wrap{max-width:1400px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:20px}
+header{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+h1{font-weight:600;font-size:24px;letter-spacing:-.01em;margin:0;line-height:1.2}
+header p{color:var(--mute);margin:2px 0 0;max-width:760px}
+.btn{background:#fff;border:1px solid var(--line2);border-radius:6px;padding:7px 12px;cursor:pointer;font-weight:500;font-size:14px;white-space:nowrap}
+.btn:hover{border-color:#aeb8bf}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+.btn.primary:hover{background:#2c3d49}
+.btn.sm{padding:3px 8px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:default}
+.btns{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:980px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+aside.card{display:flex;flex-direction:column;padding:4px 20px 20px}
+aside section{display:flex;flex-direction:column;gap:10px;padding-top:18px;margin-top:16px;border-top:1px solid var(--line)}
+aside section:first-child{border-top:0;margin-top:0}
+h2{margin:0;font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.f>span{font-size:13px;font-weight:500;color:#3b4a55;display:flex;justify-content:space-between;gap:6px}
+.f>span em{font-style:normal;color:var(--mute);font-weight:400}
+.f input,.f select,.f textarea{width:100%;border:1px solid var(--line2);border-radius:6px;padding:6px 9px;background:#fff;font-variant-numeric:tabular-nums}
+.f textarea{font:13px/1.4 'IBM Plex Mono',Consolas,monospace;min-height:84px}
+.f input:focus,.f select:focus,.f textarea:focus{border-color:var(--ink);outline:none}
+.f .hint{font-size:12px;color:var(--mute);line-height:1.35}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--ink);flex:none}
+.seg{display:flex;background:#eef1f3;border-radius:7px;padding:3px;gap:3px;flex-wrap:wrap}
+.seg button{flex:1;border:0;background:transparent;border-radius:5px;padding:5px 8px;font-size:13px;font-weight:500;color:var(--mute);cursor:pointer;white-space:nowrap}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(29,42,51,.12)}
+.note{font-size:12.5px;color:var(--mute);line-height:1.4;margin:0}
+main{display:flex;flex-direction:column;gap:20px;min-width:0}
+.warn,.err{border-radius:10px;padding:10px 14px;font-size:14px}
+.warn{background:var(--warnbg);border:1px solid var(--warnln);color:var(--warnink)}
+.err{background:var(--errbg);border:1px solid var(--errln);color:#8a1f16}
+.warn ul,.err ul{margin:0;padding-left:18px}
+.addbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.addbar select{border:1px solid var(--line2);border-radius:6px;padding:6px 9px;background:#fff;min-width:240px;flex:1}
+.ops{display:flex;flex-direction:column;gap:10px}
+.op{border:1px solid var(--line);border-radius:8px;background:#fff}
+.op.sel{border-color:var(--sel);box-shadow:0 0 0 1px var(--sel)}
+.op .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;flex-wrap:wrap}
+.op .hd .n{font-weight:700;color:var(--mute);font-variant-numeric:tabular-nums;width:22px}
+.op .hd .t{font-weight:600;flex:1;min-width:140px}
+.op .hd .m{font:12.5px 'IBM Plex Mono',Consolas,monospace;color:var(--mute)}
+.op .hd .bad{color:var(--red);font-size:13px;font-weight:600}
+.op .hd button{border:0;background:none;color:var(--mute);cursor:pointer;font-size:15px;padding:0 4px}
+.op .hd button:hover{color:var(--ink)}
+.op .hd button.del:hover{color:var(--red)}
+.op .bd{padding:4px 12px 12px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--line)}
+.op .bd .info{font-size:13.5px;color:#3b4a55;margin:6px 0 0}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
+.fgrid .wide{grid-column:1/-1}
+details.adv summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--mute)}
+details.adv .fgrid{margin-top:8px}
+.opmsg{font-size:13px;margin:0;padding-left:18px}
+.opmsg li.e{color:#8a1f16}.opmsg li.w{color:var(--warnink)}
+#plot{width:100%;height:420px;display:block;background:#fbfcfc;border:1px solid var(--line);border-radius:8px}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--mute);margin-top:8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:50%;vertical-align:-2px;margin-right:5px}
+.tabs{display:flex;background:#eef1f3;border-radius:7px;padding:3px;gap:3px}
+.tabs button{border:0;background:transparent;border-radius:5px;padding:5px 12px;font-size:14px;font-weight:500;color:var(--mute);cursor:pointer}
+.tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(29,42,51,.12)}
+.outhead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+pre.code{margin:0;background:#1d2a33;color:#e6ecef;border-radius:8px;padding:14px 16px;font:12.5px/1.5 'IBM Plex Mono',Consolas,monospace;max-height:560px;overflow:auto;white-space:pre}
+.foot{font-size:12.5px;color:var(--mute)}
+.tag{font-size:11.5px;font-weight:600;border-radius:999px;padding:1px 8px;background:#eef1f3;color:var(--mute)}
+.tag.inspect{background:#e8f0fa;color:#1d4f8c}.tag.adjust{background:#efe6fa;color:#5b2d91}
+table.rep{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13.5px;margin-bottom:14px}
+table.rep th{font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);text-align:right;padding:5px 7px;border-bottom:1px solid #9aa6ae;font-weight:600}
+table.rep td{padding:4px 7px;border-bottom:1px solid var(--line);text-align:right}
+table.rep th:nth-child(-n+2),table.rep td:nth-child(-n+2){text-align:left}
+table.rep td.out{background:var(--errbg);color:#8a1f16;font-weight:700}
+table.rep td.ok{color:#135c33;font-weight:600}
+.runhd{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin:6px 0}
+.runhd b{font-size:15px}.runhd .bad{color:var(--red);font-weight:700}
+.youget{font-size:12.5px;color:#3b4a55;background:#f1f6f8;border:1px solid #d6e6ec;border-radius:7px;padding:7px 10px}
+.youget b{font-weight:600}.youget ul{margin:3px 0 0;padding-left:16px}
+.tl{display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap}
+.tl input[type=range]{flex:1;min-width:160px;accent-color:var(--red)}
+.tl .ro{font:13px/1.4 'IBM Plex Mono',Consolas,monospace;color:#3b4a55;min-width:0;flex-basis:100%}
+pre.code .hl{background:#3a4f60;display:inline-block;width:100%}
+table.units{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+table.units td{padding:3px 7px;border-bottom:1px solid var(--line)}
+table.units tr.pick td{background:#fff6e5}
+table.units td:first-child{color:var(--mute);width:40px;text-align:right}
+.place{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin:10px 0}
+.empty{color:var(--mute);font-size:14px;padding:18px;text-align:center;border:1px dashed var(--line2);border-radius:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Probing Program Generator</h1>
+      <p>Spindle-probe programs for a Mazak machining centre: Renishaw Inspection Plus cycles as EIA/ISO with a Mazatrol SUB PRO to call them, Mazatrol MMS units, or Mazak's MMS EIA macros. Pick the cycles, fill in the feature, and download.</p>
+    </div>
+    <div class="btns">
+      <label class="btn" title="Get a job back from a .json this app saved">Open job…<input id="openJob" type="file" accept=".json" hidden></label>
+      <button class="btn" id="saveJob">Save job</button>
+      <button class="btn" id="newJob" title="Clear the operations; the settings stay">New</button>
+    </div>
+  </header>
+  <div class="grid">
+    <aside class="card" id="side"></aside>
+    <main>
+      <div id="msgs"></div>
+      <section class="card">
+        <div class="outhead"><h2>Operations</h2><span class="note" id="opCount"></span></div>
+        <div class="addbar"><select id="addSel" aria-label="Operation to add"></select><button class="btn primary" id="addBtn">Add</button>
+          <select id="tplSel" aria-label="Add a ready-made job" style="flex:0 1 260px"></select></div>
+        <div class="ops" id="ops"></div>
+      </section>
+      <section class="card">
+        <div class="outhead"><h2>Preview (top view, work X/Y)</h2><span class="note" id="plotNote"></span></div>
+        <svg id="plot" role="img" aria-label="Where each operation probes"></svg>
+        <div class="legend"><span><i style="background:var(--feat)"></i>Feature</span><span><i style="background:var(--touch)"></i>Touch and direction</span><span><i style="background:var(--start)"></i>Probe start</span><span><i style="background:var(--sel)"></i>Selected operation</span></div>
+        <div class="tl"><button class="btn sm" id="tlPlay" title="Play the moves">▶</button><input type="range" id="tlSeek" min="0" max="0" value="0" aria-label="Move"><span class="note" id="tlCount"></span><div class="ro" id="tlRead"></div></div>
+      </section>
+      <section class="card">
+        <div class="outhead"><h2>Files for the machine</h2><div class="btns" id="dlAllBox"></div></div>
+        <p class="note" style="margin:-4px 0 10px">Each tab is one file this job makes. Download each one and put it where its line says.</p>
+        <div class="outhead">
+          <div class="tabs" id="tabs"></div>
+          <div class="btns" id="dls"></div>
+        </div>
+        <p class="note" id="fileRole" style="margin:-2px 0 10px"></p>
+        <div id="out"></div>
+      </section>
+      <section class="card" id="insCard">
+        <div class="outhead"><h2>Put it into a part program</h2>
+          <div class="btns"><label class="btn">Open part program…<input id="openPart" type="file" accept=".MAZ,.maz,.PBM,.pbm,.PBD,.pbd" hidden></label><button class="btn primary" id="insDl" disabled>Download with probing</button></div></div>
+        <div id="ins"><div class="empty">Open the Mazatrol part program (.MAZ, .PBM or .PBD) this probing is for: the units this job needs go straight into it, after the units you pick. Keep a copy of the original.</div></div>
+      </section>
+      <section class="card" id="repCard">
+        <div class="outhead"><h2>Inspection report</h2>
+          <div class="btns"><label class="btn">Open print.txt…<input id="openPrint" type="file" accept=".txt,text/plain" hidden></label><button class="btn" id="repCsv" disabled>Download CSV</button><button class="btn" id="repPrint" disabled>Print</button></div></div>
+        <div id="rep"><div class="empty">Inspected features print their results to print.txt on the control (C:\ymw\M8Y\data\MC_sdg\print, with data I/O parameter DPR14 = 4). Copy it here and open it, with the job that made the program open.</div></div>
+      </section>
+      <p class="foot">The cycles' inputs follow the macro packs they were written for (Renishaw A-4013-0113-0T; Mazak MMS V1.0). Always run a new probing program single block with the rapid and feed overrides low, and watch the first touches.</p>
+    </main>
+  </div>
+</div>
+<script>/*@@MACH1@@*/</script>
+<script>/*@@PROBE@@*/</script>
+<script>
+'use strict';
+const KEY = 'mach1-probe-job-v1';
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const num = (v, d = 0) => { const n = parseFloat(v); return isFinite(n) ? n : d; };
+const clone = o => JSON.parse(JSON.stringify(o));
+const SYS = [['ren', 'Renishaw cycles'], ['mms', 'Mazatrol MMS unit'], ['mmseia', 'Mazak MMS macros']];
+// the files a job makes, with what each is for (names only; the contents are made in output())
+function fileInfo() {
+  const n = job.name || 'PROBE';
+  if (job.sys === 'mms') return [{ key: 'maz', name: n + '.PBM', role: 'A WPC unit and an MMS unit: copy them into your part program in the Mazatrol Editor, or run it on its own to set the WPC.', short: 'the WPC and MMS units' }];
+  const f = [{ key: 'eia', name: n + '.EIA', role: 'The probing program (EIA/ISO). Load it into the control\'s programs as ' + n + '. It ends with ' + PROBE.endCode(job) + (PROBE.endCode(job) === 'M99' ? ': the SUB PRO below calls it.' : ': it runs on its own (or pick M99 under End with, to call it from the SUB PRO).'), short: 'the probing program' }];
+  if (job.sys === 'ren' && PROBE.eia180(job)) f.push({ key: 'e180', name: n + '-180.EIA', role: 'Writes the other side\'s WPC. Load it as ' + n + '-180; its SUB PRO goes after the other side\'s WPC unit.', short: 'writes the other side\'s WPC' });
+  const two = f.length > 1;
+  f.push({ key: 'maz', name: n + '-M.PBM', role: 'A Mazatrol program with the SUB PRO unit (MEASURE MACRO) that runs ' + n + '. Copy that unit into your part program after its WPC unit' + (two ? '; the WPC unit and the second SUB PRO (' + n + '-180) go where the other side starts.' : '.') + (job.sys === 'mmseia' ? ' Optional: the EIA program also runs on its own.' : ''), short: job.sys === 'mmseia' ? 'a SUB PRO that runs it (optional)' : 'a Mazatrol SUB PRO that runs it' });
+  return f;
+}
+
+let job = (() => { try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && Array.isArray(s.ops)) return Object.assign(clone(PROBE.DEFAULTS), s); } catch (e) { } return clone(PROBE.DEFAULTS); })();
+let sel = job.ops.length ? 0 : -1, tab = job.sys === 'mms' ? 'maz' : 'eia';
+const open = new Set(sel >= 0 ? [0] : []);
+function save() { try { localStorage.setItem(KEY, JSON.stringify(job)); } catch (e) { } }
+
+// ------------------------------------------------------------- the job settings
+const J = (k, label, unit, extra) => Object.assign({ k, label, unit: unit || '' }, extra || {});
+const WCS_OPTS = [['G54', 'G54'], ['G55', 'G55'], ['G56', 'G56'], ['G57', 'G57'], ['G58', 'G58'], ['G59', 'G59'], ['P', 'G54.1 P…']];
+const SIDE = [
+  { h: 'How the probe runs', items: [
+    J('sys', '', '', { kind: 'seg', opts: SYS }),
+    { note: () => ({ ren: 'Renishaw Inspection Plus macros (G65 P98xx): every cycle, inspection and tool adjustment. Runs on its own, or from a Mazatrol part program through a SUB PRO unit.', mms: 'Mazatrol\'s own MMS unit, inside a Mazatrol program: faces, grooves, steps, bores, bosses and a corner, setting the WPC only.', mmseia: 'Mazak\'s MMS EIA macros (G65 P90xx). They start and end at machine zero and take machine coordinates. They must be in the control\'s programs: load them first.' })[job.sys] },
+    { youGet: true },
+    J('name', 'Program name', '', { kind: 'text', hint: 'The files are named after it' }),
+  ] },
+  { h: 'Probe', items: [
+    { row: [J('probeNo', 'Tool number', ''), J('probeSfx', 'Suffix', '', { kind: 'text' })], show: () => job.sys !== 'mms', hint: 'As in TOOL DATA. The cycles take the probe\'s length from there.' },
+    J('toolChange', 'Change to the probe (T M6) at the start', '', { kind: 'chk', show: () => job.sys !== 'mms' }),
+    J('dwell', 'Wait after the tool change', 's', { show: () => job.sys !== 'mms' && job.toolChange, hint: 'The probe needs a few seconds to switch on' }),
+    { row: [J('probeNom', 'NOM-Ø', 'in'), J('probeSfx', 'Suffix', '', { kind: 'text' })], show: () => job.sys === 'mms', hint: 'The MMS unit\'s TOOL is PROBE; NOM-Ø and suffix as in TOOL DATA' },
+  ] },
+  { h: 'Work offset', show: () => job.sys === 'ren', items: [
+    { wcs: true },
+    { note: () => 'The program runs in this offset. Operations update it unless you pick another (or none) in their Options.' },
+  ] },
+  { h: 'Moves', show: () => job.sys === 'ren', items: [
+    J('clearZ', 'Clearance Z', 'in', { hint: 'Above everything: the probe crosses between features here' }),
+    J('moveG0', 'Rapid (G0) across at the clearance Z', '', { kind: 'chk', hint: 'Off: protected moves (9810) there too, slower' }),
+    { note: () => 'Every move down to a feature and back up is a protected move (9810): if the probe touches on the way it stops with PATH OBSTRUCTED.' },
+  ] },
+  { h: 'Inspection', show: () => job.sys === 'ren', items: [
+    J('defPurpose', 'New operations are for', '', { kind: 'seg', opts: [['set', 'Set'], ['inspect', 'Inspect'], ['adjust', 'Inspect + adjust tool']] }),
+    J('stopOOT', 'Stop the machine when out of tolerance', '', { kind: 'chk', hint: 'Off: nothing stops; the report judges each feature' }),
+    J('nthOn', 'Inspect every Nth part only', '', { kind: 'chk' }),
+    J('nth', 'N', '', { show: () => job.nthOn, hint: 'Parts 1, N+1, 2N+1 … are inspected; set-ups run every time. The part count is #' + (num(job.varBase, 950) + 10) + ': set it to 0 on the control to start again.' }),
+  ] },
+  { h: 'Table', show: () => job.sys === 'ren', items: [
+    J('tcFrom', 'Table centre', '', { kind: 'seg', opts: [['typed', 'Typed here'], ['control', 'Read from the control']] }),
+    { note: () => job.tcFrom === 'control' ? 'The program reads S5 from #50700 (X) and #50701 (Z). Type it below too if you have it: the program then stops if the two differ by more than 0.05.' : '' },
+    { row: [J('tcX', 'Centre X (S5)', 'in'), J('tcZ', 'Centre Z (S5)', 'in')], hint: 'The table\'s centre of rotation in machine coordinates, for the side 180° away. On the control: PARAMETER → MACHINE → ANOTHER (S) tab, address S5, the X and Z columns. The screen shows it in 0.00001 in (−1115000 = −11.15): type inches.' },
+    J('varBase', 'Variables to use from #', '', { hint: 'Twelve in a row: the other side kept for its WPC, the measured centre, working values, the inspection run counter' }),
+  ] },
+  { h: 'MMS macros', show: () => job.sys === 'mmseia', items: [
+    { row: [J('mmsM', 'Work offset (M)', '', { kind: 'sel', opts: [54, 55, 56, 57, 58, 59].map(n => [String(n), 'G' + n]) }), J('mmsH', 'Probe H No.', '', { hint: '0 = TOOL DATA length' })] },
+    J('mmsPrint', 'Print results (S1)', '', { kind: 'chk' }),
+  ] },
+  { h: 'WPC unit', show: () => job.sys === 'mms', items: [
+    J('wpcNo', 'WPC number', '', { kind: 'text' }),
+    { row: [J('wpcX', 'X', 'in'), J('wpcY', 'Y', 'in')] },
+    { row: [J('wpcTh', 'θ', '°'), J('wpcZ', 'Z', 'in')] },
+    { note: () => 'Machine coordinates of work zero, roughly: the MMS unit corrects them.' },
+    J('initZ', 'Initial Z (common unit)', 'in'),
+  ] },
+  { h: 'G-code', show: () => job.sys !== 'mms', items: [
+    J('g20', 'G20 at the start (inch)', '', { kind: 'chk' }),
+    J('homeEnd', 'G91 G28 Z0 at the end', '', { kind: 'chk' }),
+    J('endCode', 'End with', '', { kind: 'seg', opts: [['auto', 'Auto'], ['M30', 'M30'], ['M99', 'M99']] }),
+    { note: () => 'M30 to run it on its own; M99 when a Mazatrol SUB PRO calls it. Auto: M99 when something writes the Mazatrol WPC. Now: ' + PROBE.endCode(job) + '.' },
+  ] },
+];
+function jfield(it) {
+  const v = job[it.k], kind = it.kind || 'num', id = 'j_' + it.k;
+  if (kind === 'seg') return `${it.label ? `<div class="f"><span>${esc(it.label)}</span></div>` : ''}<div class="seg" data-j="${it.k}">${it.opts.map(([val, l]) => `<button type="button" data-v="${esc(val)}" class="${String(v) === String(val) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>`;
+  if (kind === 'chk') return `<label class="chk"><input type="checkbox" data-j="${it.k}" ${v ? 'checked' : ''}>${esc(it.label)}</label>${it.hint ? `<p class="note">${esc(it.hint)}</p>` : ''}`;
+  const lab = `<span><label for="${id}">${esc(it.label)}</label>${it.unit ? `<em>${esc(it.unit)}</em>` : ''}</span>`;
+  const inp = kind === 'sel' ? `<select id="${id}" data-j="${it.k}">${it.opts.map(([val, l]) => `<option value="${esc(val)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`
+    : `<input id="${id}" data-j="${it.k}" value="${esc(v === undefined ? '' : v)}" ${kind === 'num' ? 'inputmode="decimal"' : ''} autocomplete="off">`;
+  return `<div class="f">${lab}${inp}${it.hint ? `<span class="hint">${esc(it.hint)}</span>` : ''}</div>`;
+}
+function wcsPicker(val, attr, extra) {
+  // G54-G59, G54.1 Pn, plus extra options (e.g. the active one, none, Mazatrol WPC)
+  const isP = /^P\d+$/.test(val || '');
+  const opts = (extra || []).concat(WCS_OPTS);
+  return `<div class="row"><div class="f"><select ${attr}="sel">${opts.map(([v, l]) => `<option value="${v}" ${(v === 'P' ? isP : v === val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+    <div class="f"${isP ? '' : ' hidden'}><input ${attr}="p" value="${isP ? esc(val.slice(1)) : ''}" placeholder="P 1–300" inputmode="numeric" aria-label="G54.1 P number"></div></div>`;
+}
+function renderSide() {
+  $('side').innerHTML = SIDE.filter(s => !s.show || s.show()).map(s => `<section><h2>${esc(s.h)}</h2>${s.items.filter(it => !it.show || it.show()).map(it => {
+    if (it.note) { const t = it.note(); return t ? `<p class="note">${esc(t)}</p>` : ''; }
+    if (it.youGet) return '<div class="youget" id="youGet"></div>';
+    if (it.wcs) return wcsPicker(job.wcs, 'data-jw');
+    if (it.row) return `<div class="row">${it.row.map(jfield).join('')}</div>${it.hint ? `<p class="note">${esc(it.hint)}</p>` : ''}`;
+    return jfield(it);
+  }).join('')}</section>`).join('');
+}
+$('side').addEventListener('click', e => {
+  const b = e.target.closest('.seg button'); if (!b) return;
+  const k = b.parentNode.dataset.j;
+  if (k === 'sys' && b.dataset.v !== job.sys) {
+    // each kind of program keeps its own operations
+    job.stash = job.stash || {}; job.stash[job.sys] = job.ops; job.ops = job.stash[b.dataset.v] || []; delete job.stash[b.dataset.v];
+    tab = b.dataset.v === 'mms' ? 'maz' : 'eia'; sel = job.ops.length ? 0 : -1; open.clear(); if (sel >= 0) open.add(0);
+  }
+  job[k] = b.dataset.v;
+  changed(true);
+});
+$('side').addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.jw !== undefined) {
+    if (t.dataset.jw === 'sel') { job.wcs = t.value === 'P' ? 'P1' : t.value; changed(true); }
+    else { job.wcs = 'P' + (parseInt(t.value, 10) || 1); changed(false); }
+    return;
+  }
+  const k = t.dataset.j; if (!k) return;
+  job[k] = t.type === 'checkbox' ? t.checked : t.value;
+  changed(t.type === 'checkbox' || t.tagName === 'SELECT');
+});
+
+// ------------------------------------------------------------- the operations
+function renderAdd() {
+  const groups = {};
+  PROBE.list(job.sys).forEach(c => { (groups[c.group] = groups[c.group] || []).push(c); });
+  $('addSel').innerHTML = Object.entries(groups).map(([g, cs]) => `<optgroup label="${esc(g)}">${cs.map(c => `<option value="${c.id}">${esc(c.name)}${c.macro ? ' — ' + c.macro : c.ptn ? ' — ' + c.ptn : ''}</option>`).join('')}</optgroup>`).join('');
+}
+function ofield(o, i, f) {
+  const v = o[f.k], kind = f.kind || 'num', id = `o${i}_${f.k}`;
+  if (kind === 'seg') return `<div class="f wide">${f.label ? `<span>${esc(f.label)}</span>` : ''}<div class="seg" data-o="${i}" data-k="${f.k}">${f.opts.map(([val, l]) => `<button type="button" data-v="${esc(val)}" class="${String(v) === String(val) ? 'on' : ''}">${esc(l)}</button>`).join('')}</div></div>`;
+  if (kind === 'chk') return `<div class="wide"><label class="chk"><input type="checkbox" data-o="${i}" data-k="${f.k}" ${v ? 'checked' : ''}>${esc(f.label)}</label>${f.hint ? `<p class="note">${esc(f.hint)}</p>` : ''}</div>`;
+  if (kind === 'wcsonly') return `<div class="f wide"><span>${esc(f.label)}</span>${wcsPicker(v, `data-ow="${i}" data-wk="${f.k}" data-part`)}</div>`;
+  if (kind === 'wcs') return `<div class="f wide"><span>${esc(f.label)}</span>${wcsPicker(v, `data-ow="${i}" data-wk="${f.k}" data-part`, [['active', 'The active one (' + PROBE.wcsCode(job.wcs) + ')'], ['none', 'None (inspect only)'], ['WPC', 'Mazatrol WPC (S7)']])}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</div>`;
+  const lab = `<span><label for="${id}">${esc(f.label)}</label>${f.unit ? `<em>${esc(f.unit)}</em>` : ''}</span>`;
+  let inp;
+  if (kind === 'sel') inp = `<select id="${id}" data-o="${i}" data-k="${f.k}">${f.opts.map(([val, l]) => `<option value="${esc(val)}" ${String(v) === String(val) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  else if (kind === 'pts') inp = `<textarea id="${id}" data-o="${i}" data-k="${f.k}" spellcheck="false">${esc(v || '')}</textarea>`;
+  else inp = `<input id="${id}" data-o="${i}" data-k="${f.k}" value="${esc(v === undefined ? '' : v)}" ${kind === 'num' ? 'inputmode="decimal"' : ''} placeholder="${f.def === undefined && kind === 'num' ? 'blank = off' : ''}" autocomplete="off">`;
+  return `<div class="f${kind === 'pts' ? ' wide' : ''}">${lab}${inp}${f.hint ? `<span class="hint">${esc(f.hint)}</span>` : ''}</div>`;
+}
+function renderOps(msgs) {
+  const ops = job.ops;
+  $('opCount').textContent = ops.length ? ops.length + ' operation' + (ops.length === 1 ? '' : 's') : '';
+  if (!ops.length) { $('ops').innerHTML = '<div class="empty">Pick an operation above and Add it. They run in this order.</div>'; return; }
+  $('ops').innerHTML = ops.map((o, i) => {
+    const c = PROBE.CYC[o.type]; if (!c) return '';
+    const mine = msgs.filter(m => m.op === i), nErr = mine.filter(m => m.err).length;
+    const isOpen = open.has(i);
+    const ps = PROBE.purposes(c), pu = PROBE.purposeOf(o);
+    const purp = ps.length > 1 ? ofield(Object.assign({}, o, { purpose: pu }), i, { k: 'purpose', label: 'Purpose', kind: 'seg', opts: ps.map(p => [p, PROBE.PURPOSE_NAMES[p]]) }) : '';
+    const fields = purp + c.fields.filter(f => !f.show || f.show(o)).map(f => ofield(o, i, f)).join('') + PROBE.inspectFields(o).map(f => ofield(o, i, f)).join('');
+    const opts = PROBE.optLetters(o).split('').map(L => ofield(o, i, PROBE.OPT[L])).join('');
+    return `<div class="op${i === sel ? ' sel' : ''}" data-i="${i}">
+      <div class="hd" data-act="toggle"><span class="n">${i + 1}</span><span class="t">${esc(c.name)}</span>${pu && pu !== 'set' ? `<span class="tag ${pu}">${pu === 'adjust' ? 'Inspect + adjust' : 'Inspect'}</span>` : ''}<span class="m">${c.macro ? 'P' + c.macro : c.ptn || ''}</span>${nErr ? `<span class="bad">${nErr} to fix</span>` : ''}
+        <button data-act="up" title="Move up" aria-label="Move up">↑</button><button data-act="down" title="Move down" aria-label="Move down">↓</button><button data-act="dup" title="Duplicate" aria-label="Duplicate">⧉</button><button class="del" data-act="del" title="Delete" aria-label="Delete">✕</button></div>
+      ${isOpen ? `<div class="bd"><p class="info">${esc(c.info)}</p><div class="fgrid">${fields}</div>
+        ${opts ? `<details class="adv"${pu === 'set' || (!pu && c.opt.includes('S')) ? ' open' : ''}><summary>${pu && pu !== 'set' ? 'Options: printing, overtravel' : 'Options: offsets, tolerances, printing'}</summary><div class="fgrid">${opts}</div></details>` : ''}
+        ${mine.length ? `<ul class="opmsg">${mine.map(m => `<li class="${m.err ? 'e' : 'w'}">${esc(m.err || m.warn)}</li>`).join('')}</ul>` : ''}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+$('addBtn').onclick = () => {
+  const o = PROBE.newOp($('addSel').value, job.defPurpose);
+  // a new feature starts where the last one was
+  const prev = job.ops[job.ops.length - 1];
+  if (prev && prev.x !== undefined && o.x !== undefined && PROBE.CYC[prev.type].sys === PROBE.CYC[o.type].sys) { o.x = prev.x; o.y = prev.y; }
+  job.ops.push(o); sel = job.ops.length - 1; open.clear(); open.add(sel); changed(true);
+};
+$('ops').addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); const card = e.target.closest('.op'); if (!card) return;
+  const i = +card.dataset.i;
+  if (!el) { if (sel !== i) { sel = i; draw(); markSel(); } return; }
+  const act = el.dataset.act;
+  if (act === 'toggle') { if (open.has(i)) open.delete(i); else open.add(i); sel = i; }
+  if (act === 'up' && i > 0) { [job.ops[i - 1], job.ops[i]] = [job.ops[i], job.ops[i - 1]]; sel = i - 1; open.clear(); open.add(sel); }
+  if (act === 'down' && i < job.ops.length - 1) { [job.ops[i + 1], job.ops[i]] = [job.ops[i], job.ops[i + 1]]; sel = i + 1; open.clear(); open.add(sel); }
+  if (act === 'dup') { job.ops.splice(i + 1, 0, clone(job.ops[i])); sel = i + 1; open.clear(); open.add(sel); }
+  if (act === 'del') { job.ops.splice(i, 1); sel = Math.min(i, job.ops.length - 1); open.clear(); if (sel >= 0) open.add(sel); }
+  e.stopPropagation(); changed(true);
+});
+$('ops').addEventListener('click', e => {
+  const b = e.target.closest('.seg button'); if (!b) return;
+  const p = b.parentNode, o = job.ops[+p.dataset.o]; o[p.dataset.k] = b.dataset.v;
+  if (p.dataset.k === 'purpose') o.upd = b.dataset.v === 'set' ? (o.upd && o.upd !== 'none' ? o.upd : 'active') : 'none';
+  changed(true);
+}, true);
+$('ops').addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.ow !== undefined) {
+    const o = job.ops[+t.dataset.ow], k = t.dataset.wk;
+    if (t.dataset.part === 'sel') o[k] = t.value === 'P' ? 'P1' : t.value; else o[k] = 'P' + (parseInt(t.value, 10) || 1);
+    changed(t.dataset.part === 'sel'); return;
+  }
+  if (t.dataset.o === undefined) return;
+  const o = job.ops[+t.dataset.o]; o[t.dataset.k] = t.type === 'checkbox' ? t.checked : t.value;
+  changed(t.type === 'checkbox' || t.tagName === 'SELECT');
+});
+// the wcs picker in an operation: data-part="sel" / "p" (the attribute is written as data-part followed by its role)
+function fixPickers() {
+  document.querySelectorAll('#ops [data-ow]').forEach(el => { if (el.tagName === 'SELECT') el.dataset.part = 'sel'; else el.dataset.part = 'p'; });
+}
+function markSel() { document.querySelectorAll('#ops .op').forEach(el => el.classList.toggle('sel', +el.dataset.i === sel)); }
+
+// ------------------------------------------------------------- the preview
+const NS = 'http://www.w3.org/2000/svg';
+function draw() {
+  const svg = $('plot'), W = svg.clientWidth || 800, H = svg.clientHeight || 420;
+  const P = PROBE.plot(job), xs = [], ys = [];
+  const addPt = (x, y) => { if (isFinite(x) && isFinite(y)) { xs.push(x); ys.push(y); } };
+  P.forEach(g => {
+    (g.circles || []).concat(g.dashed || []).forEach(([x, y, r]) => { addPt(x - r, y - r); addPt(x + r, y + r); });
+    (g.lines || []).forEach(([a, b, c, d]) => { addPt(a, b); addPt(c, d); });
+    (g.rects || []).forEach(([a, b, c, d]) => { addPt(a, b); addPt(c, d); });
+    (g.touch || []).forEach(([x, y]) => addPt(x, y));
+    (g.pts || []).forEach(([x, y]) => addPt(x, y));
+    if (g.start) addPt(g.start[0], g.start[1]);
+  });
+  if (!xs.length) { addPt(-1, -1); addPt(1, 1); }
+  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  const pad = Math.max(0.5, 0.12 * Math.max(x1 - x0, y1 - y0)); x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+  const s = Math.min(W / (x1 - x0), H / (y1 - y0)), ox = (W - s * (x1 - x0)) / 2, oy = (H - s * (y1 - y0)) / 2;
+  const X = x => ox + (x - x0) * s, Y = y => H - oy - (y - y0) * s;
+  let h = '';
+  // grid every 1, 0.5 or more, and the axes
+  const step = [0.25, 0.5, 1, 2, 5, 10, 20, 50].find(v => v * s >= 28) || 100;
+  for (let gx = Math.ceil(x0 / step) * step; gx <= x1; gx += step) h += `<line x1="${X(gx)}" y1="0" x2="${X(gx)}" y2="${H}" stroke="var(--grid)"/>`;
+  for (let gy = Math.ceil(y0 / step) * step; gy <= y1; gy += step) h += `<line x1="0" y1="${Y(gy)}" x2="${W}" y2="${Y(gy)}" stroke="var(--grid)"/>`;
+  if (x0 < 0 && x1 > 0) h += `<line x1="${X(0)}" y1="0" x2="${X(0)}" y2="${H}" stroke="#c9d1d6"/>`;
+  if (y0 < 0 && y1 > 0) h += `<line x1="0" y1="${Y(0)}" x2="${W}" y2="${Y(0)}" stroke="#c9d1d6"/>`;
+  h += `<text x="6" y="${H - 6}" font-size="11" fill="#9aa6ae">grid ${step} in${job.sys === 'mmseia' ? ' · machine coordinates' : ''}</text>`;
+  const order = P.map((g, i) => i).filter(i => i !== sel).concat(sel >= 0 && sel < P.length ? [sel] : []);
+  order.forEach(i => {
+    const g = P[i], on = i === sel, col = on ? 'var(--sel)' : 'var(--feat)', w = on ? 2.4 : 1.6;
+    (g.dashed || []).forEach(([x, y, r]) => { h += `<circle cx="${X(x)}" cy="${Y(y)}" r="${r * s}" fill="none" stroke="${col}" stroke-dasharray="5 4" stroke-width="1"/>`; });
+    (g.circles || []).forEach(([x, y, r]) => { h += `<circle cx="${X(x)}" cy="${Y(y)}" r="${Math.max(1, r * s)}" fill="none" stroke="${col}" stroke-width="${w}"/>`; });
+    (g.lines || []).forEach(([a, b, c, d]) => { h += `<line x1="${X(a)}" y1="${Y(b)}" x2="${X(c)}" y2="${Y(d)}" stroke="${col}" stroke-width="${w}"/>`; });
+    (g.rects || []).forEach(([a, b, c, d]) => { h += `<rect x="${X(Math.min(a, c))}" y="${Y(Math.max(b, d))}" width="${Math.abs(c - a) * s}" height="${Math.abs(d - b) * s}" fill="rgba(15,110,140,.06)" stroke="${col}" stroke-width="${w}"/>`; });
+    (g.touch || []).forEach(([x, y, dx, dy]) => {
+      const L = Math.hypot(dx, dy) || 1, ux = dx / L, uy = dy / L, tx = X(x), ty = Y(y), bx = tx - ux * 18, by = ty + uy * 18;
+      h += `<line x1="${bx}" y1="${by}" x2="${tx}" y2="${ty}" stroke="var(--touch)" stroke-width="1.6"/><polygon points="${tx},${ty} ${tx - ux * 7 - uy * 4},${ty + uy * 7 - ux * 4} ${tx - ux * 7 + uy * 4},${ty + uy * 7 + ux * 4}" fill="var(--touch)"/>`;
+    });
+    (g.pts || []).forEach(([x, y, l]) => { h += `<circle cx="${X(x)}" cy="${Y(y)}" r="4" fill="var(--touch)"/><text x="${X(x) + 6}" y="${Y(y) - 6}" font-size="11" fill="#3b4a55">${esc(l || '')}</text>`; });
+    if (g.start) h += `<circle cx="${X(g.start[0])}" cy="${Y(g.start[1])}" r="4.5" fill="#fff" stroke="var(--start)" stroke-width="2"/>`;
+    const lx = g.start ? g.start : (g.circles && g.circles[0]) || (g.pts && g.pts[0]) || (g.lines && g.lines[0]) || (g.rects && g.rects[0]) || (g.dashed && g.dashed[0]);
+    if (lx) h += `<text x="${X(lx[0]) + 8}" y="${Y(lx[1]) + 14}" font-size="12" font-weight="700" fill="${on ? '#9a5d00' : '#0f6e8c'}">${i + 1}</text>`;
+  });
+  // the timeline: the probe's path so far, and where it is
+  if (tl > 0) {
+    let px = null, py = null;
+    for (let k = 0; k < tl && k < MOVES.length; k++) {
+      const m = MOVES[k], qx = X(m.x), qy = Y(m.y);
+      if (px !== null && (qx !== px || qy !== py)) h += `<line x1="${px}" y1="${py}" x2="${qx}" y2="${qy}" stroke="${m.kind === 'touch' ? 'var(--touch)' : m.kind === 'rapid' ? '#9aa6ae' : 'var(--start)'}" stroke-width="${m.kind === 'touch' ? 2.2 : 1.4}" ${m.kind === 'rapid' ? 'stroke-dasharray="6 4"' : ''}/>`;
+      px = qx; py = qy;
+    }
+    const m = MOVES[Math.min(tl, MOVES.length) - 1];
+    if (m) h += `<circle cx="${X(m.x)}" cy="${Y(m.y)}" r="7" fill="${m.kind === 'touch' ? 'var(--touch)' : '#1d2a33'}" stroke="#fff" stroke-width="2"/>${m.kind === 'index' || m.kind === 'home' ? `<text x="${X(m.x) + 10}" y="${Y(m.y) - 10}" font-size="12" font-weight="700" fill="#5b2d91">${esc(m.label)}</text>` : ''}`;
+  }
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = h;
+  $('plotNote').textContent = job.sys === 'ren' ? 'Each operation is drawn where it probes; Z levels are in the program.' : '';
+}
+
+// ------------------------------------------------------------- output
+let FILES = [];
+function output(msgs) {
+  const errs = msgs.filter(m => m.err), blocked = errs.length > 0, info = fileInfo();
+  if (!info.some(f => f.key === tab)) tab = info[0].key;
+  $('tabs').innerHTML = info.map(f => `<button class="${f.key === tab ? 'on' : ''}" data-t="${f.key}" title="${esc(f.short)}">${esc(f.name)}</button>`).join('');
+  FILES = [];
+  if (!blocked) {
+    const n = job.name || 'PROBE';
+    for (const f of info) {
+      if (f.key === 'eia') { const t = PROBE.eia(job); FILES.push(Object.assign({}, f, { listing: t, data: t.replace(/\n/g, '\r\n'), type: 'text/plain', lines: t.trim().split('\n').length })); }
+      if (f.key === 'e180') { const t = PROBE.eia180(job); FILES.push(Object.assign({}, f, { listing: t, data: t.replace(/\n/g, '\r\n'), type: 'text/plain', lines: t.trim().split('\n').length })); }
+      if (f.key === 'maz') {
+        let m = null, lst; try { m = PROBE.toMazatrol(job, MACH1, 'SmoothM'); lst = MACH1.open(m.save(), m.fileName).listing(); } catch (e) { lst = e.message; }
+        FILES.push(Object.assign({}, f, { name: m ? m.fileName : f.name, listing: lst, data: m ? m.save() : null, type: 'application/octet-stream' }));
+      }
+    }
+  }
+  const cur = FILES.find(f => f.key === tab), curInfo = info.find(f => f.key === tab);
+  $('fileRole').innerHTML = `<b>${esc(curInfo.name)}</b>: ${esc(curInfo.role)}${cur && cur.lines ? ' ' + cur.lines + ' lines.' : ''}`;
+  $('dls').innerHTML = `<button class="btn primary" id="dlCur" ${cur && cur.data ? '' : 'disabled'}>Download ${esc(curInfo.name)}</button>`;
+  $('dlAllBox').innerHTML = info.length > 1 ? `<button class="btn" id="dlAll" ${FILES.length === info.length && FILES.every(f => f.data) ? '' : 'disabled'}>Download all ${info.length}</button>` : '';
+  if (blocked) { $('out').innerHTML = `<div class="empty">Fix the ${errs.length === 1 ? 'problem' : errs.length + ' problems'} above to make the files.</div>`; return; }
+  $('out').innerHTML = `<pre class="code">${esc(cur ? cur.listing : '')}</pre>`;
+}
+$('tabs').addEventListener('click', e => { const b = e.target.closest('button[data-t]'); if (!b) return; tab = b.dataset.t; refresh(); });
+function dl(name, data, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([data], { type })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+$('dls').addEventListener('click', e => { if (e.target.id !== 'dlCur') return; const f = FILES.find(x => x.key === tab); if (f && f.data) dl(f.name, f.data, f.type); });
+$('dlAllBox').addEventListener('click', e => { if (e.target.id !== 'dlAll') return; FILES.forEach((f, k) => setTimeout(() => dl(f.name, f.data, f.type), k * 400)); });
+$('saveJob').onclick = () => dl((job.name || 'probe') + '-probe.json', JSON.stringify(Object.assign({ mach1probe: 1 }, job), null, 1), 'application/json');
+$('openJob').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => { const j = JSON.parse(t); if (!Array.isArray(j.ops)) throw new Error('Not a probing job'); delete j.mach1probe; job = Object.assign(clone(PROBE.DEFAULTS), j); sel = job.ops.length ? 0 : -1; open.clear(); if (sel >= 0) open.add(0); changed(true); })
+    .catch(err => alert('Could not open ' + f.name + ': ' + err.message));
+  e.target.value = '';
+};
+$('newJob').onclick = () => { if (job.ops.length && !confirm('Clear the ' + job.ops.length + ' operations?')) return; job.ops = []; sel = -1; open.clear(); changed(true); };
+
+// ------------------------------------------------------------- inspection report
+let REP = null;
+const f4r = v => (v === undefined || v === null || !isFinite(v) ? '' : (+v).toFixed(4));
+function repHtml(r) {
+  const head = '<tr><th>Feature</th><th>Item</th><th>Nominal</th><th>Actual</th><th>Deviation</th><th>+ tol</th><th>− tol</th><th>Result</th></tr>';
+  const row = x => `<tr><td>${esc(x.feature)}</td><td>${esc(x.item)}${x.note ? ' <span class="note">' + esc(x.note) + '</span>' : ''}</td><td>${f4r(x.nom)}</td><td>${f4r(x.act)}</td><td class="${x.res === 'OUT' ? 'out' : ''}">${f4r(x.dev)}</td><td>${x.plus !== undefined && x.plus !== '' ? f4r(+x.plus) : ''}</td><td>${x.minus !== undefined && x.minus !== '' ? f4r(+x.minus) : ''}</td><td class="${x.res === 'OUT' ? 'out' : x.res === 'OK' ? 'ok' : ''}">${esc(x.res || '')}</td></tr>`;
+  // per feature item over all parts
+  const sum = {};
+  r.runs.forEach(run => run.rows.forEach(x => { if (!isFinite(x.act)) return; const k = x.feature + '\u0000' + x.item; const s = sum[k] = sum[k] || { feature: x.feature, item: x.item, n: 0, out: 0, min: Infinity, max: -Infinity, tot: 0 }; s.n++; if (x.res === 'OUT') s.out++; s.min = Math.min(s.min, x.act); s.max = Math.max(s.max, x.act); s.tot += x.act; }));
+  const sumRows = Object.values(sum).map(s => `<tr><td>${esc(s.feature)}</td><td>${esc(s.item)}</td><td>${s.n}</td><td class="${s.out ? 'out' : ''}">${s.out}</td><td>${f4r(s.min)}</td><td>${f4r(s.max)}</td><td>${f4r(s.tot / s.n)}</td></tr>`).join('');
+  return (r.warn.length ? `<div class="warn"><ul>${r.warn.map(w => `<li>${esc(w)}</li>`).join('')}</ul></div>` : '') +
+    (r.runs.length ? '' : '<div class="empty">No MACH1 results in this file.</div>') +
+    (r.runs.length > 1 ? `<h3 style="font-size:14px;margin:10px 0 4px">All ${r.runs.length} parts</h3><table class="rep"><tr><th>Feature</th><th>Item</th><th>Parts</th><th>Out</th><th>Min</th><th>Max</th><th>Mean</th></tr>${sumRows}</table>` : '') +
+    r.runs.map(run => `<div class="runhd"><b>Part ${run.n}</b><span class="note">${esc(run.date)} ${esc(run.time.replace(/(\d\d)(\d\d)(\d\d)/, '$1:$2:$3'))} · ${esc(run.name)}</span>${run.out ? `<span class="bad">${run.out} out of tolerance</span>` : '<span class="note">all in tolerance</span>'}</div><table class="rep">${head}${run.rows.map(row).join('')}</table>`).join('');
+}
+function showReport() {
+  $('rep').innerHTML = REP ? repHtml(REP) : '';
+  $('repCsv').disabled = $('repPrint').disabled = !(REP && REP.runs.length);
+}
+$('openPrint').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => { REP = Object.assign(PROBE.readPrint(t, job), { text: t }); showReport(); }).catch(err => alert('Could not read ' + f.name + ': ' + err.message));
+  e.target.value = '';
+};
+$('repCsv').onclick = () => { if (REP) dl((job.name || 'probe') + '-inspection.csv', PROBE.reportCSV(REP), 'text/csv'); };
+$('repPrint').onclick = () => {
+  if (!REP) return;
+  const w = window.open('', '_blank'); if (!w) return;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(job.name)} inspection</title><style>body{font:12px 'Segoe UI',system-ui,sans-serif;color:#000;margin:12mm}table{width:100%;border-collapse:collapse;margin-bottom:10px}th,td{border-bottom:1px solid #bbb;padding:3px 5px;text-align:right}th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}td.out{font-weight:700;background:#f3d3cf}.runhd{margin:8px 0 2px}.bad{font-weight:700}.note{color:#555}.warn{border:1px solid #c90;padding:4px 8px}</style></head><body><h2>${esc(job.name)} — inspection report</h2>${repHtml(REP)}</body></html>`);
+  w.document.close(); w.focus(); w.print();
+};
+
+// ------------------------------------------------------------- ready-made jobs
+function renderTpl() {
+  $('tplSel').innerHTML = '<option value="">Add a ready-made job…</option>' + PROBE.TEMPLATES.map(t => `<option value="${t.id}" title="${esc(t.info)}">${esc(t.name)}</option>`).join('');
+}
+$('tplSel').onchange = e => {
+  const id = e.target.value; e.target.value = ''; if (!id) return;
+  const t = PROBE.fromTemplate(id, job);
+  if (t.sys !== job.sys) { job.stash = job.stash || {}; job.stash[job.sys] = job.ops; job.ops = job.stash[t.sys] || []; delete job.stash[t.sys]; job.sys = t.sys; tab = ''; }
+  const first = job.ops.length; job.ops.push(...t.ops);
+  sel = first; open.clear(); t.ops.forEach((o, k) => open.add(first + k)); changed(true);
+};
+
+// ------------------------------------------------------------- into a part program
+let PART = null;        // { bytes, name, units, place }
+function showPart() {
+  if (!PART) return;
+  const two = job.sys !== 'mms' && !!PROBE.eia180(job), u = PART.units;
+  const opt = v => u.filter(x => x.no > 0).map(x => `<option value="${x.no}" ${+v === x.no ? 'selected' : ''}>${x.no} ${esc(x.unit)} ${esc(x.text)}</option>`).join('');
+  const what = job.sys === 'mms' ? 'The MMS unit' : 'SUB PRO ' + esc(job.name);
+  $('ins').innerHTML = `<p class="note"><b>${esc(PART.name)}</b>: ${u.length} units. Picked units are shaded.</p>
+    <div class="place"><div class="f"><span>${what} goes after unit</span><select id="plMain">${opt(PART.place.main)}</select><span class="hint">After this side's WPC and its INDEX / MMS units.</span></div>
+    ${two ? `<div class="f"><span>SUB PRO ${esc(job.name)}-180 goes after unit</span><select id="plOther"><option value="">pick…</option>${opt(PART.place.other)}</select><span class="hint">After the other side's WPC unit (and its INDEX).</span></div>` : ''}</div>
+    <table class="units">${u.map(x => `<tr class="${x.no === +PART.place.main || x.no === +PART.place.other ? 'pick' : ''}"><td>${x.no}</td><td>${esc(x.unit)}</td><td>${esc(x.text)}</td></tr>`).join('')}</table>
+    <p class="note" id="insMsg" style="margin-top:8px"></p>`;
+  const ok = msgsNow().filter(m => m.err).length === 0;
+  $('insDl').disabled = !ok;
+  $('insMsg').textContent = ok ? 'The download keeps the file name: check it in the Mazatrol Editor before running.' : 'Fix the problems above first.';
+}
+let lastMsgs = [];
+const msgsNow = () => lastMsgs;
+$('openPart').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.arrayBuffer().then(b => { const bytes = new Uint8Array(b); const units = PROBE.unitsOf(MACH1, bytes, f.name); PART = { bytes, name: f.name, units, place: PROBE.suggestPlace(units) }; showPart(); })
+    .catch(err => alert('Could not open ' + f.name + ': ' + err.message));
+  e.target.value = '';
+};
+$('ins').addEventListener('change', e => { if (!PART) return; if (e.target.id === 'plMain') PART.place.main = +e.target.value; if (e.target.id === 'plOther') PART.place.other = e.target.value === '' ? null : +e.target.value; showPart(); });
+$('insDl').onclick = () => {
+  if (!PART) return;
+  try { const r = PROBE.insertInto(job, MACH1, PART.bytes, PART.name, PART.place); dl(PART.name, r.program.save(), 'application/octet-stream'); $('insMsg').textContent = 'Added: ' + r.done.join('; ') + '.' + (r.warnings.length ? ' ' + r.warnings.join(' ') : '') + ' The file name is kept: check it in the Mazatrol Editor before running.'; }
+  catch (err) { $('insMsg').textContent = err.message; }
+};
+
+// ------------------------------------------------------------- the timeline
+let MOVES = [], tl = 0, tlTimer = null;
+const KIND = { rapid: 'rapid', protected: 'protected move', touch: 'touch', index: 'table turns', home: 'probe to Z home', calc: 'works out' };
+function tlRead() {
+  const m = MOVES[tl - 1];
+  $('tlCount').textContent = MOVES.length ? tl + ' / ' + MOVES.length : '';
+  if (!m) { $('tlRead').textContent = MOVES.length ? 'Start: drag the bar or press ▶ to follow the probe.' : ''; return; }
+  const c = PROBE.CYC[job.ops[m.op] && job.ops[m.op].type];
+  $('tlRead').textContent = (m.op + 1) + ' ' + (c ? c.name : '') + ' · ' + (KIND[m.kind] || m.kind) + ': ' + m.label + ' · X' + PROBE.fmt(m.x) + ' Y' + PROBE.fmt(m.y) + (m.z === null ? ' Z home' : ' Z' + PROBE.fmt(m.z));
+}
+function tlSet(v) {
+  tl = Math.max(0, Math.min(MOVES.length, v)); $('tlSeek').value = tl; tlRead();
+  const m = MOVES[tl - 1];
+  if (m && m.op !== sel) { sel = m.op; markSel(); }
+  draw(); hlListing();
+}
+$('tlSeek').addEventListener('input', e => tlSet(+e.target.value));
+$('tlPlay').onclick = () => {
+  if (tlTimer) { clearInterval(tlTimer); tlTimer = null; $('tlPlay').textContent = '▶'; return; }
+  if (tl >= MOVES.length) tlSet(0);
+  $('tlPlay').textContent = '❚❚';
+  tlTimer = setInterval(() => { if (tl >= MOVES.length) { clearInterval(tlTimer); tlTimer = null; $('tlPlay').textContent = '▶'; return; } tlSet(tl + 1); }, 450);
+};
+// the listing lines of the operation the timeline is on
+function hlListing() {
+  const pre = document.querySelector('#out pre'); if (!pre || tab !== 'eia') return;
+  const f = FILES.find(x => x.key === 'eia'); if (!f) return;
+  const m = MOVES[tl - 1], lines = f.listing.replace(/\n$/, '').split('\n');
+  let a = -1, b = -1;
+  if (m) { a = lines.findIndex(l => l.startsWith('(' + (m.op + 1) + ' ')); b = lines.findIndex((l, k) => k > a && /^\(\d+ /.test(l) || (k > a && /^G65 P9833/.test(l))); if (b < 0) b = lines.length; }
+  pre.innerHTML = lines.map((l, k) => k >= a && k < b && a >= 0 ? `<span class="hl">${esc(l)}</span>` : esc(l)).join('\n');
+  const el = pre.querySelector('.hl'); if (el) pre.scrollTop = Math.max(0, el.offsetTop - pre.offsetTop - 40);
+}
+
+// ------------------------------------------------------------- refresh
+function messages(msgs) {
+  const g = msgs.filter(m => m.op < 0), errs = g.filter(m => m.err), warns = g.filter(m => m.warn);
+  const opErr = msgs.filter(m => m.op >= 0 && m.err).length;
+  $('msgs').innerHTML = (errs.length || opErr ? `<div class="err"><ul>${errs.map(m => `<li>${esc(m.err)}</li>`).join('')}${opErr ? `<li>${opErr} problem${opErr === 1 ? '' : 's'} in the operations (marked below)</li>` : ''}</ul></div>` : '') +
+    (warns.length ? `<div class="warn"><ul>${warns.map(m => `<li>${esc(m.warn)}</li>`).join('')}</ul></div>` : '');
+}
+function refresh(full) {
+  const msgs = PROBE.check(job);
+  lastMsgs = msgs;
+  MOVES = PROBE.moves(job); if (tl > MOVES.length) tl = MOVES.length; $('tlSeek').max = MOVES.length; $('tlSeek').value = tl; tlRead();
+  if (full) { renderSide(); renderAdd(); renderTpl(); renderOps(msgs); fixPickers(); }
+  else {
+    // keep focus while typing: only the badges and messages of the operations change
+    document.querySelectorAll('#ops .op').forEach(el => {
+      const i = +el.dataset.i, mine = msgs.filter(m => m.op === i), n = mine.filter(m => m.err).length;
+      const hd = el.querySelector('.hd'); let b = hd.querySelector('.bad');
+      if (n && !b) { b = document.createElement('span'); b.className = 'bad'; hd.insertBefore(b, hd.querySelector('button')); }
+      if (b) { if (n) b.textContent = n + ' to fix'; else b.remove(); }
+      const bd = el.querySelector('.bd'); if (!bd) return;
+      let ul = bd.querySelector('.opmsg');
+      if (!mine.length) { if (ul) ul.remove(); return; }
+      if (!ul) { ul = document.createElement('ul'); ul.className = 'opmsg'; bd.appendChild(ul); }
+      ul.innerHTML = mine.map(m => `<li class="${m.err ? 'e' : 'w'}">${esc(m.err || m.warn)}</li>`).join('');
+    });
+  }
+  messages(msgs); draw(); output(msgs);
+  hlListing(); showPart();
+  if ($('youGet')) $('youGet').innerHTML = '<b>You get:</b><ul>' + fileInfo().map(f => `<li><b>${esc(f.name)}</b>: ${esc(f.short)}</li>`).join('') + '</ul>';
+}
+function changed(full) { save(); refresh(full); if (REP && REP.text) { REP = Object.assign(PROBE.readPrint(REP.text, job), { text: REP.text }); showReport(); } }
+window.addEventListener('resize', draw);
+refresh(true);
+</script>
+</body>
+</html>

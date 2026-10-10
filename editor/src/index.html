@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mazatrol Editor</title>
+<style>/*APP_CSS*/</style>
+<script>try { document.documentElement.dataset.theme = JSON.parse(localStorage.getItem('mazed-theme')) || 'dark'; } catch (e) { document.documentElement.dataset.theme = 'dark'; }</script>
+</head>
+<body>
+<header class="bar">
+  <div class="brand">Mazatrol Editor</div>
+  <div class="group">
+    <div class="menu">
+      <button type="button" data-act="new-menu" title="Start a new program">New</button>
+      <div class="drop" id="newDrop"></div>
+    </div>
+    <button type="button" data-act="open" title="Open programs (Ctrl+O). You can also drop files on the window.">Open</button>
+    <button type="button" data-act="folder" title="Open a folder of programs, such as a machine's data folder from Smooth CAM Ai: list, search and check them all">Open folder</button>
+    <button type="button" data-act="save" data-need-doc title="Save (Ctrl+S)">Save</button>
+    <div class="menu">
+      <button type="button" data-act="saveas-menu" data-need-doc data-need-program title="Save a copy, converting between Matrix and Smooth">Save as</button>
+      <div class="drop" id="saveasDrop"></div>
+    </div>
+    <div class="menu">
+      <button type="button" data-act="print-menu" data-need-doc>Print</button>
+      <div class="drop">
+        <button type="button" data-act="print">Print listing… (Ctrl+P)</button>
+        <button type="button" data-act="listing">Save listing as .txt</button>
+        <button type="button" data-act="sheet" data-need-program>Print setup sheet…</button>
+        <button type="button" data-act="sheettxt" data-need-program>Save setup sheet as .txt</button>
+      </div>
+    </div>
+  </div>
+  <div class="group right">
+    <button type="button" data-act="unitlist" id="unitListBtn" data-need-program title="Show or hide the list of units at the left of the program">Units</button>
+    <button type="button" data-act="theme" id="themeBtn" title="Light or dark screen">Light</button>
+    <div class="seg" id="typeSeg" hidden title="Tool data: the machine the file is for (the file does not say; lathe tool files are laid out differently)" data-title="Tool data: the machine the file is for (the file does not say; lathe tool files are laid out differently)">
+      <button type="button" data-ttype="mill">mill</button><button type="button" data-ttype="lathe">lathe</button><button type="button" data-ttype="millturn">mill-turn</button>
+    </div>
+    <div class="seg" id="unitsSeg" title="Program units. The file does not record them; pick what the program was written in.">
+      <button type="button" data-units="inch">inch</button><button type="button" data-units="metric">mm</button>
+    </div>
+  </div>
+  <input type="file" id="fileInput" multiple hidden>
+  <input type="file" id="dirInput" webkitdirectory multiple hidden>
+</header>
+<nav class="tabs" id="tabs"></nav>
+<main id="main">
+  <nav class="unitlist" id="unitList" aria-label="Units" hidden></nav>
+  <section class="screen" id="screen">
+    <div class="empty" id="empty">
+      <p><b>Open a Mazatrol program</b></p>
+      <p>Mill <code>.PBD</code> <code>.PBM</code> · lathe <code>.PBF</code> <code>.PBP</code> · mill-turn <code>.PBE</code> <code>.PBN</code> · Smooth machine files <code>.MAZ</code> <code>.MTP</code> <code>.MPR</code> · EIA/ISO <code>.EIA</code> <code>.NC</code> · tool data <code>TOOLDATA</code> <code>TOOLFILE</code> <code>.DBD</code> <code>.DBM</code> — drop files here, use Open, or start with New.</p>
+      <p class="keyhelp">Arrows move · type a value and Enter · Delete clears a field · Ins inserts a line · Ctrl+Del deletes a line or unit · Ctrl+Z undo · Ctrl+S save</p>
+    </div>
+    <div class="lines" id="lines"></div>
+    <textarea id="gtext" class="gtext" spellcheck="false" wrap="off" autocomplete="off" hidden></textarea>
+  </section>
+  <aside class="side" id="side" hidden>
+    <div class="side-head"><b>Plot</b>
+      <div class="seg" id="viewSeg" hidden title="Mill-turn: turning shapes (Z across, radius up) or milling (X-Y)">
+        <button type="button" data-view="turn">turning</button><button type="button" data-view="mill">milling</button>
+      </div>
+      <div class="seg" id="angSeg" hidden title="Look at the part from another side. In the side and 3D views, drag to turn it (Shift+drag pans).">
+        <button type="button" data-ang="top">top</button><button type="button" data-ang="front">front</button><button type="button" data-ang="right">right</button><button type="button" data-ang="iso">3D</button>
+      </div><span id="plotInfo"></span></div>
+    <canvas id="plot" class="plot"></canvas>
+    <div class="playbar" id="playbar" hidden>
+      <button type="button" data-play="first" title="Back to the start (or the restart point)">⏮</button>
+      <button type="button" data-play="back" title="Back one step">◀</button>
+      <button type="button" data-play="run" id="playRun" title="Play the program's path">▶</button>
+      <button type="button" data-play="fwd" title="One step on: the next block of an EIA program, the next line of a Mazatrol program">▶|</button>
+      <button type="button" data-play="last" title="The whole path">⏭</button>
+      <input type="range" id="playPos" min="0" max="0" value="0" title="Drag to any point of the program">
+      <select id="playSpeed" title="Playback speed, in machine time">
+        <option value="1">1×</option><option value="5">5×</option><option value="20" selected>20×</option><option value="100">100×</option><option value="1000">1000×</option>
+      </select>
+      <button type="button" data-play="here" title="Restart from the unit (Mazatrol) or line (EIA) at the cursor: the plot plays from there">From cursor</button>
+    </div>
+    <div class="playinfo" id="playInfo"></div>
+    <div class="plotnotes" id="plotNotes" hidden></div>
+    <div class="legend"><span class="k rapid"></span>rapid <span class="k feed"></span>feed / shape <span class="k cut"></span>cutter path <span class="k hole"></span>hole (lathe: Z across, radius up)
+      <span class="hint">wheel zoom · drag pan (3D: drag turns, Shift+drag pans) · double-click fit · click selects</span></div>
+  </aside>
+  <aside class="side" id="folderSide" hidden>
+    <div class="side-head"><b>Folder</b><span id="folderName"></span></div>
+    <div class="fsearch"><input id="folderSearch" placeholder="search every program, e.g. E-MILL 0.75 or TAPPING" autocomplete="off" spellcheck="false"></div>
+    <div class="toolsum" id="folderInfo"></div>
+    <div class="toolsList" id="folderList"></div>
+    <div class="legend">Click a program or a found line to open it. Tools are checked against the folder's machine memory
+      (<code>m8ysram</code>) or TOOLDATA file when it has one.</div>
+  </aside>
+  <aside class="side" id="cmpSide" hidden>
+    <div class="side-head"><b>Compare</b>
+      <label class="tsrc">with <select id="cmpWith"></select></label></div>
+    <div class="toolsum" id="cmpInfo"></div>
+    <div class="toolsList" id="cmpList"></div>
+    <div class="legend">Changes from the other program to this one. Records are matched on their contents, so inserted
+      or deleted units do not shift the rest. Click a change to go to it.</div>
+  </aside>
+  <aside class="side" id="toolsSide" hidden>
+    <div class="side-head"><b>Tools</b>
+      <label class="tsrc">check against <select id="toolSrc"></select></label></div>
+    <div class="toolsum" id="toolsInfo"></div>
+    <div class="toolsList" id="toolsList"></div>
+    <div class="legend">A tool is found when the tool data has the same type, nominal size and suffix (and part, for turning
+      tools). Open a machine's <code>m8ysram</code> or a TOOLDATA file to check against it. Click a tool to go to it.</div>
+  </aside>
+</main>
+<footer class="entry" id="entry">
+  <button type="button" class="guidetog" id="guideTog" hidden></button>
+  <div class="prompt" id="prompt">&nbsp;</div>
+  <div class="guide" id="guide" hidden></div>
+  <div class="inputrow">
+    <span class="where" id="where"></span>
+    <input id="input" autocomplete="off" spellcheck="false" placeholder="type a value, Enter to set">
+    <span class="keys inkeys" id="inKeys"></span>
+    <span class="msg" id="msg" role="status"></span>
+  </div>
+  <div class="keys" id="keys"></div>
+  <div class="info" id="info"></div>
+  <nav class="softkeys" id="softkeys" aria-label="Soft keys"></nav>
+</footer>
+<div class="drop wide skdrop" id="unitDrop"></div>
+<dialog class="dlg devdlg" id="devDlg">
+  <div class="tpchead"><b id="devTitle">Tool development</b><span class="grow"></span><button type="button" id="devApply" class="on">Apply</button><button type="button" id="devClose">Close</button></div>
+  <div class="devwrap"><div id="devPrev"></div><div id="devParams"></div></div>
+</dialog>
+<dialog class="dlg chkdlg" id="chkDlg">
+  <div class="tpchead"><b id="chkTitle">Program check</b><span class="grow"></span><button type="button" id="chkClose">Close</button></div>
+  <div id="chkBody"></div>
+</dialog>
+<dialog class="dlg refdlg" id="refDlg">
+  <div class="tpchead"><b>Reference</b>
+    <div class="seg"><button type="button" data-reftab="g">G codes</button><button type="button" data-reftab="m">M codes</button><button type="button" data-reftab="p">Parameters</button><button type="button" data-reftab="a">Alarms</button><button type="button" data-reftab="v">Variables</button></div>
+    <input id="refFind" placeholder="search: G83, coolant, D45, clearance …" autocomplete="off"><button type="button" id="refClose">Close</button></div>
+  <div id="refBody"></div>
+  <input type="file" id="alarmFile" accept=".txt" hidden>
+</dialog>
+<dialog class="dlg calcdlg" id="calcDlg">
+  <div class="tpchead"><b>Calculator</b><span class="tw-dim">WPC from probed holes</span>
+    <div class="seg"><button type="button" data-calctab="two">2 holes on X</button><button type="button" data-calctab="twoY">2 holes on Y</button><button type="button" data-calctab="any">Any holes</button><button type="button" data-calctab="bolt">Bolt circle</button></div>
+    <button type="button" id="calcClose">Close</button></div>
+  <p class="tw-dim" id="calcHelp"></p>
+  <div id="calcBolt" class="calcgrid">
+    <label>Centre X<input id="calcCx" inputmode="decimal" autocomplete="off" placeholder="0"></label><label>Centre Y<input id="calcCy" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+    <label>Radius<input id="calcR" inputmode="decimal" autocomplete="off"></label><label>Start angle (hole 1, deg CCW)<input id="calcA0" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+    <label>Number of holes<input id="calcN" inputmode="numeric" autocomplete="off"></label>
+  </div>
+  <table class="tt reft calcrows"><thead id="calcHead"></thead><tbody id="calcRows"></tbody></table>
+  <div class="calcbtns" id="calcRowBtns"><button type="button" id="calcAdd">Add hole</button></div>
+  <div class="calcgrid">
+    <label>Offset X<input id="calcOffX" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+    <label>Offset Y<input id="calcOff" inputmode="decimal" autocomplete="off" placeholder="0"></label>
+  </div>
+  <table class="tt reft calcout"><tbody>
+    <tr><td class="refc">Th</td><td id="calcTh">-</td><td class="tw-dim">degrees</td></tr>
+    <tr><td class="refc">X</td><td id="calcX">-</td><td class="tw-dim">WPC X</td></tr>
+    <tr><td class="refc">Y</td><td id="calcY">-</td><td class="tw-dim">WPC Y</td></tr>
+  </tbody></table>
+  <p class="tw-dim" id="calcMsg"></p>
+  <div class="calcbtns"><button type="button" id="calcApply">Apply to WPC- at cursor</button></div>
+</dialog>
+<dialog class="dlg tpcdlg" id="tpcDlg">
+  <div class="tpchead"><b id="tpcTitle">TPC</b>
+    <div class="seg"><button type="button" data-tpctab="param">Parameter</button><button type="button" data-tpctab="relay">Relay point</button></div></div>
+  <div class="tpcwrap"><div id="tpcBody"></div><div class="tpcdraw" id="tpcDraw"></div></div>
+  <div class="softkeys tpckeys"><button type="button" class="sk" id="tpcPrev">PREV.<br>UNIT</button><button type="button" class="sk" id="tpcNext">NEXT<br>UNIT</button>
+    <button type="button" class="sk" id="tpcCancel" title="Put this unit's TPC back as it was when the screen opened">TPC<br>CANCEL</button><button type="button" class="sk" id="tpcEnd">TPC<br>END</button></div>
+</dialog>
+<div class="drop skdrop" id="skPop"></div>
+<dialog class="dlg helpdlg" id="helpDlg">
+  <h3>Keys</h3>
+  <div class="helpcols">
+    <div><b>Soft keys (bottom row)</b>
+      <p>Like the control's: <b>◀ ▶</b> page through a menu and ◀ on its first page goes back up. A key with ▲ opens another menu.
+        <b>PROGRAM EDIT</b> turns editing on (Ctrl+E); <b>PROGRAM COMPLETE</b> turns it off. While editing, on a field with choices
+        (PTN, a tool, a direction ...) the keys are the choices (Alt+1 ... Alt+0); ◀ brings the menu back.</p>
+      <p><b>TOOL PATH</b> the plot · <b>MACHIN. TIME</b> where the time goes · <b>PROGRAM LAYOUT</b> the run order and priority
+        numbers · <b>PROGRAM FILE</b> the opened folder's programs · <b>WORK No.</b> another open program · <b>SEARCH</b> a unit by
+        number or name.</p></div>
+    <div><b>Keyboard</b>
+      <p>Arrows move · type a value and Enter · Tab next field · Delete clears a field · Ins inserts a line · Ctrl+Del deletes the line or
+        unit · Alt+↑ / Alt+↓ move it · Ctrl+C / X / V / D copy, cut, paste, duplicate · Ctrl+Z / Y undo, redo · Ctrl+E edit on/off ·
+        Ctrl+S save · Ctrl+O open · Ctrl+P print · Shift+click or Shift+arrows select several lines · right-click a line for more.</p></div>
+  </div>
+  <div class="dlgrow"><span class="grow"></span><button type="button" id="helpClose">Close</button></div>
+</dialog>
+<dialog id="bitsDlg" class="dlg">
+  <h3 id="bitsTitle">Bits</h3>
+  <div class="bitsval">value <b id="bitsVal">0</b> <span id="bitsHex"></span> <span id="bitsWas"></span></div>
+  <div class="bitsWrap"><table class="bits"><tbody id="bitsRows"></tbody></table></div>
+  <p class="hint">Tick a bit to set it. Write what each bit does in its box (from the control's parameter list); the notes are
+    kept in this browser for this field, and Export / Import share them with other computers.</p>
+  <div class="dlgrow">
+    <button type="button" id="bitsApply">Set value</button>
+    <button type="button" id="bitsClose">Close</button>
+    <span class="grow"></span>
+    <button type="button" id="bitsExport">Export notes</button>
+    <button type="button" id="bitsImport">Import notes</button>
+    <input type="file" id="bitsFile" accept=".json" hidden>
+  </div>
+</dialog>
+<div class="ctxmenu" id="ctxMenu" hidden></div>
+<dialog class="txtdlg" id="txtDlg">
+  <div class="td-head"><b id="tdTitle"></b></div>
+  <div class="td-body">
+    <textarea id="tdText" spellcheck="false" wrap="off" autocomplete="off"></textarea>
+    <div class="td-side"><canvas id="tdPrev"></canvas><div class="td-legend"><span class="k old"></span>now <span class="k new"></span>from the text <span class="k start"></span>first</div><div class="td-check" id="tdCheck"></div></div>
+  </div>
+  <div class="td-foot"><span class="tw-dim">One line per row, tab-separated (as Excel copies), or commas or spaces. The # line names the columns the rows hold: give fewer (for example <code># X Y</code>) and the other fields come from the lines there now. Blank or - clears a field.</span>
+    <button type="button" id="tdCopy">Copy all</button><button type="button" id="tdCancel">Cancel</button><button type="button" id="tdApply" class="on">Apply</button></div>
+</dialog>
+<div class="timewin" id="timeWin" hidden>
+  <div class="tw-head" id="twHead"><b>Machining time</b><span class="tw-grip">drag to move · corner to resize</span>
+    <button type="button" id="twPop" title="Open it in a window of its own (for a second screen)">⧉</button>
+    <button type="button" id="twClose" title="Close">×</button></div>
+  <div class="tw-in" id="twRoot"></div>
+</div>
+<div id="printArea"></div>
+<script>const SCHEMA = /*SCHEMA*/null;</script>
+<script>/*CORE_JS*/</script>
+<script>/*PLOT_JS*/</script>
+<script>/*GCODE_JS*/</script>
+<script>/*PATHS_JS*/</script>
+<script>/*ALARMS_JS*/</script>
+<script>/*REF_JS*/</script>
+<script>/*CHECKS_JS*/</script>
+<script>/*GUIDE_JS*/</script>
+<script>/*HELP_JS*/</script>
+<script>/*PARAMS_JS*/</script>
+<script>/*DEVELOP_JS*/</script>
+<script>/*APP_JS*/</script>
+</body>
+</html>
