@@ -1,0 +1,17 @@
+{
+  "name": "mach1-vendor-cad",
+  "private": true,
+  "description": "Fetches and bundles the third-party code the CAD app inlines (node build.mjs). Run once with the network; the output in vendor/cad is committed.",
+  "type": "module",
+  "dependencies": {
+    "replicad": "1.1.0",
+    "replicad-opencascadejs": "1.1.0",
+    "three": "0.180.0",
+    "occt-import-js": "0.0.23",
+    "@mlightcad/libredwg-web": "0.7.14",
+    "pdfjs-dist": "5.7.284"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}

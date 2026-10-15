@@ -1,0 +1,5 @@
+editor/calib-rows.json
+editor/tools/calib-rows.json
+.DS_Store
+editor/tests/names.local.json
+tools/vendor-cad/node_modules/

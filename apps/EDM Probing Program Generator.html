@@ -1,0 +1,1616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EDM Probing Generator</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1d2330; --muted: #5d6676; --line: #d9dde4;
+  --accent: #1f6feb; --accent-ink: #ffffff; --err: #c62828; --warn: #a15c00; --ok: #2e7d32;
+  --touch: #d32f2f; --rapid: #7a8597; --part: #3a7bd5; --code: #f1f3f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2e3542;
+    --accent: #4c8dff; --accent-ink: #0b0e13; --err: #ff6b6b; --warn: #f0b04a; --ok: #6cc570;
+    --touch: #ff6b6b; --rapid: #8792a5; --part: #6aa2ff; --code: #151920;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12151b; --panel: #1b2029; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2e3542;
+  --accent: #4c8dff; --accent-ink: #0b0e13; --err: #ff6b6b; --warn: #f0b04a; --ok: #6cc570;
+  --touch: #ff6b6b; --rapid: #8792a5; --part: #6aa2ff; --code: #151920;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+header h1 { font-size: 17px; margin: 0; }
+header .sub { color: var(--muted); font-size: 13px; }
+header .sp { flex: 1; }
+main { display: grid; grid-template-columns: minmax(320px, 440px) 1fr; gap: 16px; padding: 16px; }
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+main > div { min-width: 0; }
+@media (max-width: 520px) { main { padding: 12px 16px; } .grid { grid-template-columns: 1fr; } header .row { width: 100%; } header .row select { flex: 1; min-width: 0; } }
+section.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+section.card h2 { font-size: 14px; margin: 0 0 8px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.grid .full { grid-column: 1 / -1; }
+label.f { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); min-width: 0; }
+label.f.chk { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
+input, select, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 5px; padding: 4px 6px; min-width: 0; width: 100%; }
+label.f.chk input { width: auto; }
+textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; min-height: 70px; }
+textarea.code { min-height: 150px; white-space: pre; }
+.sub-h { grid-column: 1 / -1; font-weight: 600; font-size: 13px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 5px; padding: 4px 10px; cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.op { border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin-top: 8px; }
+.op.bad { border-color: var(--err); }
+.op-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.op-head b { flex: 1; font-size: 13px; }
+.op-head button { padding: 1px 7px; }
+.info { color: var(--muted); font-size: 12px; margin: 0 0 6px; }
+.msg { font-size: 12px; margin: 2px 0; }
+.msg.err { color: var(--err); } .msg.warn { color: var(--warn); }
+details summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-top: 6px; }
+svg#plot { width: 100%; height: 360px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+.tabs button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+pre#listing { background: var(--code); border: 1px solid var(--line); border-radius: 6px; padding: 8px; margin: 0; max-height: 520px; overflow: auto; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; }
+pre#listing .hl { background: color-mix(in srgb, var(--accent) 22%, transparent); display: inline-block; width: 100%; }
+.legend { font-size: 12px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; margin-top: 4px; }
+.sw { display: inline-block; width: 18px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 4px; }
+#tl { width: 100%; }
+.tlinfo { font-size: 12px; color: var(--muted); min-height: 1.4em; }
+dialog.ref { width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--ink); }
+dialog.ref[open] { display: flex; flex-direction: column; }
+dialog.ref::backdrop { background: rgb(0 0 0 / .4); }
+dialog.ref .ref-head { display: flex; align-items: center; gap: 8px; padding: 12px 12px 0; }
+dialog.ref .ref-head h2 { flex: 1; font-size: 15px; margin: 0; }
+dialog.ref .ref-tools { padding: 8px 12px; }
+dialog.ref .ref-tools input { flex: 1; width: auto; min-width: 140px; }
+dialog.ref .ref-tools select { width: auto; }
+#tblSvg { width: 100%; height: min(52vh, 460px); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; display: block; margin-bottom: 8px; }
+table.spec { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px; }
+table.spec td { border-bottom: 1px solid var(--line); padding: 4px 6px; vertical-align: top; }
+table.spec td:first-child { color: var(--muted); white-space: nowrap; width: 1%; }
+.ref-body { overflow: auto; padding: 0 12px; min-height: 120px; flex: 1; }
+dialog.ref .ref-foot { border-top: 1px solid var(--line); padding: 2px 12px 8px; }
+dialog.ref .ref-foot .info { margin: 4px 0 0; }
+table.codes { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.codes th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); position: sticky; top: 0; background: var(--panel); border-bottom: 1px solid var(--line); padding: 4px 6px; }
+table.codes td { border-bottom: 1px solid var(--line); padding: 5px 6px; vertical-align: top; }
+table.codes td.c { font: 600 13px/1.4 ui-monospace, Menlo, Consolas, monospace; white-space: nowrap; }
+table.codes tr.grp td { font-weight: 600; font-size: 12px; color: var(--muted); background: var(--bg); padding-top: 8px; }
+table.codes .ex { display: inline-block; margin-top: 2px; font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; background: var(--code); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; overflow-wrap: anywhere; }
+table.codes .note { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.tag { display: inline-block; font-size: 11px; border: 1px solid currentColor; border-radius: 10px; padding: 0 6px; white-space: nowrap; color: var(--accent); margin-left: 4px; }
+@media (max-width: 600px) {
+  table.codes thead { display: none; }
+  table.codes tr { display: grid; grid-template-columns: 1fr auto; border-bottom: 1px solid var(--line); }
+  table.codes tr.grp { display: block; }
+  table.codes td { border: 0; }
+  table.codes td.d { grid-column: 1 / -1; grid-row: 2; padding-top: 0; }
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>EDM Probing Program Generator</h1>
+  <span class="sub">Mitsubishi wire EDM · G29 / G30 / G14 · writes .NC setup programs</span>
+  <span class="sp"></span>
+  <div class="row">
+    <select id="tpl" aria-label="Ready-made job"><option value="">Add a ready-made job…</option></select>
+    <button id="saveJob">Save job</button>
+    <button id="openJob">Open job…</button>
+    <input type="file" id="openFile" accept=".json" hidden>
+    <button id="newJob">New</button>
+    <button id="sampleDl" title="A complete 4-part keyway job (rough + finish) as an .NC file, to read or load">Download sample program</button>
+    <button id="refBtn" title="What each G and M code does on the control">G / M codes</button>
+    <button id="tblBtn" title="The machine's table, its M8 holes and the wire's travel, as a DXF drawing">Machine table</button>
+  </div>
+</header>
+<main>
+  <div>
+    <section class="card" id="settings"></section>
+    <section class="card">
+      <h2>Operations <span class="sub" style="font-weight:normal;color:var(--muted)">(run top to bottom)</span></h2>
+      <div class="row"><select id="addSel" style="flex:1" aria-label="Operation to add"></select><button id="addBtn" class="primary">Add</button></div>
+      <div id="ops"></div>
+      <div id="jobMsgs"></div>
+    </section>
+  </div>
+  <div>
+    <section class="card">
+      <h2>Preview (from above)</h2>
+      <svg id="plot" role="img" aria-label="Probing preview"></svg>
+      <div class="legend">
+        <span><span class="sw" style="border-color:var(--rapid);border-top-style:dashed"></span>rapid</span>
+        <span><span class="sw" style="border-color:var(--touch)"></span>touch (G29 / G30)</span>
+        <span><span class="sw" style="border-color:var(--part)"></span>expected hole / face</span>
+      </div>
+      <div class="row" style="margin-top:6px"><button id="tlPlay">▶</button><input type="range" id="tl" min="0" max="0" value="0" style="flex:1" aria-label="Timeline"></div>
+      <div class="tlinfo" id="tlInfo"></div>
+      <p class="info">Each operation is drawn in the coordinates you typed for it (work or machine). Points in machine coordinates are drawn as they are; positions after a G92 shift are not re-drawn in the new frame.</p>
+    </section>
+    <section class="card">
+      <h2>Files for the machine</h2>
+      <div class="tabs" id="tabs"></div>
+      <div class="row" style="margin-bottom:6px"><span id="fileRole" class="info" style="flex:1;margin:0"></span><button id="dlOne">Download</button><button id="dlAll" class="primary">Download all</button></div>
+      <pre id="listing"></pre>
+    </section>
+  </div>
+</main>
+
+<dialog id="ref" class="ref" aria-labelledby="refTitle">
+  <div class="ref-head"><h2 id="refTitle">G and M codes</h2><button id="refClose" aria-label="Close">✕</button></div>
+  <div class="row ref-tools">
+    <input id="refQ" type="search" placeholder="Search: drain, offset, G92…" aria-label="Search the codes" autocomplete="off">
+    <select id="refKind" aria-label="Which codes">
+      <option value="">All codes</option><option value="G">G codes</option><option value="M">M codes</option>
+      <option value="O">Other words</option><option value="gen">Written by this generator</option>
+    </select>
+  </div>
+  <div id="refBody" class="ref-body"></div>
+  <details class="ref-foot"><summary>About this list</summary><p class="info" id="refFoot"></p></details>
+</dialog>
+
+<dialog id="tbl" class="ref" aria-labelledby="tblTitle">
+  <div class="ref-head"><h2 id="tblTitle">Machine table</h2><button id="tblClose" aria-label="Close">✕</button></div>
+  <div class="row ref-tools">
+    <select id="tblModel" aria-label="Machine"></select>
+    <select id="tblUnits" aria-label="Units"><option value="mm">mm</option><option value="in">Inch</option></select>
+    <select id="tblOrigin" aria-label="Origin"><option value="zero">Origin: machine X0 Y0</option><option value="corner">Origin: table front-left corner</option></select>
+    <button id="tblDl" class="primary">Download DXF</button>
+  </div>
+  <div class="ref-body">
+    <svg id="tblSvg" role="img" aria-label="Machine table drawing"></svg>
+    <table class="spec" id="tblSpec"></table>
+  </div>
+  <details class="ref-foot"><summary>About this drawing</summary><p class="info">The machine zero is the wire at the left-rear end of travel: machine X runs 0 to + the travel, Y 0 to − the travel, as G53 moves do. The M8 holes are drawn Ø8; the counterbored holes that fix the table down are left out. Check a hole or two on the machine before you rely on the drawing. The DXF is AutoCAD R12, which every CAD program opens.</p></details>
+</dialog>
+
+<script id="edm-lib">
+/* EDM probing library. Every command form written here is one the control's own programs
+   already use; see docs/edm-probe.md. */
+(function (root) {
+'use strict';
+
+const num = (v, d) => (v === '' || v == null || !isFinite(+v)) ? d : +v;
+const has = v => v !== '' && v != null && v !== false && isFinite(+v);
+function fmt(v, dec) {
+  let s = (+v).toFixed(dec == null ? 4 : dec);
+  if (s.indexOf('.') >= 0) s = s.replace(/0+$/, '');
+  if (/^-0\.$/.test(s)) s = '0.';
+  return s;
+}
+/* Comments up to 100 characters: the control's own cut programs run with longer ones. */
+const cm = s => '(' + String(s).toUpperCase().replace(/[^ -~]/g, '').replace(/[()]/g, '').slice(0, 100) + ')';
+const dec = j => j.units === 'mm' ? 3 : 4;
+
+/* H-variables below 1000 that the control's built-in and existing programs already use. */
+const USED_H = [0,1,2,3,4,5,10,43,50,51,60,71,80,81,82,91,92,93,94,95,98,100,101,102,103,104,105,106,107,110,150,
+  180,181,183,184,185,186,187,188,189,190,193,194,195,197,198,199,233,242,300,348,350,351,352,353,400,500,501,502,503,
+  504,505,510,511,559,600,700,800,801,803,804,805,806,807,808,809,811,812,814,815,816,817,818,820,822,823,824,825,826,
+  829,830,831,835,836,840,841,842,843,844,845,846,847,848,849,865,880,881,882,883,884,885,886,887,888,889,896,897,898,
+  899,900,901,902,903,904,905,906,907,908,909,910,911,912,913,914,915,916,917,918,919,920,921,922,923,924,925,926,927,
+  928,929,930,931,932];
+const FACTORY_ALARMS = [0, 1, 2, 3, 4, 5, 7, 11, 12, 13, 20, 30, 40, 9001, 9002, 9003];
+/* Table travel X x Y in mm; used for warnings only. OTHER uses the travel typed in the job. */
+const MACHINES = {
+  MV1200S: { x: 400, y: 300 }, MV1200R: { x: 400, y: 300 },
+  MV2400S: { x: 600, y: 400 }, MV2400R: { x: 600, y: 400 },
+  MV4800S: { x: 800, y: 600 }, MV4800R: { x: 800, y: 600 },
+  OTHER: null,
+};
+const BLOCK = 40;   // H-variables the program uses: base .. base+39
+
+const DEFAULTS = {
+  name: 'SETUP', progNo: '5000', machine: 'MV2400S', travelX: '', travelY: '', units: 'in',
+  wireFrom: 'typed', wireDia: '0.010',
+  varBase: '610', labelBase: '7000', alarm: '9101',
+  notch: '', repeat: '', tol: '',
+  adaptiveOff: true, endCode: 'M02',
+  ops: [],
+};
+
+function vars(j) {
+  const b = Math.round(num(j.varBase, 610));
+  return { R: b, A: b + 1, B: b + 2, C: b + 3, D: b + 4, E: b + 5, F: b + 6, G: b + 7,
+    LAST: b + 10, START: b + 11, CNT: b + 12, MIN: b + 13, MAX: b + 14, RES0: b + 20 };
+}
+
+/* ---------- field helpers ---------- */
+const F = (k, label, extra) => Object.assign({ k, label, kind: 'num' }, extra || {});
+const U = { unit: true };
+const START = [
+  F('coord', 'Start position', { kind: 'sel', def: 'work', opts: [['work', 'Work coords (G00 G90)'], ['mach', 'Machine coords (G53)'], ['here', 'Where the wire is now']] }),
+  F('x', 'Start X', Object.assign({ def: 0, show: o => o.coord !== 'here' }, U)),
+  F('y', 'Start Y', Object.assign({ def: 0, show: o => o.coord !== 'here' }, U)),
+  F('p', 'Work offset G54.1 P', { def: '', hint: 'blank = keep the active offset', opt: true }),
+];
+const WIRE = [
+  F('thread', 'Thread wire first (M20)', { kind: 'chk', def: true }),
+  F('cut', 'Cut wire after (M21)', { kind: 'chk', def: true }),
+];
+const TOUCH = [
+  F('notch', 'Speed notch (P)', { def: '', opt: true, adv: true, hint: 'blank = job setting' }),
+  F('repeat', 'Repeat count (,P)', { def: '', opt: true, adv: true, hint: 'blank = job setting' }),
+  F('tol', 'Repeat tolerance (,R)', Object.assign({ def: '', opt: true, adv: true, hint: 'blank = job setting' }, U)),
+];
+/* G30's I and J are a first stretch at 570 mm/min before the slow touch, so they must stop short
+   of the hole wall. Given the hole size, warn when either comes within 80 % of the wall, for a start off centre. */
+const HOLE_D = show => F('hd', 'Hole diameter (for the I / J check)', Object.assign({ def: '', opt: true, hint: 'blank = no check', show }, U));
+function g30Reach(o, j) {
+  if (!has(o.hd) || !(+o.hd > 0)) return [];
+  const d = dec(j), wall = +o.hd / 2 - (j.wireFrom === 'read' ? 0 : num(j.wireDia, 0) / 2);
+  if (!(wall > 0)) return [{ err: 'The hole is no bigger than the wire.' }];
+  const far = [['I', num(o.i, 0)], ['J', num(o.jj, 0)]].filter(([, v]) => v >= wall * 0.8);
+  if (!far.length) return [];
+  return [{ warn: 'G30 ' + far.map(([k, v]) => k + ' ' + fmt(v, d)).join(' and ') + (far.length > 1 ? ' come' : ' comes') + ' close to the hole wall, ' + fmt(wall, d) +
+    ' from the centre. I and J are a fast first move (570 mm/min' + (j.units === 'mm' ? '' : ', 22 in/min') + ') before the slow touch: keep them well short of the wall, allowing for how far off centre the wire starts.' }];
+}
+const DIRS = [['1', '+'], ['-1', '−']];
+const AXES = [['X', 'X'], ['Y', 'Y']];
+
+/* ---------- emit helpers ---------- */
+function touchOpts(o, j) {
+  const n = has(o.notch) ? o.notch : j.notch, r = has(o.repeat) ? o.repeat : j.repeat, t = has(o.tol) ? o.tol : j.tol;
+  let s = '';
+  if (has(n)) s += ' P' + Math.round(+n);
+  if (has(r)) s += ' ,P' + Math.round(+r);
+  if (has(t)) s += ' ,R' + fmt(t, dec(j) + 1);
+  return s;
+}
+function moveTo(L, j, coord, x, y) {
+  const d = dec(j);
+  if (coord === 'mach') {
+    L.push('G53G92X0Y0', 'G53 G00 G90 X' + fmt(x, d) + 'Y' + fmt(y, d), 'G90');
+  } else if (coord === 'work') {
+    L.push('G00 G90 X' + fmt(x, d) + 'Y' + fmt(y, d));
+  }
+}
+function startLines(L, o, j) {
+  if (o.coord === 'mach') {
+    moveTo(L, j, 'mach', num(o.x, 0), num(o.y, 0));
+    if (has(o.p)) L.push('G54.1P' + Math.round(+o.p));
+  } else {
+    if (has(o.p)) L.push('G54.1P' + Math.round(+o.p));
+    moveTo(L, j, o.coord, num(o.x, 0), num(o.y, 0));
+  }
+  if (o.thread) L.push('M20 (INSERT WIRE)');
+}
+function endLines(L, o) { if (o.cut) L.push('M21 (CUT WIRE)'); }
+/* Word that sets the touched axis so the face reads `face`, with the wire centre one radius off it. */
+function faceWord(L, j, V, ax, dir, face, scratch) {
+  const d = dec(j);
+  if (!has(face) || +face === 0) return ax + (dir > 0 ? '-' : '') + 'H' + V.R;
+  L.push('H' + scratch + '=H' + V.R + (dir > 0 ? '-' : '+') + fmt(face, d));
+  return ax + (dir > 0 ? '-' : '') + 'H' + scratch;
+}
+function backOff(L, j, ax, amount) {
+  if (!has(amount) || +amount === 0) return;
+  L.push('G91 G00 ' + ax + fmt(amount, dec(j)), 'G90');
+}
+function tolBlock(L, j, V, res, o, lab, alarm, what) {
+  if (!has(o.min) && !has(o.max)) return;
+  const d = dec(j);
+  if (has(o.min)) L.push('H' + V.MIN + '=' + fmt(o.min, d), 'IF[H' + V.MIN + 'GTH' + res + ']GOTO' + lab);
+  if (has(o.max)) L.push('H' + V.MAX + '=' + fmt(o.max, d), 'IF[H' + res + 'GTH' + V.MAX + ']GOTO' + lab);
+  L.push('GOTO' + (lab + 1), 'N' + lab, 'H3000=' + alarm + cm(what + ' OUT OF TOL'), 'M00', 'N' + (lab + 1));
+}
+
+/* ---------- factory macros (argument letters read from each macro's comment header) ---------- */
+const QSTW = [['Q', 'Speed notch [P]'], ['S', 'Edging count [,P]'], ['T', 'Tolerance [,R]'], ['W', 'Pallet rotation']];
+const QST = QSTW.slice(0, 3);
+const FM = {
+  '311': { l: 99990311, name: 'Edge, X+ face', let: [['X', 'Surface point X'], ['A', 'Surface point Y'], ['Z', 'Measure Z']].concat(QSTW), res: 'H21050 = X+ face' },
+  '312': { l: 99990312, name: 'Edge, X− face', let: [['U', 'Surface point X'], ['D', 'Surface point Y'], ['Z', 'Measure Z']].concat(QSTW), res: 'H21051 = X- face' },
+  '313': { l: 99990313, name: 'Edge, Y+ face', let: [['Y', 'Surface point X'], ['B', 'Surface point Y'], ['Z', 'Measure Z']].concat(QSTW), res: 'H21052 = Y+ face' },
+  '314': { l: 99990314, name: 'Edge, Y− face', let: [['V', 'Surface point X'], ['E', 'Surface point Y'], ['Z', 'Measure Z']].concat(QSTW), res: 'H21053 = Y- face' },
+  '315': { l: 99990315, name: 'Width in X', let: [['X', 'X+ face point X'], ['A', 'X+ face point Y'], ['Z', 'X+ measure Z'], ['U', 'X− face point X'], ['D', 'X− face point Y'], ['M', 'X− measure Z']].concat(QSTW), res: 'H21050 / H21051 = X+ / X- faces' },
+  '316': { l: 99990316, name: 'Width in Y', let: [['Y', 'Y+ face point X'], ['B', 'Y+ face point Y'], ['Z', 'Y+ measure Z'], ['V', 'Y− face point X'], ['E', 'Y− face point Y'], ['M', 'Y− measure Z']].concat(QSTW), res: 'H21052 / H21053 = Y+ / Y- faces' },
+  '317': { l: 99990317, name: 'Hole centre', let: [['X', 'Start point X'], ['A', 'Start point Y'], ['Z', 'Start point Z']].concat(QSTW), res: 'H21050 = X, H21052 = Y' },
+  '303': { l: 99990303, name: 'Hole centre, 3 surface points', let: [['X', '1st point X'], ['A', '1st point Y'], ['Y', '2nd point X'], ['B', '2nd point Y'], ['U', '3rd point X'], ['D', '3rd point Y'], ['K', 'Finish position X'], ['R', 'Finish position Y']].concat(QST), res: 'centre' },
+  '300': { l: 99990300, name: 'Set-up from 2 faces', let: [['H', 'Measure surface'], ['X', 'X+ point X'], ['A', 'X+ point Y'], ['U', 'X− point X'], ['D', 'X− point Y'], ['Y', 'Y+ point X'], ['B', 'Y+ point Y'], ['V', 'Y− point X'], ['E', 'Y− point Y'], ['K', 'Finish position X'], ['R', 'Finish position Y']].concat(QSTW), res: 'position and rotation' },
+  '301': { l: 99990301, name: 'Set-up from 3 faces', let: [['H', 'Measure surface'], ['X', 'X+ point X'], ['A', 'X+ point Y'], ['U', 'X− point X'], ['D', 'X− point Y'], ['Y', 'Y+ point X'], ['B', 'Y+ point Y'], ['V', 'Y− point X'], ['E', 'Y− point Y'], ['K', 'Finish position X'], ['R', 'Finish position Y']].concat(QSTW), res: 'position and rotation' },
+  '302': { l: 99990302, name: 'Set-up from 4 faces', let: [['X', 'X+ point X'], ['A', 'X+ point Y'], ['U', 'X− point X'], ['D', 'X− point Y'], ['Y', 'Y+ point X'], ['B', 'Y+ point Y'], ['V', 'Y− point X'], ['E', 'Y− point Y'], ['K', 'Finish position X'], ['R', 'Finish position Y']].concat(QST), res: 'position and rotation' },
+  '9001': { l: 99999001, name: '3-point centre, inside a bore', let: [['A', 'Point A angle (−180…180)'], ['B', 'Point B angle'], ['C', 'Point C angle'], ['R', 'Nominal radius'], ['F', 'Positioning speed']], res: 'H921 = X, H922 = Y, H923 = radius' },
+  '9002': { l: 99999002, name: '3-point centre, outside a boss', let: [['A', 'Point A angle (−180…180)'], ['B', 'Point B angle'], ['C', 'Point C angle'], ['R', 'Nominal radius'], ['F', 'Positioning speed'], ['D', 'Pitch (wire cut between points)']], res: 'H921 = X, H922 = Y, H923 = radius' },
+};
+const FM_INT = { Q: 1, S: 1, H: 1 };
+
+/* ---------- operation registry ---------- */
+const CYC = {};
+const add = (id, def) => { CYC[id] = Object.assign({ id }, def); };
+
+add('hole', {
+  group: 'Pick up', name: 'Hole centre (G30)',
+  info: 'Threads the wire in a start hole, centres with G30 and sets X/Y there with G92. R tilts the search (R0 along X and Y). I and J are a fast first move in X and Y before the slow touch: keep them short of the wall.',
+  fields: START.concat([
+    F('r', 'R (start angle)', { def: 0 }),
+    F('i', 'I', Object.assign({ def: 0.15, hint: 'fast first move in X, short of the wall' }, U)),
+    F('jj', 'J', Object.assign({ def: 0.15 }, U)),
+    HOLE_D(),
+    F('setZero', 'Set zero here (G92)', { kind: 'chk', def: true }),
+    F('setX', 'X value at centre', Object.assign({ def: 0, show: o => o.setZero }, U)),
+    F('setY', 'Y value at centre', Object.assign({ def: 0, show: o => o.setZero }, U)),
+  ], WIRE, TOUCH),
+  emit(o, j, L) {
+    const d = dec(j);
+    startLines(L, o, j);
+    L.push('G30X1R' + fmt(num(o.r, 0), 2) + 'I' + fmt(num(o.i, 0), d) + 'J' + fmt(num(o.jj, 0), d) + touchOpts(o, j));
+    if (o.setZero) L.push('G92X' + fmt(num(o.setX, 0), d) + 'Y' + fmt(num(o.setY, 0), d));
+    endLines(L, o);
+  },
+  geo(o, at) { return { circles: has(o.hd) && +o.hd > 0 ? [[at[0], at[1], +o.hd / 2]] : [], touch: [[at[0], at[1], 0, 0]], end: at }; },
+  check(o, j) {
+    const m = [];
+    if (!(num(o.i, 0) > 0) || !(num(o.jj, 0) > 0)) m.push({ err: 'I and J must be more than 0.' });
+    return m.concat(g30Reach(o, j));
+  },
+  touches: 1,
+});
+
+add('edge', {
+  group: 'Pick up', name: 'Edge in X or Y (G29)',
+  info: 'Moves along one axis until the wire touches a face, then sets that axis so the face reads the value you give (the wire radius is allowed for).',
+  fields: START.concat([
+    F('axis', 'Axis', { kind: 'seg', def: 'X', opts: AXES }),
+    F('dir', 'Touch moving', { kind: 'seg', def: '1', opts: DIRS }),
+    F('setFace', 'Set the face position (G92)', { kind: 'chk', def: true }),
+    F('face', 'Face value', Object.assign({ def: 0, show: o => o.setFace }, U)),
+    F('back', 'Back off after', Object.assign({ def: 0.05 }, U)),
+  ], WIRE, TOUCH),
+  emit(o, j, L, V) {
+    const ax = o.axis === 'Y' ? 'Y' : 'X', dir = +o.dir < 0 ? -1 : 1;
+    startLines(L, o, j);
+    L.push('G29' + ax + (dir > 0 ? '1' : '-1') + touchOpts(o, j));
+    if (o.setFace) L.push('G92' + faceWord(L, j, V, ax, dir, o.face, V.A));
+    backOff(L, j, ax, -dir * num(o.back, 0));
+    endLines(L, o);
+  },
+  geo(o, at, j) {
+    const dir = +o.dir < 0 ? -1 : 1, len = 4 * Math.max(num(o.back, 0), j.units === 'mm' ? 1 : 0.04);
+    const v = o.axis === 'Y' ? [0, dir * len] : [dir * len, 0];
+    const fx = at[0] + v[0], fy = at[1] + v[1], h = len * 0.6;
+    return { touch: [[at[0], at[1], v[0], v[1]]], lines: [o.axis === 'Y' ? [fx - h, fy, fx + h, fy] : [fx, fy - h, fx, fy + h]], end: at };
+  },
+  touches: 1,
+});
+
+add('corner', {
+  group: 'Pick up', name: 'Corner (G29 in X, then Y)',
+  info: 'Touches an X face, backs off, goes round to the Y face (Y first, then X) and touches it. Then sets both axes so the corner reads the values you give. Keep the path between the two starts clear of the part.',
+  fields: [
+    F('coord', 'Start positions in', { kind: 'sel', def: 'work', opts: [['work', 'Work coords (G00 G90)'], ['mach', 'Machine coords (G53)']] }),
+    F('p', 'Work offset G54.1 P', { def: '', hint: 'blank = keep the active offset', opt: true }),
+    F('dx', 'X touch moving', { kind: 'seg', def: '1', opts: DIRS }),
+    F('dy', 'Y touch moving', { kind: 'seg', def: '1', opts: DIRS }),
+    F('x1', 'X touch start X', Object.assign({ def: -0.1 }, U)),
+    F('y1', 'X touch start Y', Object.assign({ def: 0.25 }, U)),
+    F('x2', 'Y touch start X', Object.assign({ def: 0.25 }, U)),
+    F('y2', 'Y touch start Y', Object.assign({ def: -0.1 }, U)),
+    F('setX', 'X value of the X face', Object.assign({ def: 0 }, U)),
+    F('setY', 'Y value of the Y face', Object.assign({ def: 0 }, U)),
+    F('back', 'Back off after each touch', Object.assign({ def: 0.05 }, U)),
+  ].concat(WIRE, TOUCH),
+  emit(o, j, L, V) {
+    const d = dec(j), dx = +o.dx < 0 ? -1 : 1, dy = +o.dy < 0 ? -1 : 1;
+    startLines(L, Object.assign({}, o, { x: o.x1, y: o.y1 }), j);
+    L.push('G29X' + (dx > 0 ? '1' : '-1') + touchOpts(o, j));
+    L.push('G14X' + V.A + 'Y' + V.C);
+    backOff(L, j, 'X', -dx * num(o.back, 0));
+    if (o.coord === 'mach') L.push('G53 G00 G90 Y' + fmt(num(o.y2, 0), d), 'G53 G00 G90 X' + fmt(num(o.x2, 0), d), 'G90');
+    else L.push('G00 G90 Y' + fmt(num(o.y2, 0), d), 'X' + fmt(num(o.x2, 0), d));
+    L.push('G29Y' + (dy > 0 ? '1' : '-1') + touchOpts(o, j));
+    L.push('G14X' + V.B + 'Y' + V.D);
+    /* X face (as read) = first touch + dx * radius; X now = setX + (X now - X face) */
+    L.push('H' + V.E + '=H' + V.A + (dx > 0 ? '+' : '-') + 'H' + V.R);
+    L.push('H' + V.E + '=H' + V.B + '-H' + V.E);
+    if (has(o.setX) && +o.setX !== 0) L.push('H' + V.E + '=H' + V.E + '+' + fmt(o.setX, d));
+    const yw = faceWord(L, j, V, 'Y', dy, o.setY, V.F);
+    L.push('G92XH' + V.E + ' ' + yw);
+    backOff(L, j, 'Y', -dy * num(o.back, 0));
+    endLines(L, o);
+  },
+  geo(o, at, j) {
+    const dx = +o.dx < 0 ? -1 : 1, dy = +o.dy < 0 ? -1 : 1, len = 4 * Math.max(num(o.back, 0), j.units === 'mm' ? 1 : 0.04);
+    const x1 = num(o.x1, 0), y1 = num(o.y1, 0), x2 = num(o.x2, 0), y2 = num(o.y2, 0), b = num(o.back, 0);
+    return {
+      start: [x1, y1],
+      touch: [[x1, y1, dx * len, 0], [x2, y2, 0, dy * len]],
+      dashed: [[x1 - dx * b, y1, x1 - dx * b, y2], [x1 - dx * b, y2, x2, y2]],
+      lines: [[x1 + dx * len, y1 - len * 0.6, x1 + dx * len, y1 + len * 0.6], [x2 - len * 0.6, y2 + dy * len, x2 + len * 0.6, y2 + dy * len]],
+      end: [x2, y2],
+    };
+  },
+  path(o) { return [[num(o.x1, 0), num(o.y1, 0), 'X touch'], [num(o.x2, 0), num(o.y2, 0), 'Y touch']]; },
+  touches: 2,
+});
+
+add('width', {
+  group: 'Pick up', name: 'Width / centre in X or Y (G29 both sides)',
+  info: 'Inside (slot or bore): touches both walls from the middle and moves to the centre. Outside (web or part): touches one side, cuts the wire, re-threads past the far side and touches back. Stores the width and can set the centre with G92.',
+  fields: [
+    F('kind', 'Feature', { kind: 'seg', def: 'in', opts: [['in', 'Inside (slot)'], ['out', 'Outside (web)']] }),
+    F('axis', 'Axis', { kind: 'seg', def: 'X', opts: AXES }),
+    F('coord', 'Positions in', { kind: 'sel', def: 'work', opts: [['work', 'Work coords (G00 G90)'], ['mach', 'Machine coords (G53)'], ['here', 'Where the wire is now (inside only)']] }),
+    F('x', 'Centre X (about)', Object.assign({ def: 0, show: o => o.coord !== 'here' }, U)),
+    F('y', 'Centre Y (about)', Object.assign({ def: 0, show: o => o.coord !== 'here' }, U)),
+    F('w', 'Nominal width', Object.assign({ def: 0.5 }, U)),
+    F('back', 'Clearance outside each face', Object.assign({ def: 0.1, show: o => o.kind === 'out' }, U)),
+    F('p', 'Work offset G54.1 P', { def: '', hint: 'blank = keep the active offset', opt: true }),
+    F('setC', 'Set the centre (G92)', { kind: 'chk', def: true }),
+    F('centre', 'Centre value', Object.assign({ def: 0, show: o => o.setC }, U)),
+    F('res', 'Store width in H', { def: '', opt: true, hint: 'blank = next free result variable' }),
+    F('min', 'Alarm if width under', Object.assign({ def: '', opt: true }, U)),
+    F('max', 'Alarm if width over', Object.assign({ def: '', opt: true }, U)),
+  ].concat(WIRE, TOUCH),
+  emit(o, j, L, V, x) {
+    const d = dec(j), ax = o.axis === 'Y' ? 'Y' : 'X', w = num(o.w, 0), b = num(o.back, 0);
+    const res = has(o.res) ? Math.round(+o.res) : x.res;
+    const rd = (a, h) => ax === 'X' ? 'G14X' + h + 'Y' + V.G : 'G14X' + V.G + 'Y' + h;   // read the touched axis into h
+    const cx = num(o.x, 0), cy = num(o.y, 0);
+    const side = s => ax === 'X' ? [cx + s * (w / 2 + b), cy] : [cx, cy + s * (w / 2 + b)];
+    if (o.kind === 'out') {
+      startLines(L, Object.assign({}, o, { x: side(-1)[0], y: side(-1)[1], thread: true }), j);
+      L.push('G29' + ax + '1' + touchOpts(o, j), rd(ax, V.A));
+      backOff(L, j, ax, -b);
+      L.push('M21 (CUT WIRE)');
+      const s2 = side(1);
+      if (o.coord === 'mach') L.push('G53 G00 G90 X' + fmt(s2[0], d) + 'Y' + fmt(s2[1], d), 'G90');
+      else L.push('G00 G90 X' + fmt(s2[0], d) + 'Y' + fmt(s2[1], d));
+      L.push('M20 (INSERT WIRE)', 'G29' + ax + '-1' + touchOpts(o, j), rd(ax, V.B));
+      L.push('H' + res + '=H' + V.B + '-H' + V.A, 'H' + res + '=H' + res + '-H' + V.R, 'H' + res + '=H' + res + '-H' + V.R);
+      if (o.setC) {
+        L.push('H' + V.C + '=H' + V.B + '-H' + V.A, 'H' + V.C + '=H' + V.C + '/2');
+        if (has(o.centre) && +o.centre !== 0) L.push('H' + V.C + '=H' + V.C + '+' + fmt(o.centre, d));
+        L.push('G92' + ax + 'H' + V.C);
+      }
+      backOff(L, j, ax, b);
+    } else {
+      startLines(L, o, j);
+      L.push('G29' + ax + '-1' + touchOpts(o, j), rd(ax, V.A));
+      L.push('G29' + ax + '1' + touchOpts(o, j), rd(ax, V.B));
+      L.push('H' + res + '=H' + V.B + '-H' + V.A, 'H' + res + '=H' + res + '+H' + V.R, 'H' + res + '=H' + res + '+H' + V.R);
+      if (o.setC) {
+        L.push('H' + V.C + '=H' + V.A + '-H' + V.B, 'H' + V.C + '=H' + V.C + '/2', 'G91 G00 ' + ax + 'H' + V.C, 'G90');
+        L.push('G92' + ax + fmt(num(o.centre, 0), d));
+      }
+    }
+    L.push(cm('H' + res + ' = ' + ax + ' WIDTH'));
+    tolBlock(L, j, V, res, o, x.lab, x.alarm, ax + ' WIDTH');
+    endLines(L, o);
+  },
+  geo(o, at, j) {
+    const ax = o.axis === 'Y' ? 'Y' : 'X', w = num(o.w, 0), b = num(o.back, 0), h = w * 0.6 || 0.1;
+    const c = o.coord === 'here' ? at : [num(o.x, 0), num(o.y, 0)];
+    const L = (s) => ax === 'X' ? [c[0] + s * w / 2, c[1] - h, c[0] + s * w / 2, c[1] + h] : [c[0] - h, c[1] + s * w / 2, c[0] + h, c[1] + s * w / 2];
+    const T = (s, dir) => {
+      if (o.kind === 'out') { const p = ax === 'X' ? [c[0] + s * (w / 2 + b), c[1]] : [c[0], c[1] + s * (w / 2 + b)]; return ax === 'X' ? [p[0], p[1], dir * b, 0] : [p[0], p[1], 0, dir * b]; }
+      return ax === 'X' ? [c[0], c[1], s * w / 2, 0] : [c[0], c[1], 0, s * w / 2];
+    };
+    return { lines: [L(-1), L(1)], touch: o.kind === 'out' ? [T(-1, 1), T(1, -1)] : [T(-1), T(1)], start: o.kind === 'out' ? T(-1, 1).slice(0, 2) : c, end: c };
+  },
+  check(o, j) {
+    const m = [];
+    if (!(num(o.w, 0) > 0)) m.push({ err: 'Give the nominal width (more than 0).' });
+    if (o.kind === 'out' && o.coord === 'here') m.push({ err: 'An outside width needs a centre position: it moves to each side.' });
+    if (o.kind === 'out' && !(num(o.back, 0) > 0)) m.push({ err: 'An outside width needs a clearance outside each face.' });
+    if (has(o.min) && has(o.max) && +o.min > +o.max) m.push({ err: 'The lower alarm limit is above the upper one.' });
+    return m;
+  },
+  touches: 2, result: true, labels: true,
+});
+
+add('multi', {
+  group: 'Pick up', name: 'Several parts: hole centre each (G30 + G54.1 Pn)',
+  info: 'Part 1 is picked up from machine coordinates into the first offset; each next part is reached from part 1 and picked up into its own offset (G54.1 P1, P2 …). H-variables at the top choose the last part and the part to start from.',
+  fields: [
+    F('mx', 'Part 1 machine X', Object.assign({ def: 0 }, U)),
+    F('my', 'Part 1 machine Y', Object.assign({ def: 0 }, U)),
+    F('pts', 'Parts 2, 3 … from part 1 (X,Y per line)', { kind: 'pts', def: '' }),
+    F('p', 'First work offset G54.1 P', { def: 1 }),
+    F('r', 'R (start angle)', { def: 0 }),
+    F('i', 'I', Object.assign({ def: 0.15 }, U)),
+    F('jj', 'J', Object.assign({ def: 0.15 }, U)),
+    HOLE_D(),
+    F('cutL', 'Cut program to run on each part (G22 L)', { def: '', opt: true, hint: 'blank = probe only' }),
+  ].concat(TOUCH),
+  emit(o, j, L, V, x) {
+    const d = dec(j), parts = [[num(o.mx, 0), num(o.my, 0)]].concat(ptList(o.pts));
+    const n = parts.length, p0 = Math.round(num(o.p, 1)), lb = x.lab, endP = lb + 99;
+    const G30 = 'G30X1R' + fmt(num(o.r, 0), 2) + 'I' + fmt(num(o.i, 0), d) + 'J' + fmt(num(o.jj, 0), d) + touchOpts(o, j);
+    L.push('H' + V.LAST + '=' + n + ' (LAST PART NUMBER)', 'H' + V.START + '=1 (START FROM PART NUMBER)');
+    L.push('H' + V.CNT + '=H' + V.START);
+    for (let k = 1; k <= n; k++) L.push('IF[H' + V.CNT + 'EQ' + k + ']GOTO' + (lb + k) + ' (START FROM PART NUMBER)');
+    parts.forEach((pt, i) => {
+      const k = i + 1;
+      L.push('', 'N' + (lb + k) + ' (PROBE ' + k + ')');
+      L.push('IF[H' + V.CNT + 'GTH' + V.LAST + ']GOTO' + endP + ' (WHEN COUNTER IS GREATER THAN LAST PART NUMBER)');
+      L.push('H' + V.CNT + '=[H' + V.CNT + '+1]');
+      if (k === 1) {
+        L.push('G53G92X0Y0', 'G53 G00 G90 X' + fmt(pt[0], d) + 'Y' + fmt(pt[1], d), 'G90', 'G53G92X0Y0', 'G54.1P' + p0);
+      } else {
+        L.push('G53G92X0Y0', 'G54.1P' + p0, 'G00 G90 X' + fmt(pt[0], d) + 'Y' + fmt(pt[1], d), 'G90', 'G53G92X0Y0', 'G54.1P' + (p0 + k - 1));
+      }
+      L.push('M20 (INSERT WIRE)', G30, 'G92X0.Y0.', 'M21 (CUT WIRE)');
+    });
+    L.push('', 'N' + endP + ' (PROBING DONE)');
+    if (has(o.cutL)) {
+      const cb = lb + 100, endC = lb + 199;
+      L.push('H' + V.CNT + '=H' + V.START);
+      for (let k = 1; k <= n; k++) L.push('IF[H' + V.CNT + 'EQ' + k + ']GOTO' + (cb + k) + ' (START FROM PART NUMBER)');
+      for (let k = 1; k <= n; k++) {
+        L.push('', 'N' + (cb + k) + ' (CUT ' + k + ')');
+        L.push('IF[H' + V.CNT + 'GTH' + V.LAST + ']GOTO' + endC + ' (WHEN COUNTER IS GREATER THAN LAST PART NUMBER)');
+        L.push('H' + V.CNT + '=[H' + V.CNT + '+1]', 'G54.1P' + (p0 + k - 1), 'G00 G90 X0.Y0.', 'G22 L' + Math.round(+o.cutL));
+      }
+      L.push('', 'N' + endC + ' (CUTTING DONE)');
+    }
+  },
+  geo(o) {
+    const parts = ptList(o.pts), p1 = [num(o.mx, 0), num(o.my, 0)], r = has(o.hd) && +o.hd > 0 ? +o.hd / 2 : 0;
+    const all = [[0, 0]].concat(parts);
+    return { circles: r ? all.map(p => [p[0], p[1], r]) : [], touch: all.map(p => [p[0], p[1], 0, 0]), pts: all.map((p, i) => [p[0], p[1], 'P' + (i + 1)]), start: [0, 0], end: [0, 0], note: 'Drawn from part 1 (machine ' + fmt(p1[0], 4) + ', ' + fmt(p1[1], 4) + ').' };
+  },
+  path(o) { return [[0, 0, 'part 1']].concat(ptList(o.pts).map((p, i) => [p[0], p[1], 'part ' + (i + 2)])); },
+  check(o, j) {
+    const m = [], parts = ptList(o.pts), bad = String(o.pts || '').split(/\n/).filter(s => s.trim() && !/^\s*-?[\d.]+\s*[, ]\s*-?[\d.]+\s*$/.test(s));
+    if (bad.length) m.push({ err: 'Each line of parts needs X,Y (e.g. 3.0,3.05): ' + bad[0].trim() });
+    if (parts.length + 1 > 98) m.push({ err: 'At most 98 parts.' });
+    if (num(o.p, 1) + parts.length > 300) m.push({ warn: 'The offsets go past G54.1 P300.' });
+    if (!(num(o.i, 0) > 0) || !(num(o.jj, 0) > 0)) m.push({ err: 'I and J must be more than 0.' });
+    if (has(o.cutL) && !(+o.cutL >= 1)) m.push({ err: 'The cut program is an L number.' });
+    return m.concat(g30Reach(o, j));
+  },
+  touches: 1, labels: true,
+});
+
+/* ---------- whole job: set up every part, then each pass over every part, in one program ---------- */
+const PASSES = [1, 2, 3];
+const BAD_PASTE = [[/^%/, 'a % line'], [/^L\d/, 'an L program line'], [/\bM0?2\b/, 'M02'], [/\bM30\b/, 'M30'], [/\bM99\b/, 'M99'], [/\bG2[23]\b/, 'G22 / G23 (subprogram call or return)']];
+function pasted(s) { return String(s || '').split(/\r?\n/).map(t => t.replace(/\s+$/, '')).filter(t => t.trim()); }
+function jobLabels(x, k) { const P = x.lab + 200 * k; return { start: P, done: P + 99, back: P + 100, cut: P + 101 }; }
+const ZERO = [['g30', 'G30 in each part\'s hole'], ['nominal', 'Nominal spacing (part 1 set by hand)'], ['fixture', 'Probe the fixture, then nominal spacing']];
+const H = (k, label) => F(k, label, { kind: 'head' });
+const passFields = k => [
+  H('h' + k, 'Pass ' + k),
+  F('on' + k, 'Use pass ' + k, { kind: 'chk', def: k < 3 }),
+  F('name' + k, 'Name', { kind: 'text', def: ['ROUGH', 'FINISH', 'SKIM'][k - 1], show: o => o['on' + k] }),
+  F('tx' + k, 'Thread point X (from part zero)', Object.assign({ def: 0, show: o => o['on' + k] }, U)),
+  F('ty' + k, 'Thread point Y (from part zero)', Object.assign({ def: 0, show: o => o['on' + k] }, U)),
+  F('code' + k, 'Cut path: paste the cutting moves (E code, H offset, G41/G42 … G40)', { kind: 'code', def: '', show: o => o['on' + k] }),
+  F('drain' + k, 'After this pass: park, drain, open the door and stop (M01) to take out slugs', { kind: 'chk', def: k === 1, show: o => o['on' + k] }),
+].concat(k === 1 ? [
+  F('tab1', 'Leave a tab on each part, then cut the tabs off part by part (the threader\'s uncut / cut-off modes)', { kind: 'chk', def: false, show: o => o.on1 }),
+  F('tabLen', 'Tab length (H96)', Object.assign({ def: '', hint: 'over 0.5 mm / 0.02 in', show: o => o.on1 && o.tab1 }, U)),
+] : []);
+/* A tab, by the threader's M01 uncut / cut-off function: the cut stops the tab length short of the M01 that follows the
+   shape's last move (H94 uncut mode), and a second run cuts only that length (H95 cut-off mode), stopping at the M01
+   so the slug can come out. The M01 goes before the path's G40 lead-out unless the path has its own. */
+function tabPath(lines) {
+  const code = t => t.replace(/\(.*?\)/g, '');
+  if (lines.some(t => /(?<![A-Z\d.])M0?1(?!\d)/.test(code(t)))) return lines.slice();
+  let at = -1;
+  lines.forEach((t, i) => { if (/(?<![A-Z\d.])G40(?!\d)/.test(code(t))) at = i; });
+  const out = lines.slice();
+  out.splice(at < 0 ? out.length : at, 0, 'M01 (ADDED: THE TAB ENDS HERE)');
+  return out;
+}
+const TAB_Q = x => ({ start: x.lab + 800, done: x.lab + 899, back: x.lab + 902, cut: x.lab + 903 });
+add('job', {
+  group: 'Whole job (one program)', name: 'Whole job: set up all parts, then each pass on all parts',
+  info: 'Writes a complete program with no subprograms: the set-up loop, then each pass (rough, finish …) over every part, then the end. Each pasted cut is written once after the end and reached with G200A, returning with GOTO. Operators edit the H-variables at the top: last part, start-from part and the skip flags. Put this operation last.',
+  labelSpan: 1000, ends: true,
+  fields: [
+    H('hs', 'Parts and set-up'),
+    F('zero', 'Find each part\'s zero by', { kind: 'sel', def: 'g30', opts: ZERO }),
+    F('mx', 'Part 1 machine X', Object.assign({ def: 0, show: o => o.zero === 'g30' }, U)),
+    F('my', 'Part 1 machine Y', Object.assign({ def: 0, show: o => o.zero === 'g30' }, U)),
+    F('fx', 'Fixture hole machine X', Object.assign({ def: 0, show: o => o.zero === 'fixture' }, U)),
+    F('fy', 'Fixture hole machine Y', Object.assign({ def: 0, show: o => o.zero === 'fixture' }, U)),
+    F('two', 'Second fixture hole: zero on the midpoint', { kind: 'chk', def: false, show: o => o.zero === 'fixture' }),
+    F('bx', 'Second hole X from the first', Object.assign({ def: 2, show: o => o.zero === 'fixture' && o.two }, U)),
+    F('by', 'Second hole Y from the first', Object.assign({ def: 0, show: o => o.zero === 'fixture' && o.two }, U)),
+    F('ox', 'Part 1 X from the fixture zero', Object.assign({ def: 0, show: o => o.zero === 'fixture' }, U)),
+    F('oy', 'Part 1 Y from the fixture zero', Object.assign({ def: 0, show: o => o.zero === 'fixture' }, U)),
+    F('pts', 'Parts 2, 3 … from part 1 (X,Y per line)', { kind: 'pts', def: '' }),
+    F('p', 'First work offset G54.1 P', { def: 1 }),
+    F('r', 'G30 R (start angle)', { def: 0, show: o => o.zero !== 'nominal' }),
+    F('i', 'G30 I', Object.assign({ def: 0.15, show: o => o.zero !== 'nominal' }, U)),
+    F('jj', 'G30 J', Object.assign({ def: 0.15, show: o => o.zero !== 'nominal' }, U)),
+    HOLE_D(o => o.zero !== 'nominal'),
+  ].concat(...PASSES.map(passFields), [
+    H('he', 'Start and end'),
+    F('notes', 'Notes for the operator (one comment per line)', { kind: 'pts', def: '' }),
+    F('z1', 'Z1', Object.assign({ def: '', opt: true, hint: 'blank = leave out' }, U)),
+    F('z2', 'Z2', Object.assign({ def: '', opt: true, hint: 'blank = leave out' }, U)),
+    F('z5', 'Z5', Object.assign({ def: '', opt: true, hint: 'blank = leave out' }, U)),
+    F('stopEach', 'Optional stop (M01) before each part is cut', { kind: 'chk', def: true }),
+    F('parkX', 'Park at machine X', Object.assign({ def: '', opt: true, hint: 'blank = stay' }, U)),
+    F('parkY', 'Park at machine Y', Object.assign({ def: '', opt: true, hint: 'blank = stay' }, U)),
+    F('water', 'Offer "leave water full and run again" (ends M99)', { kind: 'chk', def: false }),
+  ], TOUCH),
+  emit(o, j, L, V, x) {
+    const d = dec(j), parts = [[0, 0]].concat(ptList(o.pts)), n = parts.length, p0 = Math.round(num(o.p, 1));
+    const B = x.lab, setDone = B + 99, end = B + 900, endWet = B + 901;
+    const on = PASSES.filter(k => o['on' + k]), nm = k => String(o['name' + k] || 'PASS ' + k).toUpperCase().replace(/[^ -~]/g, '').replace(/[()]/g, '').slice(0, 20);
+    const SKIPSET = V.R + 15, SKIP = k => V.R + 15 + k, WATER = V.R + 19, SKIPTAB = V.R + 9;
+    const tabs = !!(o.on1 && o.tab1), TQ = TAB_Q(x);
+    const sec = {}; let sn = 2;
+    on.forEach(k => { sec[k] = sn++; if (k === 1 && tabs) sec.tab = sn++; });
+    sec.end = sn;
+    const G30 = 'G30X1R' + fmt(num(o.r, 0), 2) + 'I' + fmt(num(o.i, 0), d) + 'J' + fmt(num(o.jj, 0), d) + touchOpts(o, j);
+    const xy = (p) => 'X' + fmt(p[0], d) + 'Y' + fmt(p[1], d);
+    const how = { g30: 'G30 CENTRE IN EACH PART HOLE', nominal: 'NOMINAL SPACING FROM PART 1', fixture: 'PROBE THE FIXTURE THEN NOMINAL SPACING' }[o.zero] || '';
+    const park = () => {
+      L.push('G53G92X0Y0', 'G90');
+      if (has(o.parkX)) L.push('G00 G53 X' + fmt(o.parkX, d));
+      if (has(o.parkY)) L.push('G00 G53 Y' + fmt(o.parkY, d));
+    };
+
+    /* header: what the program does, and what the operator edits */
+    L.push(cm('==== ONE PROGRAM, NO SUBPROGRAMS: ' + n + ' PART' + (n > 1 ? 'S' : '') + ' ===='));
+    L.push(cm('1. SET UP: ' + how), cm('   EACH PART ZERO GOES IN G54.1 P' + p0 + (n > 1 ? '-P' + (p0 + n - 1) : '')));
+    on.forEach(k => {
+      L.push(cm(sec[k] + '. ' + nm(k) + ' EVERY PART' + (k === 1 && tabs ? ', LEAVING A TAB ON EACH' : '') + (o['drain' + k] && !(k === 1 && tabs) ? ', THEN DRAIN AND STOP' : '')));
+      if (k === 1 && tabs) L.push(cm(sec.tab + '. CUT OFF EACH TAB AND STOP: TAKE OUT THE SLUG' + (o.drain1 ? ', THEN DRAIN AND STOP' : '')));
+    });
+    L.push(cm(sec.end + '. PARK, DRAIN, DOOR DOWN, END'));
+    L.push(cm('OPTIONAL STOP ON TO STOP AT EACH M01'));
+    if (tabs) L.push(cm('THE ' + nm(1) + ' LEAVES EACH TAB AT THE M01 AFTER THE SHAPE: OPTIONAL STOP OFF FOR IT,'), cm('ON FOR CUTTING OFF THE TABS'));
+    pasted(o.notes).forEach(t => L.push(cm(t)));
+    L.push('', cm('---- EDIT THESE BEFORE RUNNING ----'));
+    L.push('H' + V.LAST + '=' + n + ' (LAST PART NUMBER)', 'H' + V.START + '=1 (START FROM PART NUMBER)');
+    L.push('H' + SKIPSET + '=0 (SKIP SET-UP 1=YES 0=NO)');
+    on.forEach(k => {
+      L.push('H' + SKIP(k) + '=0 (SKIP ' + nm(k) + ' 1=YES 0=NO)');
+      if (k === 1 && tabs) L.push('H' + SKIPTAB + '=0 (SKIP CUTTING OFF THE TABS 1=YES 0=NO)');
+    });
+    if (tabs) L.push('H96=' + fmt(num(o.tabLen, 0), d) + ' (TAB LENGTH: UNCUT / CUT-OFF AMOUNT)', 'H94=0 (UNCUT MODE OFF)', 'H95=0 (CUT-OFF MODE OFF)');
+    if (o.water) L.push('H' + WATER + '=0 (LEAVE WATER FULL AND RUN AGAIN 1=YES 0=NO)');
+    [['z1', 1], ['z2', 2], ['z5', 5]].forEach(([k, z], i) => { if (has(o[k])) L.push('N000' + (i + 1) + 'Z' + z + '=' + fmt(o[k], 3)); });
+    L.push('G90');
+    L.push('IF[H' + SKIPSET + 'EQ1]GOTO' + setDone + ' (SKIP SET-UP: USE THE OFFSETS ALREADY SET)');
+
+    /* 1. set-up loop */
+    L.push('', cm('---- 1. SET UP: ' + how + ' ----'));
+    L.push('H' + V.CNT + '=H' + V.START);
+    for (let k = 1; k <= n; k++) L.push('IF[H' + V.CNT + 'EQ' + k + ']GOTO' + (B + k) + ' (START FROM PART NUMBER)');
+    parts.forEach((pt, i) => {
+      const k = i + 1, P = p0 + k - 1;
+      L.push('', 'N' + (B + k) + ' (SET UP PART ' + k + ')');
+      L.push('IF[H' + V.CNT + 'GTH' + V.LAST + ']GOTO' + setDone + ' (WHEN COUNTER IS GREATER THAN LAST PART NUMBER)');
+      L.push('H' + V.CNT + '=[H' + V.CNT + '+1]');
+      if (k === 1 && o.zero === 'g30') {
+        L.push(cm('GO TO PART 1, CENTRE IN ITS HOLE, ZERO G54.1 P' + P));
+        L.push('G53G92X0Y0', 'G53 G00 G90 X' + fmt(num(o.mx, 0), d) + 'Y' + fmt(num(o.my, 0), d), 'G90', 'G53G92X0Y0', 'G54.1P' + P);
+        L.push('M20 (INSERT WIRE)', G30, 'G92X0.Y0.', 'M21 (CUT WIRE)');
+      } else if (k === 1 && o.zero === 'nominal') {
+        L.push(cm('PART 1 = G54.1 P' + P + ' AS SET BY HAND'));
+      } else if (k === 1) {
+        L.push(cm('CENTRE IN THE FIXTURE HOLE'));
+        L.push('G53G92X0Y0', 'G53 G00 G90 X' + fmt(num(o.fx, 0), d) + 'Y' + fmt(num(o.fy, 0), d), 'G90', 'G53G92X0Y0', 'G54.1P' + P);
+        L.push('M20 (INSERT WIRE)', G30);
+        if (o.two) {
+          L.push('G92X0.Y0. (HOLE 1 = 0,0 FOR NOW)', 'G14X' + V.A + 'Y' + V.B + ' (HOLE 1 POSITION)', 'M21 (CUT WIRE)');
+          L.push(cm('CENTRE IN THE SECOND FIXTURE HOLE'));
+          L.push('G00 G90 X' + fmt(num(o.bx, 0), d) + 'Y' + fmt(num(o.by, 0), d), 'M20 (INSERT WIRE)', G30, 'G14X' + V.C + 'Y' + V.D + ' (HOLE 2 POSITION)');
+          L.push(cm('WIRE IS HALF THE HOLE SPACING PAST THE MIDPOINT'));
+          L.push('H' + V.E + '=H' + V.C + '-H' + V.A, 'H' + V.E + '=H' + V.E + '/2', 'H' + V.F + '=H' + V.D + '-H' + V.B, 'H' + V.F + '=H' + V.F + '/2');
+          if (has(o.ox) && +o.ox !== 0) L.push('H' + V.E + '=H' + V.E + '-' + fmt(o.ox, d));
+          if (has(o.oy) && +o.oy !== 0) L.push('H' + V.F + '=H' + V.F + '-' + fmt(o.oy, d));
+          L.push(cm('PART 1 = 0,0 IN G54.1 P' + P), 'G92XH' + V.E + ' YH' + V.F, 'M21 (CUT WIRE)');
+        } else {
+          L.push(cm('PART 1 = 0,0 IN G54.1 P' + P), 'G92X' + fmt(-num(o.ox, 0), d) + 'Y' + fmt(-num(o.oy, 0), d), 'M21 (CUT WIRE)');
+        }
+      } else {
+        L.push(cm('GO TO PART ' + k + ' FROM PART 1' + (o.zero === 'g30' ? ', CENTRE IN ITS HOLE' : '') + ', ZERO G54.1 P' + P));
+        L.push('G53G92X0Y0', 'G54.1P' + p0, 'G00 G90 ' + xy(pt), 'G90', 'G53G92X0Y0', 'G54.1P' + P);
+        if (o.zero === 'g30') L.push('M20 (INSERT WIRE)', G30, 'G92X0.Y0.', 'M21 (CUT WIRE)');
+        else L.push('G92X0.Y0.');
+      }
+    });
+    L.push('', 'N' + setDone + ' (SET-UP DONE)');
+
+    /* 2… each pass over every part */
+    on.forEach(k => {
+      const Q = jobLabels(x, k), name = nm(k);
+      L.push('', cm('---- ' + sec[k] + '. ' + name + ' EVERY PART' + (k === 1 && tabs ? ', LEAVING A TAB ON EACH' : '') + ' ----'));
+      L.push('N' + Q.start + ' (' + name + ')', 'M01', 'H' + V.CNT + '=H' + V.START);
+      L.push('IF[H' + SKIP(k) + 'EQ1]GOTO' + Q.done + ' (SKIP ' + name + ')');
+      L.push('G90', 'M122 (TANK DOOR UP)');
+      L.push('N' + Q.back + ' (BACK FROM THE ' + name + ' CUT: NEXT PART)');
+      if (o.stopEach) L.push('M01');
+      for (let p = 1; p <= n; p++) L.push('IF[H' + V.CNT + 'EQ' + p + ']GOTO' + (Q.start + p) + ' (START FROM PART NUMBER)');
+      for (let p = 1; p <= n; p++) {
+        L.push('', 'N' + (Q.start + p) + ' (' + name + ' PART ' + p + ')');
+        L.push('IF[H' + V.CNT + 'GTH' + V.LAST + ']GOTO' + Q.done + ' (WHEN COUNTER IS GREATER THAN LAST PART NUMBER)');
+        L.push('H' + V.CNT + '=[H' + V.CNT + '+1]', 'G53G92X0Y0', 'G54.1P' + (p0 + p - 1), 'G00 G90 X0.Y0.');
+        L.push('G200A' + Q.cut + ' (' + name + ' CUT)');
+      }
+      L.push('', 'N' + Q.done + ' (' + name + ' DONE)');
+      if (k === 1 && tabs) {
+        L.push('', cm('---- ' + sec.tab + '. CUT OFF EACH TAB, STOPPING AT ITS M01 TO TAKE OUT THE SLUG ----'));
+        L.push('N' + TQ.start + ' (CUT OFF THE TABS)', 'IF[H' + SKIPTAB + 'EQ1]GOTO' + TQ.done + ' (SKIP CUTTING OFF THE TABS)');
+        L.push('H3006=1(M01-STOP-ON:TAKE-OUT-SLUGS)', 'H' + V.CNT + '=H' + V.START, 'G90', 'M122 (TANK DOOR UP)');
+        L.push('N' + TQ.back + ' (BACK FROM A TAB: NEXT PART)');
+        for (let p = 1; p <= n; p++) L.push('IF[H' + V.CNT + 'EQ' + p + ']GOTO' + (TQ.start + p) + ' (START FROM PART NUMBER)');
+        for (let p = 1; p <= n; p++) {
+          L.push('', 'N' + (TQ.start + p) + ' (TAB PART ' + p + ')');
+          L.push('IF[H' + V.CNT + 'GTH' + V.LAST + ']GOTO' + TQ.done + ' (WHEN COUNTER IS GREATER THAN LAST PART NUMBER)');
+          L.push('H' + V.CNT + '=[H' + V.CNT + '+1]', 'G53G92X0Y0', 'G54.1P' + (p0 + p - 1), 'G00 G90 X0.Y0.');
+          L.push('G200A' + TQ.cut + ' (CUT OFF THE TAB)');
+        }
+        L.push('', 'N' + TQ.done + ' (TABS DONE)');
+      }
+      if (o['drain' + k]) {
+        L.push(cm('PARK, DRAIN AND OPEN THE DOOR: TAKE OUT THE SLUGS'));
+        park();
+        L.push('M58 (DRAIN TO BOTTOM OF TABLE)', 'M121 (TANK DOOR DOWN)', 'M93 (TURN OFF READY SWITCH)', 'M01');
+      }
+    });
+
+    /* end */
+    L.push('', cm('---- ' + sec.end + '. END ----'));
+    L.push('N' + end + ' (ALL DONE: PARK, DRAIN, OPEN DOOR, END)');
+    park();
+    if (o.water) L.push('IF[H' + WATER + 'EQ1]GOTO' + endWet + ' (LEAVE WATER FULL)');
+    L.push('M81 (FLUID OFF)', 'M58 (DRAIN TO BOTTOM OF TABLE)', 'M121 (TANK DOOR DOWN)', 'M93 (TURN OFF READY SWITCH)', 'M02 (PGM END)');
+    if (o.water) L.push('', 'N' + endWet + ' (WATER STAYS FULL: RUN AGAIN)', 'M99');
+
+    /* the cuts: each written once, reached by G200A, back by GOTO */
+    const cut = (k, Q, title, mode) => {
+      L.push('', cm('---- ' + title + ': REACHED BY G200A' + Q.cut + ', BACK TO N' + Q.back + ' ----'));
+      L.push('N' + Q.cut + ' (' + title + ')', 'M91 (ADAPTIVE OFF)', 'G00X0.Y0.');
+      L.push('G00X' + fmt(num(o['tx' + k], 0), d) + 'Y' + fmt(num(o['ty' + k], 0), d) + ' (THREAD POINT)');
+      L.push('M20 (INSERT WIRE)', 'M78 (FILL TANK)', 'M78 (FILL TANK)', 'M80 (FLUID ON)', 'M82 (WIRE ON)', 'M84 (MACHINING ON)', 'G90', 'M90 (ADAPTIVE ON)');
+      if (mode === 'uncut') L.push('H94=1 (UNCUT MODE: STOP THE TAB LENGTH SHORT OF THE M01)');
+      if (mode === 'cutoff') L.push('H95=1 (CUT-OFF MODE: CUT ONLY THE TAB, THEN STOP AT THE M01)');
+      L.push(cm('-- CUT PATH (PASTED) --'));
+      (mode ? tabPath(pasted(o['code' + k])) : pasted(o['code' + k])).forEach(t => L.push(t));
+      L.push(cm('-- END OF CUT PATH --'));
+      if (mode === 'uncut') L.push('H94=0 (UNCUT MODE OFF)');
+      if (mode === 'cutoff') L.push('H95=0 (CUT-OFF MODE OFF)');
+      L.push('M21 (CUT WIRE)', 'M91 (ADAPTIVE OFF)', 'G90', 'G40G0X0Y0', 'GOTO' + Q.back);
+    };
+    on.forEach(k => {
+      cut(k, jobLabels(x, k), nm(k) + ' CUT', k === 1 && tabs ? 'uncut' : '');
+      if (k === 1 && tabs) cut(1, TQ, 'CUT OFF THE TAB', 'cutoff');
+    });
+  },
+  geo(o) {
+    const all = [[0, 0]].concat(ptList(o.pts)), r = o.zero === 'g30' && has(o.hd) && +o.hd > 0 ? +o.hd / 2 : 0;
+    const th = [];
+    PASSES.forEach(k => { if (o['on' + k]) all.forEach(p => th.push([p[0] + num(o['tx' + k], 0), p[1] + num(o['ty' + k], 0), 0, 0])); });
+    return { circles: r ? all.map(p => [p[0], p[1], r]) : [], touch: th, pts: all.map((p, i) => [p[0], p[1], 'P' + (i + 1)]), start: [0, 0], end: [0, 0] };
+  },
+  path(o) { return [[0, 0, 'part 1']].concat(ptList(o.pts).map((p, i) => [p[0], p[1], 'part ' + (i + 2)])); },
+  check(o, j, i) {
+    const m = [], parts = ptList(o.pts), bad = String(o.pts || '').split(/\n/).filter(s => s.trim() && !/^\s*-?[\d.]+\s*[, ]\s*-?[\d.]+\s*$/.test(s));
+    if (bad.length) m.push({ err: 'Each line of parts needs X,Y (e.g. 3.0,3.05): ' + bad[0].trim() });
+    if (parts.length + 1 > 98) m.push({ err: 'At most 98 parts.' });
+    if (num(o.p, 1) + parts.length > 300) m.push({ warn: 'The offsets go past G54.1 P300.' });
+    if (o.zero !== 'nominal' && (!(num(o.i, 0) > 0) || !(num(o.jj, 0) > 0))) m.push({ err: 'G30 I and J must be more than 0.' });
+    if (o.zero !== 'nominal') g30Reach(o, j).forEach(r => m.push(r));
+    const on = PASSES.filter(k => o['on' + k]);
+    if (!on.length) m.push({ err: 'Turn on at least one pass.' });
+    on.forEach(k => {
+      const lines = pasted(o['code' + k]), nm = 'Pass ' + k + ' (' + (o['name' + k] || '') + ')';
+      if (!lines.length) { m.push({ err: nm + ': paste the cut path.' }); return; }
+      lines.forEach(t => {
+        BAD_PASTE.forEach(([re, what]) => { if (re.test(t.replace(/\(.*?\)/g, ''))) m.push({ err: nm + ': the cut path has ' + what + ' (' + t.trim().slice(0, 30) + '). Paste only the cutting moves.' }); });
+      });
+      if (lines.some(t => /\bM2[01]\b/.test(t.replace(/\(.*?\)/g, '')))) m.push({ warn: nm + ': the cut path threads or cuts the wire itself (M20 / M21). The program already threads at the thread point and cuts after.' });
+      if (lines.some(t => /\b(GOTO|G20[0-3])\b/.test(t.replace(/\(.*?\)/g, '')))) m.push({ warn: nm + ': the cut path jumps (GOTO / G200). Check its labels don\'t clash with N' + (+j.labelBase || 0) + ' up.' });
+      if (lines.some(t => /[^ -~]/.test(t))) m.push({ warn: nm + ': the cut path has non-ASCII characters.' });
+      if (!lines.some(t => /E\d{3,}/.test(t.replace(/\(.*?\)/g, '')))) m.push({ warn: nm + ': no E condition in the cut path. Most cuts set one (e.g. F0.0551E1481).' });
+    });
+    if (o.on1 && o.tab1) {
+      const t = num(o.tabLen, 0), small = j.units === 'mm' ? 0.5 : 0.02;
+      if (!(t > 0)) m.push({ err: 'Pass 1: give the tab length (H96).' });
+      else if (t <= small) m.push({ warn: 'Pass 1: a tab of ' + fmt(t, dec(j)) + ' is short. Keep the uncut amount over 0.5 mm (0.02 in), or the M01 may be passed with no tab.' });
+      const own = pasted(o.code1).filter(t => /(?<![A-Z\d.])M0?1(?!\d)/.test(t.replace(/\(.*?\)/g, ''))).length;
+      if (own > 1) m.push({ warn: 'Pass 1: the cut path has ' + own + ' M01s. Each one leaves a tab; usually there is one, after the shape\'s last move.' });
+      m.push({ warn: 'Tabs use the threader\'s uncut / cut-off modes, set by the program in H94 / H95 (1 is taken as on). Prove it on one part first, single block.' });
+    }
+    if (o.zero === 'nominal' && !parts.length) m.push({ warn: 'Part 1 is set by hand and there are no other parts: the set-up does nothing.' });
+    if ((j.ops || []).slice(i + 1).length) m.push({ err: 'The whole job must be the last operation: nothing after its end (M02) runs.' });
+    if ((j.ops || []).filter(q => q.type === 'job').length > 1) m.push({ err: 'Only one whole job per program.' });
+    return m;
+  },
+});
+
+add('fm', {
+  group: 'Factory macros (G65 L)', name: 'Mitsubishi measuring macro',
+  info: 'Calls one of the measuring macros already on the control. Arguments are read from each macro\'s comment header. The macros also read set-up parameters (wire diameter H21041, edging distance H21043, speed H20040) from the machine\'s Setting Parameter screen. Blank letters are left out.',
+  fields: [F('m', 'Macro', { kind: 'sel', def: '317', opts: Object.keys(FM).map(k => [k, 'L' + FM[k].l + ' ' + FM[k].name]) })],
+  dyn: o => (FM[o.m] || FM['317']).let.map(([a, label]) => F('a' + a, a + ': ' + label, { def: '', opt: true })),
+  emit(o, j, L) {
+    const f = FM[o.m] || FM['317'], d = dec(j);
+    const args = f.let.filter(([a]) => has(o['a' + a])).map(([a]) => a + (FM_INT[a] ? Math.round(+o['a' + a]) : fmt(o['a' + a], d)));
+    L.push('G65 L' + f.l + (args.length ? ' ' + args.join(' ') : ''));
+    L.push(cm('RESULT ' + f.res));
+  },
+  geo(o, at) { return { touch: [[at[0], at[1], 0, 0]], end: at }; },
+  check(o) {
+    const f = FM[o.m];
+    if (!f) return [{ err: 'Pick a macro.' }];
+    const m = [{ warn: 'L' + f.l + ': arguments read from the macro code. Prove it single block, and check the set-up parameters it reads first.' }];
+    if (o.m === '9001' || o.m === '9002') {
+      ['A', 'B', 'C'].forEach(a => { if (has(o['a' + a]) && Math.abs(+o['a' + a]) > 180) m.push({ err: a + ' must be between −180 and 180.' }); });
+      if (!has(o.aR)) m.push({ err: 'Give R, the nominal radius.' });
+    }
+    return m;
+  },
+});
+
+add('offset', { group: 'Program', name: 'Select work offset (G54.1 P)', fields: [F('p', 'G54.1 P', { def: 1 })],
+  emit(o, j, L) { L.push('G54.1P' + Math.round(num(o.p, 1))); }, noMove: true,
+  check(o) { return num(o.p, 0) >= 1 ? [] : [{ err: 'The offset number starts at 1.' }]; } });
+add('move', { group: 'Program', name: 'Rapid move', fields: [START[0], START[1], START[2]].map(f => f.k === 'coord' ? Object.assign({}, f, { opts: f.opts.slice(0, 2) }) : f),
+  emit(o, j, L) { moveTo(L, j, o.coord, num(o.x, 0), num(o.y, 0)); },
+  geo(o) { return { start: [num(o.x, 0), num(o.y, 0)], end: [num(o.x, 0), num(o.y, 0)] }; } });
+add('thread', { group: 'Program', name: 'Thread wire (M20)', fields: [], emit(o, j, L) { L.push('M20 (INSERT WIRE)'); }, noMove: true });
+add('cutw', { group: 'Program', name: 'Cut wire (M21)', fields: [], emit(o, j, L) { L.push('M21 (CUT WIRE)'); }, noMove: true });
+add('stop', { group: 'Program', name: 'Optional stop (M01)', fields: [F('msg', 'Message', { kind: 'text', def: 'CHECK SETUP' })],
+  emit(o, j, L) { L.push('M01 ' + cm(o.msg || 'CHECK')); }, noMove: true });
+add('call', { group: 'Program', name: 'Run cut program (G22 L)', fields: [F('l', 'Program L number', { def: '', opt: true })],
+  emit(o, j, L) { L.push('G22 L' + Math.round(num(o.l, 0))); }, noMove: true,
+  check(o) { return num(o.l, 0) >= 1 ? [] : [{ err: 'Give the L number of the cut program.' }]; } });
+add('note', { group: 'Program', name: 'Comment', fields: [F('text', 'Text', { kind: 'text', def: '' })],
+  emit(o, j, L) { if (o.text) L.push(cm(o.text)); }, noMove: true });
+
+function ptList(s) {
+  return String(s || '').split(/\n/).map(t => t.trim()).filter(Boolean).map(t => t.split(/[\s,]+/).map(Number)).filter(p => p.length >= 2 && isFinite(p[0]) && isFinite(p[1]));
+}
+function fieldsOf(o) { const c = CYC[o.type]; return c ? c.fields.concat(c.dyn ? c.dyn(o) : []) : []; }
+function newOp(type) {
+  const o = { type };
+  fieldsOf(o).forEach(f => { o[f.k] = f.def === undefined ? '' : f.def; });
+  return o;
+}
+function list() { return Object.values(CYC); }
+
+/* ---------- labels, alarms and result variables ---------- */
+function plan(j) {
+  const V = vars(j), lb = Math.round(num(j.labelBase, 7000)), al = Math.round(num(j.alarm, 9101));
+  let res = V.RES0, k = 0, a = 0, off = 0;
+  return (j.ops || []).map((o, i) => {
+    const c = CYC[o.type] || {}, x = { lab: lb + off, alarm: al + a };
+    off += c.labelSpan || 200;
+    if (c.result) { x.res = has(o.res) ? Math.round(+o.res) : res; if (!has(o.res)) res++; }
+    if (c.labels) k++;
+    if (o.type === 'width' && (has(o.min) || has(o.max))) a++;
+    return x;
+  });
+}
+
+/* ---------- program text ---------- */
+function body(j) {
+  const V = vars(j), L = [], d = dec(j), P = plan(j);
+  const job = (j.ops || []).some(o => o.type === 'job');
+  L.push(cm((job ? 'EDM JOB ' : 'EDM PROBING ') + (j.machine && j.machine !== 'OTHER' ? j.machine + ' ' : '') + (j.units === 'mm' ? 'MM' : 'INCH')));
+  L.push(cm('H' + V.R + '-H' + (V.R + BLOCK - 1) + ' USED BY THIS PROGRAM'));
+  if (j.adaptiveOff) L.push('M91 (ADAPTIVE OFF)');
+  L.push('G90');
+  if (j.wireFrom === 'read') L.push('G14X' + V.R + 'Y22P7 (WIRE DIAMETER)', 'H' + V.R + '=H' + V.R + '/2 (WIRE RADIUS)');
+  else L.push('H' + V.R + '=' + fmt(num(j.wireDia, 0) / 2, d + 1) + ' (WIRE RADIUS)');
+  (j.ops || []).forEach((o, i) => {
+    const c = CYC[o.type]; if (!c) return;
+    L.push('', cm((i + 1) + ' ' + c.name));
+    c.emit(o, j, L, V, P[i]);
+  });
+  return L;
+}
+function program(j) {
+  const L = ['%', 'L' + Math.round(num(j.progNo, 5000)) + '/' + String(j.name || 'SETUP').toUpperCase().replace(/[^ -~]/g, '')];
+  body(j).forEach(s => L.push(s));
+  if (!(j.ops || []).some(o => o.type === 'job')) L.push('', j.endCode === 'G23' ? 'G23' : 'M02 (PGM END)');
+  L.push('%');
+  return L.join('\r\n') + '\r\n';
+}
+function snippet(j) {
+  const L = [cm('-- PROBING SET-UP: PASTE ABOVE THE CUT --')];
+  body(j).forEach(s => L.push(s));
+  L.push(cm('-- END OF PROBING SET-UP --'));
+  return L.join('\r\n') + '\r\n';
+}
+
+/* ---------- checks ---------- */
+function check(j) {
+  const m = [], add = (op, kind, text) => m.push({ op, [kind]: text });
+  const name = String(j.name || '');
+  if (!/^[A-Za-z0-9][A-Za-z0-9 _.\-]{0,31}$/.test(name)) add(-1, 'err', 'Name: letters, digits, space, _ . - only, up to 32.');
+  const L = +j.progNo;
+  if (!(Number.isInteger(L) && L >= 1 && L <= 99999999)) add(-1, 'err', 'The program number is a whole L number (1 – 99999999).');
+  else if (L >= 9000) add(-1, 'warn', 'L9000 and up hold the control\'s own macros. Pick a number below 9000.');
+  if (j.wireFrom !== 'read') {
+    const w = num(j.wireDia, 0);
+    if (!(w > 0)) add(-1, 'err', 'Give the wire diameter.');
+    else if (j.units === 'mm' ? (w < 0.05 || w > 0.36) : (w < 0.002 || w > 0.014)) add(-1, 'warn', 'That wire diameter looks wrong for ' + (j.units === 'mm' ? 'mm' : 'inch') + '.');
+  } else add(-1, 'warn', 'Reading the wire diameter (G14 …Y22P7) is copied from the factory macros. Check the radius variable on the first run.');
+  const b = +j.varBase;
+  if (!(Number.isInteger(b) && b >= 1)) add(-1, 'err', 'The H-variable start is a whole number.');
+  else {
+    const clash = USED_H.filter(h => h >= b && h < b + BLOCK);
+    if (clash.length) add(-1, 'warn', 'H' + b + '–H' + (b + BLOCK - 1) + ' overlaps variables the control\'s programs use: H' + clash.slice(0, 6).join(', H') + (clash.length > 6 ? ' …' : '') + '. H610 – H649 is free.');
+  }
+  const lb = +j.labelBase, nops = (j.ops || []).length;
+  if (!(Number.isInteger(lb) && lb >= 1)) add(-1, 'err', 'The N label start is a whole number.');
+  else if (lb + (j.ops || []).reduce((s, o) => s + ((CYC[o.type] || {}).labelSpan || 200), 0) > 9999) add(-1, 'err', 'N labels would go past N9999. Lower the label start.');
+  if ((j.ops || []).some(o => o.type === 'job')) add(-1, 'warn', 'A whole job is a complete program: load NAME.NC. The paste-in block is not meant for it.');
+  const al = +j.alarm;
+  if (!(Number.isInteger(al) && al >= 1)) add(-1, 'err', 'The alarm number is a whole number.');
+  else if (FACTORY_ALARMS.includes(al)) add(-1, 'warn', 'Alarm ' + al + ' is one the factory macros use.');
+  ['notch', 'repeat'].forEach(k => { if (j[k] !== '' && j[k] != null && !(Number.isInteger(+j[k]) && +j[k] >= 1)) add(-1, 'err', 'The ' + (k === 'notch' ? 'speed notch' : 'repeat count') + ' is a whole number.'); });
+  if (j.tol !== '' && j.tol != null && !(+j.tol > 0)) add(-1, 'err', 'The repeat tolerance is more than 0.');
+  if (!nops) add(-1, 'warn', 'Add an operation.');
+
+  let threaded = false;
+  (j.ops || []).forEach((o, i) => {
+    const c = CYC[o.type];
+    if (!c) { add(i, 'err', 'Unknown operation ' + o.type); return; }
+    /* the wire must be threaded before a touch: by this operation (M20) or an earlier one */
+    if (o.type === 'thread') threaded = true;
+    else if (o.type === 'cutw' || o.type === 'multi' || (o.type === 'width' && o.kind === 'out')) threaded = o.type === 'width' && !o.cut;
+    else if (c.touches) {
+      if (!o.thread && !threaded) add(i, 'warn', 'No M20 before this touch: the wire is not threaded. Turn on "Thread wire first" or add Thread wire before it.');
+      threaded = !o.cut;
+    }
+    fieldsOf(o).forEach(f => {
+      if (f.show && !f.show(o)) return;
+      if (f.kind !== 'num' || f.opt) return;
+      if (o[f.k] === '' || o[f.k] == null) add(i, 'err', f.label + ': missing.');
+      else if (!isFinite(+o[f.k])) add(i, 'err', f.label + ': not a number.');
+    });
+    fieldsOf(o).forEach(f => { if (f.kind === 'num' && f.opt && o[f.k] !== '' && o[f.k] != null && !isFinite(+o[f.k])) add(i, 'err', f.label + ': not a number.'); });
+    if (has(o.p) && o.type !== 'multi' && !(+o.p >= 1 && +o.p <= 300)) add(i, 'err', 'G54.1 P runs 1 – 300.');
+    if (c.check) c.check(o, j, i).forEach(r => add(i, r.err ? 'err' : 'warn', r.err || r.warn));
+  });
+
+  /* travel: the spread of positions typed in each frame must fit the table (only when travel is given) */
+  const t = MACHINES[j.machine] || (has(j.travelX) && has(j.travelY) ? { x: +j.travelX, y: +j.travelY } : null);
+  if (t) {
+    const k = j.units === 'mm' ? 1 : 1 / 25.4, span = { work: [], mach: [] };
+    (j.ops || []).forEach(o => {
+      const c = CYC[o.type]; if (!c) return;
+      const fr = o.type === 'multi' ? 'work' : o.coord;
+      if (!span[fr]) return;
+      (c.path ? c.path(o) : [[num(o.x, 0), num(o.y, 0)]]).forEach(p => span[fr].push(p));
+    });
+    Object.keys(span).forEach(fr => {
+      const p = span[fr]; if (p.length < 2) return;
+      const dx = Math.max(...p.map(q => q[0])) - Math.min(...p.map(q => q[0])), dy = Math.max(...p.map(q => q[1])) - Math.min(...p.map(q => q[1]));
+      if (dx > t.x * k || dy > t.y * k) add(-1, 'warn', 'The ' + (fr === 'mach' ? 'machine' : 'work') + '-coordinate moves span more than the ' + (MACHINES[j.machine] ? j.machine : 'table') + ' travel (' + t.x + ' x ' + t.y + ' mm).');
+    });
+  }
+  return m;
+}
+
+/* ---------- preview ---------- */
+function plot(j) {
+  let at = [0, 0];
+  return (j.ops || []).map((o, i) => {
+    const c = CYC[o.type];
+    if (!c || c.noMove) return { i, name: c ? c.name : o.type };
+    const here = (o.coord === 'here' || o.coord == null) ? at : [num(o.x, 0), num(o.y, 0)];
+    const g = c.geo ? c.geo(o, here, j) : {};
+    const item = Object.assign({ i, name: c.name, start: g.start || here, frame: o.type === 'multi' ? 'part 1' : (o.coord === 'mach' ? 'machine' : 'work') }, g);
+    at = g.end || here;
+    return item;
+  });
+}
+function moves(j) {
+  const out = [];
+  let last = null;
+  plot(j).forEach(p => {
+    if (!p.start) return;
+    if (last) out.push({ op: p.i, kind: 'rapid', x: p.start[0], y: p.start[1], from: last, label: 'Rapid to start' });
+    (p.touch || []).forEach(t => out.push({ op: p.i, kind: 'touch', x: t[0] + t[2], y: t[1] + t[3], from: [t[0], t[1]], label: (t[2] || t[3]) ? 'Touch' : 'G30 centre' }));
+    last = p.end || p.start;
+  });
+  return out;
+}
+
+/* ---------- ready-made jobs ---------- */
+/* A complete sample whole job: 4 parts, each a 0.250 wide keyway to Y0.625 in a 1.000 bore.
+   The E conditions and offsets are placeholders: every machine, wire and material needs its own. */
+const SAMPLE_ROUGH = [
+  '(SAMPLE ROUGH: 0.250 WIDE KEYWAY TO Y0.625 IN A 1.000 BORE)',
+  'F0.0551E1481 (SAMPLE CONDITION: USE YOUR OWN)',
+  'H1=0.0085 (SAMPLE OFFSET: USE YOUR OWN)',
+  'G42G01X-0.125Y0.45H1', 'G01X-0.125Y0.625', 'G01X0.125Y0.625', 'G01X0.125Y0.45', 'G40G01X0.Y0.35'].join('\n');
+const SAMPLE_FINISH = [
+  '(SAMPLE FINISH: SAME PATH, SMALLER OFFSET)',
+  'F0.0236E1332 (SAMPLE CONDITION: USE YOUR OWN)',
+  'H1=0.0055 (SAMPLE OFFSET: USE YOUR OWN)',
+  'G42G01X-0.125Y0.45H1', 'G01X-0.125Y0.625', 'G01X0.125Y0.625', 'G01X0.125Y0.45', 'G40G01X0.Y0.35'].join('\n');
+const SAMPLE_OP = { type: 'job', zero: 'g30', mx: 10, my: -5, pts: '2,0\n4,0\n6,0', p: 1, r: 0, i: 0.3, jj: 0.3, hd: 1,
+  tx1: 0, ty1: 0.35, code1: SAMPLE_ROUGH, tx2: 0, ty2: 0.35, code2: SAMPLE_FINISH, water: true,
+  notes: 'SAMPLE PROGRAM: NOT FOR A REAL PART\n4 PARTS 2.0 APART IN X, EACH A 1.000 BORE\n0.250 WIDE KEYWAY TO Y0.625 FROM THE BORE CENTRE\nSET YOUR OWN E CONDITIONS, OFFSETS AND PART 1 POSITION' };
+function sampleJob() {
+  return Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), { name: 'SAMPLE-JOB', progNo: '5000', ops: [Object.assign(newOp('job'), SAMPLE_OP)] });
+}
+const GRID = '2,0\n4,0\n0,2\n2,2\n4,2';
+const TEMPLATES = [
+  { id: 'hole', name: 'Start hole: G30 centre and zero', ops: [{ type: 'hole', coord: 'here' }] },
+  { id: 'corner', name: 'Corner pick-up on a block (outside, lower left)', ops: [{ type: 'corner' }] },
+  { id: 'grid', name: 'Six parts on a grid (G54.1 P1 – P6)', ops: [{ type: 'multi', mx: 0, my: 0, pts: GRID, r: 0, i: 0.25, jj: 0.25, p: 1 }] },
+  { id: 'job-g30', name: 'Whole job: G30 in each part, rough + finish (one program)', ops: [{ type: 'job', zero: 'g30', pts: GRID, i: 0.25, jj: 0.25 }] },
+  { id: 'job-sample', name: 'Sample: 4 keyways, G30 each part, rough + finish (complete)', ops: [SAMPLE_OP] },
+  { id: 'job-nominal', name: 'Whole job: fixed spacing from part 1, finish only (one program)', ops: [{ type: 'job', zero: 'nominal', pts: '4,0\n8,0\n12,0', on1: false, drain1: false }] },
+  { id: 'slot', name: 'Square up: centre a slot in X, then Y edge', ops: [{ type: 'width', kind: 'in', axis: 'X', coord: 'here', w: 0.5, cut: false }, { type: 'edge', axis: 'Y', dir: '1', coord: 'here', thread: false }] },
+  { id: 'web', name: 'Centre a part in X from outside, Y edge', ops: [{ type: 'width', kind: 'out', axis: 'X', x: 0, y: 0, w: 1, back: 0.1 }, { type: 'edge', axis: 'Y', dir: '1', coord: 'work', x: 0, y: -0.6 }] },
+];
+function fromTemplate(id) {
+  const t = TEMPLATES.find(t => t.id === id);
+  return t ? t.ops.map(o => Object.assign(newOp(o.type), o)) : [];
+}
+
+/* G and M codes for the reference the page shows (G / M codes in the header), in our own words.
+   gen: this generator writes it (the test keeps that true). */
+const CODE = (c, g, d, x) => Object.assign({ c, g, d, ex: '', note: '', gen: false }, x || {});
+const CODES = [
+  CODE('G00', 'Moves', 'Rapid move to the point by the shortest path, not cutting.', { ex: 'G00 X1. Y0.5', gen: true, note: 'U and V are always incremental.' }),
+  CODE('G01', 'Moves', 'Straight cut to the point at feed F.', { ex: 'G01 X0.25 Y0.969', note: 'The power-on default. Start and end the wire offset on G01 moves.' }),
+  CODE('G02', 'Moves', 'Arc clockwise to the point.', { ex: 'G02 X1. Y0 I0.5 J0', note: 'I and J are the centre from the start point, always incremental; or R the radius (− for over 180°). A full circle needs I/J. On an arc under 6 mm (0.24 in) start and end radii more than 6 µm (0.00024 in) apart stop it with an end point error.' }),
+  CODE('G03', 'Moves', 'Arc counter-clockwise to the point.', { ex: 'G03 X0 Y1. I0 J0.5', note: 'Words as for G02.' }),
+  CODE('G02.1', 'Moves', 'Spiral arc clockwise: the radius changes evenly from start to end.', { ex: 'G02.1 X1. Y0 I0.5 J0', note: 'No end point radius check.' }),
+  CODE('G03.1', 'Moves', 'Spiral arc counter-clockwise.', { ex: 'G03.1 X0 Y1. I0 J0.5' }),
+  CODE('G04', 'Moves', 'Dwell: wait before the next block.', { ex: 'G04 X5.', note: 'X5. is 5 seconds in any units; without a point the unit is 0.001 s (X5000 is 5 s). An F in the block is the time, not a feed.' }),
+  CODE('G46', 'Moves', 'Micro joint: shorten this move by the amount in H40 (lengthen if negative).', { ex: 'G46 G01 X1. Y0', note: 'Only on G00 – G03, in the one block.' }),
+  CODE('G69', 'Moves', 'Skip the arc end point check for this block.', { ex: 'G69 G02 X1. Y0 I0.5 J0' }),
+  CODE('G27', 'Zero return', 'Check the machine zero: rapid to it and show whether it arrived.', { ex: 'G27 X0 Y0', note: 'Needs a dog-type zero return (G60) first.' }),
+  CODE('G28', 'Zero return', 'Return to the machine zero on the axes named.', { ex: 'G28 X0 Y0', note: 'The numbers are ignored. Set G92 again afterwards.' }),
+  CODE('G48', 'Zero return', 'Return to the 2nd zero point, or the 3rd / 4th with P3 / P4.', { ex: 'G48 P3 X0 Y0', note: 'The points are set by parameter.' }),
+  CODE('G60', 'Zero return', 'Dog-type return to the machine zero.', { ex: 'G60 X0 Y0 Z0' }),
+  CODE('G29', 'Touch and read', 'Edge find: move along one axis until the wire touches the edge.', { ex: 'G29 X-1', gen: true, note: 'Only the sign counts (direction). P is the speed notch 1 – 9 (3 to 570 mm/min; none = 60). I (X) or J (Y) is a first stretch at 570 mm/min. ,P repeats up to 9 and ,R the scatter allowed (3 × ,R; the wire goes to the average). R tilts the search, Q names a variable for the result instead of an alarm. It stops with the wire touching: allow for the wire radius.' }),
+  CODE('G30', 'Touch and read', 'Hole centre: touch the hole\'s sides and stop at its centre.', { ex: 'G30 X1 R0 I0.15 J0.15', gen: true, note: 'X or Y and its sign pick where it starts; the number doesn\'t count. I and J are first stretches at 570 mm/min in X and Y: keep them short of the wall. R tilts it; P, ,P, ,R and Q as for G29.' }),
+  CODE('G78', 'Touch and read', 'Automatic vertical alignment of the wire, then zero U and V.', { ex: 'G78 X-1 P2', note: 'P is how many times both ends must touch together. G78 U0 V0 Q1 only zeroes U and V.' }),
+  CODE('G14', 'Touch and read', 'Read values into H-variables: X, Y, U, V, Z name the variables, P what is read.', { ex: 'G14 X611 Y612 P0', gen: true, note: 'P0 program position, P1 or P3 machine position, P4 position counter, P5 minutes since start, P8 speed, P9 / P10 set / measured voltage. P7 with Y20 / Y21 reads status bits (bit 3 of Y20: variable type 2 on). The factory macros read the wire diameter with Y22 P7, and also use G14 with no P; this generator does that too, but only for the difference of two readings, since P0 is the program position.' }),
+  CODE('G43.1', 'Touch and read', 'Write a time counter (run times, maintenance hours).', { ex: 'G43.1 X50 Y18', note: 'X is the variable holding the value, Y the counter: 18 filter hours, 20 resin, 26 lubrication …' }),
+  CODE('G44.1', 'Touch and read', 'Read a time counter into an H-variable.', { ex: 'G44.1 X250 Y10', note: 'Y10 reads the wire left (minutes), Y4 machining time.' }),
+  CODE('G40', 'Wire offset and taper', 'Wire offset and taper off.', { ex: 'G40 G01 X0.24 Y0.92', gen: true, note: 'The power-on default. Cancel on a G00 or G01 move.' }),
+  CODE('G41', 'Wire offset and taper', 'Wire offset to the left of the path, by the amount in H.', { ex: 'G41 G01 X0 Y0.5 H1', note: 'H1 – H900. A mirror on one axis swaps the side.' }),
+  CODE('G42', 'Wire offset and taper', 'Wire offset to the right of the path, by the amount in H.', { ex: 'G42 G01 X-0.25 Y0.969 H1' }),
+  CODE('G43', 'Wire offset and taper', 'Set an offset amount (P the H number, R the amount), or a work offset.', { ex: 'G43 P10 R0.0085', note: 'G43 G54 X_ Y_ sets a work offset from the machine zero. Alone in its block.' }),
+  CODE('G44', 'Wire offset and taper', 'Transfer a program offset amount.'),
+  CODE('G87', 'Wire offset and taper', 'Taper: the same corner radius on the upper and lower path, in this block.', { ex: 'G01 X1. Y0 ,R0.1 G87' }),
+  CODE('G88', 'Wire offset and taper', 'Corner R mode for offset and taper corners.', { note: 'Offset or taper can\'t change between two arcs in this mode.' }),
+  CODE('G89', 'Wire offset and taper', 'Intersection mode for offset and taper corners.', { note: 'The power-on default; offset and taper can change freely.' }),
+  CODE('G90', 'Coordinates', 'Absolute: positions are from the zero.', { ex: 'G90', gen: true, note: 'U and V stay incremental.' }),
+  CODE('G91', 'Coordinates', 'Incremental: positions are from where the wire is.', { ex: 'G91 G00 X0.1', gen: true, note: 'The power-on default, and M02 sets it: write G90 in each program.' }),
+  CODE('G92', 'Coordinates', 'Set the current position: where the wire is becomes the value given.', { ex: 'G92 X0 Y0', gen: true, note: 'Use it in G40. The shift it makes is added to the work offset, and is cleared by the G92 Clear switch, and by RESET or M02 when the reset-coordinate setting is on.' }),
+  CODE('G52', 'Coordinates', 'Local coordinates: shift the current work zero.', { ex: 'G52 X1. Y0', note: 'G52 X0 Y0 cancels; M02, M30 and RESET clear it.' }),
+  CODE('G53', 'Coordinates', 'Machine coordinates, for this block.', { ex: 'G53 G00 X0 Y0', gen: true, note: 'Use it in G40.' }),
+  CODE('G54', 'Coordinates', 'Work offset 1.', { ex: 'G90 G54 G00 X0 Y0', note: 'The power-on default. Changing offset doesn\'t cancel wire offset or taper: cancel them first.' }),
+  CODE('G55', 'Coordinates', 'Work offset 2.', { ex: 'G55' }),
+  CODE('G56', 'Coordinates', 'Work offset 3.', { ex: 'G56' }),
+  CODE('G57', 'Coordinates', 'Work offset 4.', { ex: 'G57' }),
+  CODE('G58', 'Coordinates', 'Work offset 5.', { ex: 'G58' }),
+  CODE('G59', 'Coordinates', 'Work offset 6.', { ex: 'G59' }),
+  CODE('G54.1', 'Coordinates', 'Work offset W00 – W99: P00 – P99.', { ex: 'G54.1 P2', gen: true }),
+  CODE('G70', 'Coordinates', 'Inch.', { note: 'The units really come from the machine\'s inch switch.' }),
+  CODE('G71', 'Coordinates', 'Millimetres.'),
+  CODE('G05', 'Rotate, scale, mirror', 'Rotate the coordinates: X, Y the centre, R the angle (counter-clockwise +).', { ex: 'G05 X0 Y0 R30.', note: 'Also written K30. (K0 off). M02 clears it unless the keep-data setting is on.' }),
+  CODE('G06', 'Rotate, scale, mirror', 'Rotation off.', { ex: 'G06' }),
+  CODE('G51', 'Rotate, scale, mirror', 'Scale the shape: X, Y the centre, P the factor.', { ex: 'G51 X0 Y0 P2000000', note: 'Or S alone about the current position.' }),
+  CODE('G50', 'Rotate, scale, mirror', 'Scaling off (1.0).', { ex: 'G50' }),
+  CODE('G51.1', 'Rotate, scale, mirror', 'Mirror image on, about the X / Y given.', { ex: 'G51.1 X0' }),
+  CODE('G50.1', 'Rotate, scale, mirror', 'Mirror image off.', { ex: 'G50.1 X0 Y0' }),
+  CODE('G62', 'Rotate, scale, mirror', 'Mirror image: 1 on, 0 off, per axis.', { ex: 'G62 X0 Y0', note: 'It stays on, even through M02.' }),
+  CODE('G97', 'Rotate, scale, mirror', 'Swap X and Y: X1 on, X0 off.', { ex: 'G97 X0', note: 'It stays on, even through M02. With a mirror too, the mirror comes first.' }),
+  CODE('G63', 'Settings', 'Soft limit on: H gives the limit.', { ex: 'G63 H11', note: 'The limits are set on the work set-up screen.' }),
+  CODE('G64', 'Settings', 'Soft limit off: H gives the limit.', { ex: 'G64 H1' }),
+  CODE('G22', 'Program flow', 'Call a program: L the program, H a label to start at, P the repeats.', { ex: 'G22 L2000', gen: true, note: 'G22 H_ alone jumps to a label in this program. Up to 30 deep. With I and J it also turns each pass (figure rotation).' }),
+  CODE('G23', 'Program flow', 'End of a called program: go back to the caller.', { ex: 'G23', gen: true, note: 'G23 H_ goes back to that label instead.' }),
+  CODE('G65', 'Program flow', 'Call a macro once, with arguments.', { ex: 'G65 L99990317 X0 A0 Q6 S5 T0.005', gen: true, note: 'Each letter lands in a local variable: A H901, B H902, C H903, I H904 … X H924, Y H925, Z H926. P repeats it. Up to 4 deep.' }),
+  CODE('G66', 'Program flow', 'Call a macro after every move until G67.', { ex: 'G66 L1000 A1.' }),
+  CODE('G66.1', 'Program flow', 'Call a macro with every block until G67, its words passed as arguments.', { ex: 'G66.1 L1000' }),
+  CODE('G67', 'Program flow', 'End G66 / G66.1.', { ex: 'G67' }),
+  CODE('G200', 'Program flow', 'Jump to label A.', { ex: 'G200 A500', gen: true, note: 'Alone in its block; the label must be in this program.' }),
+  CODE('G201', 'Program flow', 'Jump to label A when B equals C.', { ex: 'G201 A500 BH620 C0' }),
+  CODE('G202', 'Program flow', 'Jump to label A when B is less than C.', { ex: 'G202 A500 BH620 C0' }),
+  CODE('G203', 'Program flow', 'Jump to label A when bit C of B is 0; go on when it is 1.', { ex: 'G203 A500 BH620 C3' }),
+  CODE('G101', 'Maths', 'A = B.', { ex: 'G101 AH620 BH621', note: 'G101 – G111 each go alone in their block. A is the variable; B and C variables or numbers.' }),
+  CODE('G102', 'Maths', 'A = B + C.', { ex: 'G102 AH620 BH621 CH622' }),
+  CODE('G103', 'Maths', 'A = B − C.', { ex: 'G103 AH620 BH621 CH622' }),
+  CODE('G104', 'Maths', 'A = B × C.', { ex: 'G104 AH620 BH621 CH622' }),
+  CODE('G105', 'Maths', 'A = B ÷ C.', { ex: 'G105 AH620 BH621 CH622' }),
+  CODE('G106', 'Maths', 'A = the square root of B² + C².', { ex: 'G106 AH620 BH621 CH622' }),
+  CODE('G107', 'Maths', 'A = B × sin C.', { ex: 'G107 AH620 BH621 C30000', note: 'Angles are in 0.001° steps, but C3000 is also seen written for 30°: check which on the machine.' }),
+  CODE('G108', 'Maths', 'A = B × cos C.', { ex: 'G108 AH620 BH621 C30000', note: 'Angle units as for G107.' }),
+  CODE('G109', 'Maths', 'A = the angle whose tangent is B ÷ C (−90° to 90°).', { ex: 'G109 AH620 BH621 CH622' }),
+  CODE('G110', 'Maths', 'A = the square root of B² − C².', { ex: 'G110 AH620 BH621 CH622' }),
+  CODE('G111', 'Maths', 'Centre of the circle through three points: A,B  C,D  E,F in; the centre to X, Y and the radius to R.', { ex: 'G111 AH611 BH612 CH613 DH614 EH615 FH616 XH617 YH618 RH619' }),
+
+  CODE('M00', 'Program', 'Stop: machining and fluid stop; Start carries on.', { ex: 'M00', gen: true, note: 'It acts after everything else in its block. A switch decides whether fluid, wire and machining come back on.' }),
+  CODE('M01', 'Program', 'Optional stop: stops only with the M01 stop switch on.', { ex: 'M01', gen: true, note: 'In the threader\'s uncut / cut off work each shape stops short of its M01 by the uncut amount H96: keep it over 0.5 mm (0.02 in).' }),
+  CODE('M02', 'Program', 'End of program, and reset.', { ex: 'M02', gen: true, note: 'Sets G01, G40, G54, G91, G89, G23; turns off M80, M82, M84; taper angle and the E adjustment / FC override notch to 0. Mirror (G62) and axis swap (G97) stay on.' }),
+  CODE('M30', 'Program', 'End of program, and reset, as M02.', { ex: 'M30' }),
+  CODE('M99', 'Program', 'End of a subprogram, as G23; at the end of a main program it runs it again from the top.', { ex: 'M99', gen: true, note: 'The usual subprogram end on most controls. The whole job\'s "run again" ending uses it.' }),
+  CODE('M93', 'Program', 'All stop: turn the Ready switch off.', { ex: 'M93', gen: true, note: 'It acts after everything else in its block.' }),
+  CODE('M06', 'Program', 'With Auto Machining On set, run moves with machining and adaptive control off.', { ex: 'M06 G01 X1. Y0', note: 'One block, or a section from M06 P1 to its end (its end is given as both M06 P0 and M06 P2). Such moves run at 60 mm/min with no F.' }),
+  CODE('M96', 'Program', 'Turn a switch on: H93 says which.', { ex: 'H93=5 then M96', note: 'H93=5 is the M01 stop switch, by a factory comment.' }),
+  CODE('M97', 'Program', 'Turn a switch off: H93 says which.', { ex: 'H93=5 then M97', note: 'As the factory programs use it.' }),
+  CODE('M247', 'Program', 'Save the machine data.', { ex: 'M247', note: 'As the factory programs use it.' }),
+  CODE('M20', 'Wire', 'Thread the wire with the automatic threader.', { ex: 'M20', gen: true, note: 'It cancels the wire offset in its block: G40 first. A wire break returns to the last M20 point.' }),
+  CODE('M21', 'Wire', 'Cut the wire.', { ex: 'M21', gen: true, note: 'At the end of each shape, before an M00, so a dropping slug isn\'t taken for a wire break.' }),
+  CODE('M22', 'Wire', 'Test threading.', { ex: 'M22', note: 'A dry run with AT Test on runs M22 in place of M20.' }),
+  CODE('M23', 'Wire', 'Send the threader\'s guide pipe back to its fixed position.', { ex: 'M23' }),
+  CODE('M82', 'Wire', 'Wire feed on.', { ex: 'M82', gen: true }),
+  CODE('M83', 'Wire', 'Wire feed off.', { ex: 'M83' }),
+  CODE('M78', 'Tank and fluid', 'Fill the tank quickly; it stops at the set level.', { ex: 'M78', gen: true, note: 'Close the tank door first.' }),
+  CODE('M80', 'Tank and fluid', 'Dielectric fluid on.', { ex: 'M80', gen: true }),
+  CODE('M81', 'Tank and fluid', 'Dielectric fluid off.', { ex: 'M81', gen: true }),
+  CODE('M57', 'Tank and fluid', 'Drain all the fluid.', { ex: 'M57', note: 'Between parts: M123, M57, then move.' }),
+  CODE('M58', 'Tank and fluid', 'Fluid level low: keep it below the table.', { ex: 'M58', gen: true, note: 'This generator writes it as DRAIN TO BOTTOM OF TABLE.' }),
+  CODE('M59', 'Tank and fluid', 'Fluid level high: keep it at the set height above the table.', { ex: 'M59' }),
+  CODE('M74', 'Tank and fluid', 'Fluid preparation on.', { ex: 'M74' }),
+  CODE('M75', 'Tank and fluid', 'Fluid preparation off.', { ex: 'M75' }),
+  CODE('M76', 'Tank and fluid', 'Fluid circulation on.', { ex: 'M76' }),
+  CODE('M77', 'Tank and fluid', 'Fluid circulation off.', { ex: 'M77' }),
+  CODE('M88', 'Tank and fluid', 'Less flushing flow.', { ex: 'M88' }),
+  CODE('M89', 'Tank and fluid', 'More flushing flow.', { ex: 'M89' }),
+  CODE('M121', 'Tank and fluid', 'Lower the work tank door.', { ex: 'M121', gen: true, note: 'Some lists name M121 and M122 the other way round; the control\'s own programs lower the door with M121. If the run is stopped while the door moves, only Reset Interrupt carries it on.' }),
+  CODE('M122', 'Tank and fluid', 'Raise the work tank door.', { ex: 'M122', gen: true }),
+  CODE('M123', 'Tank and fluid', 'Overflow mode off.', { ex: 'M123' }),
+  CODE('M124', 'Tank and fluid', 'Overflow mode on: the door follows the Z height.', { ex: 'M124', note: 'After power-on the door must have been to its low limit once.' }),
+  CODE('M84', 'Machining', 'Machining power on.', { ex: 'M84', gen: true }),
+  CODE('M85', 'Machining', 'Machining power off.', { ex: 'M85' }),
+  CODE('M90', 'Machining', 'Adaptive control on.', { ex: 'M90', gen: true, note: 'F is ignored while it is on.' }),
+  CODE('M91', 'Machining', 'Adaptive control off.', { ex: 'M91', gen: true }),
+  CODE('M101', 'Machining', 'PM control off.', { ex: 'M101' }),
+  CODE('M102', 'Machining', 'PM control on, nozzle open mode.', { ex: 'M102', note: 'Give M102 or M103 before each shape\'s first cut.' }),
+  CODE('M103', 'Machining', 'PM control on, nozzle seated mode.', { ex: 'M103' }),
+  CODE('M105', 'Machining', 'PM control on, thin plate mode.', { ex: 'M105' }),
+  CODE('M106', 'Machining', 'FC override notch, Q −5 to +4: adjusts the cutting speed.', { ex: 'M106 Q-2', note: 'First cuts or PM only. Back to 0 at M02, M30 or RESET.' }),
+  CODE('M110', 'Machining', 'CM-R: P0 off, P1 on, P2 speed first, P3 – P5 accuracy first.', { ex: 'M110 P2' }),
+  CODE('M111', 'Machining', 'CM-S: P0 off, P1 on.', { ex: 'M111 P1' }),
+  CODE('M112', 'Machining', 'EM path control: P0 off, P1 on, P2 on with WH auto set; A, B the path change.', { ex: 'M112 P1 A1.0 B0.5', note: 'Alone in its block.' }),
+  CODE('M113', 'Machining', 'EM condition control: P1 on, P0 off; Q the EM adjustment.', { ex: 'M113 P1 Q4', note: 'Alone in its block. Q is given as both −4 to +4 and 0 to 8: check on the machine.' }),
+  CODE('M131', 'Machining', 'Start of a core holding section, cut with the holding condition.', { ex: 'M131 P401 Q3.0 R1 I2.0', note: 'P the holding E pack, Q the feed, R the hold points per block, I the hold length (over 0.5 mm). Only in G41 / G42.' }),
+  CODE('M132', 'Machining', 'End of the core holding section.', { ex: 'M132' }),
+  CODE('M133', 'Machining', 'G40 speed up on: faster axis feed when G40 is read.', { ex: 'M133' }),
+  CODE('M134', 'Machining', 'G40 speed up off.', { ex: 'M134' }),
+  CODE('M60', 'Outputs', 'External output 1 on.', { ex: 'M60', note: 'Even codes M60 – M68 turn outputs 1 – 5 on, odd codes M61 – M69 off.' }),
+  CODE('M61', 'Outputs', 'External output 1 off.', { ex: 'M61' }),
+  CODE('M62', 'Outputs', 'External output 2 on.', { ex: 'M62' }),
+  CODE('M63', 'Outputs', 'External output 2 off.', { ex: 'M63' }),
+  CODE('M64', 'Outputs', 'External output 3 on.', { ex: 'M64' }),
+  CODE('M65', 'Outputs', 'External output 3 off.', { ex: 'M65' }),
+  CODE('M66', 'Outputs', 'External output 4 on.', { ex: 'M66' }),
+  CODE('M67', 'Outputs', 'External output 4 off.', { ex: 'M67' }),
+  CODE('M68', 'Outputs', 'External output 5 on.', { ex: 'M68' }),
+  CODE('M69', 'Outputs', 'External output 5 off.', { ex: 'M69' }),
+  CODE('M52', 'Pallet and scrap', 'Remove the cut-off scrap automatically.', { ex: 'M52' }),
+  CODE('M53', 'Pallet and scrap', 'Change the workpiece: P the pallet.', { ex: 'M53 P1' }),
+  CODE('M54', 'Pallet and scrap', 'Take the pallet out.', { ex: 'M54', note: 'As the factory programs use it.' }),
+
+  CODE('X1 / X1.', 'Other words', 'Without a decimal point a number counts in the smallest unit.', { ex: 'X1. = 1   X1 = 0.001 mm (0.0001 in)', note: 'The point works on A B F G I J K Q R S U V X Y Z; on other letters it is ignored.' }),
+  CODE('E', 'Other words', 'Machining condition pack: E1 – E499 are yours, E500 and up the maker\'s.', { ex: 'E1481', note: 'With two E words in a block the last one counts.' }),
+  CODE('F', 'Other words', 'Feed along the path, in mm/min (0.001 without a point).', { ex: 'F0.0551 E1481', note: 'Ignored while adaptive control is on. Rapids are fixed (XY 1300 mm/min).' }),
+  CODE('H', 'Other words', 'Variables, and the offset amount G41 / G42 use (H1).', { ex: 'H610=0.005', gen: true, note: 'H1 – H900 are shared and kept at power off; the maker keeps H80 – H86, H90 – H99, H242 – H247 and H850 – H900. H901 – H932 are local to each macro level.' }),
+  CODE('IF GOTO', 'Other words', 'Jump to a label when the test holds: EQ NE GT LT GE LE.', { ex: 'IF[H622GTH620]GOTO7099', gen: true, note: 'Only with the control\'s variable type 2 on (bit 3 of G14 X_ Y20 P7); the conventional mode uses G200 – G203. Type 2 also has WHILE … DO and functions such as SIN, SQRT, ABS.' }),
+  CODE('H3000', 'Other words', 'Stop with a macro alarm: the number and message you give.', { ex: 'H3000=9101(X WIDTH OUT OF TOL)', gen: true }),
+  CODE('H94', 'Other words', 'M01 uncut mode: the cut stops H96 short of the M01 after a shape, leaving a tab.', { ex: 'H94=1', gen: true, note: 'The block before the M01 must be a move. The control cuts the wire there and skips on.' }),
+  CODE('H95', 'Other words', 'M01 cut-off mode: cut only the last H96 before each M01, then stop at it.', { ex: 'H95=1', gen: true, note: 'Run with the M01 stop switch on, to take each slug out.' }),
+  CODE('H96', 'Other words', 'The tab length for H94 / H95: the uncut and cut-off amount.', { ex: 'H96=0.2', gen: true, note: 'Keep it over 0.5 mm (0.02 in).' }),
+  CODE('H3006', 'Other words', 'Stop after the previous block with a message; Start carries on.', { ex: 'H3006=1(CHECK-THE-PART)', gen: true }),
+  CODE('L', 'Other words', 'Program number, at the top: L9000 and up are the control\'s own.', { ex: 'L5000/NAME', gen: true }),
+  CODE('N', 'Other words', 'A label to jump to, 1 – 99999.', { ex: 'N7000', gen: true }),
+  CODE('A', 'Other words', 'Taper angle, −60° to 60°: + leans the wire right of the path.', { ex: 'A1.5', note: 'Needs G41 / G42 on. RESET, M02 and G40 set it to 0.' }),
+  CODE('K', 'Other words', 'Rotate the coordinates by this angle about where the wire is (K0 off).', { ex: 'K30.' }),
+  CODE('S', 'Other words', 'Scale the shape: S2. is twice, S1.0 full size.', { ex: 'S1.0' }),
+  CODE('( )', 'Other words', 'A comment: shown on screen, not run.', { ex: '(ROUGH CUT)', gen: true }),
+  CODE('%', 'Other words', 'End of the program text; acts as M02 when there is none.', { ex: '%', gen: true }),
+  CODE('/', 'Other words', 'Block skip: the block is skipped with the block delete switch on.', { ex: '/M01' }),
+];
+
+/* ---------- machine tables: each model's table outline and specifications. mm, from the table's front-left corner,
+   Y toward the back. The stroke is where the wire can reach; the machine zero is the wire at its left-rear end, so
+   machine X runs 0 to +travel and Y 0 to −travel. ---------- */
+const span = (a, b, st) => { const r = []; for (let v = a; v <= b + 1e-9; v += st) r.push(v); return r; };
+const grid = (xs, ys) => [].concat(...xs.map(x => ys.map(y => [x, y])));
+const SPECS = {
+  1200: { x: 400, y: 300, z: 220, uv: 60, work: [800, 700, 215], kg: 500, taper: 200 },
+  2400: { x: 600, y: 400, z: 310, uv: 75, work: [1050, 800, 295], kg: 1500, taper: 260 },
+  4800: { x: 800, y: 600, z: 510, uv: 100, work: [1250, 1020, 505], kg: 3000, taper: 355 },
+};
+const TABLES = {
+  MV1200S: { kind: 'U type, split', w: 640, d: 450, spec: SPECS[1200], stroke: [120, 120, 520, 420],
+    pieces: [[0, 0, 110, 450], [530, 0, 640, 450], [110, 0, 530, 110]],
+    holes: [].concat(grid([80, 560], span(25, 425, 50)), grid([30, 610], [75, 175, 275, 375]), grid(span(120, 520, 50), [80]), grid([170, 270, 370, 470], [30])) },
+  MV1200R: { kind: 'square', w: 640, d: 540, spec: SPECS[1200], stroke: [120, 120, 520, 420],
+    pieces: [[0, 0, 640, 540]], opening: [110, 110, 530, 430],
+    holes: [].concat(grid(span(70, 570, 50), [460]), grid(span(120, 520, 50), [80]), grid([170, 270, 370, 470], [30]), grid([80, 560], span(25, 425, 50)), grid([30, 610], [75, 175, 275, 375])) },
+  MV2400S: { kind: 'U type, split', w: 840, d: 560, spec: SPECS[2400], stroke: [120, 120, 720, 520],
+    pieces: [[0, 110, 110, 560], [730, 110, 840, 560], [0, 0, 420, 110], [420, 0, 840, 110]],
+    holes: [].concat(grid([80, 760], span(135, 535, 50)), grid([30, 810], [185, 285, 385, 485]), grid(span(10, 410, 50).concat(span(430, 830, 50)), [80]), grid([60, 160, 260, 360, 480, 580, 680, 780], [30])) },
+  MV2400R: { kind: 'square', w: 840, d: 640, spec: SPECS[2400], stroke: [120, 120, 720, 520],
+    pieces: [[0, 0, 840, 640]], opening: [110, 110, 730, 530],
+    holes: [].concat(grid([60, 160, 260, 360, 480, 580, 680, 780], [30, 610]), grid(span(70, 770, 50), [80, 560]), grid([80, 760], span(135, 535, 50)), grid([30, 810], [185, 285, 385, 485])) },
+  MV4800: { kind: 'U type, split', w: 1080, d: 780, spec: SPECS[4800], stroke: [140, 140, 940, 740],
+    pieces: [[0, 0, 130, 780], [950, 0, 1080, 780], [130, 0, 950, 130]],
+    holes: [].concat(grid([100, 980], span(40, 740, 50)), grid([50, 1030], span(90, 690, 100)), grid(span(165, 915, 50), [100]), grid([215, 315, 415, 515, 565, 665, 765, 865], [50])) },
+};
+const tableOf = m => TABLES[m] || TABLES[String(m || '').replace(/[SR]$/, '')] || null;   // the MV4800 has one table
+/* The drawing as entities: origin 'zero' (machine X0 Y0) or 'corner' (the table's front-left corner), in mm or inch. */
+function tableDrawing(model, opt) {
+  const T = tableOf(model); if (!T) return null;
+  const o = opt || {}, inch = o.units === 'in', k = inch ? 1 / 25.4 : 1, st = T.stroke, S = T.spec;
+  const ox = o.origin === 'corner' ? 0 : st[0], oy = o.origin === 'corner' ? 0 : st[3];
+  const P = (x, y) => [(x - ox) * k, (y - oy) * k], ents = [];
+  const rect = (r, layer) => { const c = [P(r[0], r[1]), P(r[2], r[1]), P(r[2], r[3]), P(r[0], r[3])]; c.forEach((a, i) => ents.push({ t: 'line', a, b: c[(i + 1) % 4], layer })); };
+  T.pieces.forEach(r => rect(r, 'TABLE'));
+  if (T.opening) rect(T.opening, 'TABLE');
+  T.holes.forEach(h => ents.push({ t: 'circle', c: P(h[0], h[1]), r: 4 * k, layer: 'M8' }));
+  rect(st, 'TRAVEL');
+  const cx = (st[0] + st[2]) / 2, cy = (st[1] + st[3]) / 2;
+  ents.push({ t: 'line', a: P(cx, -20), b: P(cx, T.d + 20), layer: 'CENTER' }, { t: 'line', a: P(-20, cy), b: P(T.w + 20, cy), layer: 'CENTER' });
+  ents.push({ t: 'line', a: P(st[0] - 10, st[3]), b: P(st[0] + 10, st[3]), layer: 'ZERO' }, { t: 'line', a: P(st[0], st[3] - 10), b: P(st[0], st[3] + 10), layer: 'ZERO' });
+  const h = 6 * k, mm = (v, dp) => inch ? fmt(v / 25.4, dp == null ? 3 : dp) + ' IN (' + v + ' MM)' : v + ' MM';
+  ents.push({ t: 'text', p: P(st[0] + 3, st[3] + 3), h: h * 0.8, s: 'MACHINE X0 Y0', layer: 'ZERO' });
+  ents.push({ t: 'text', p: P(st[0] + 3, st[1] + 3), h: h * 0.8, s: 'TRAVEL X' + fmt(S.x * k, inch ? 3 : 0) + ' x Y' + fmt(S.y * k, inch ? 3 : 0), layer: 'TRAVEL' });
+  const notes = [
+    'MITSUBISHI ' + model + ' TABLE (' + T.kind.toUpperCase() + '), ' + (inch ? 'INCH' : 'MM'),
+    'TABLE ' + mm(T.w) + ' x ' + mm(T.d) + ', ' + T.holes.length + ' M8 TAPPED HOLES (DRAWN %%c8 MM)',
+    'TRAVEL X ' + mm(S.x) + ', Y ' + mm(S.y) + ', Z ' + mm(S.z) + ', U/V %%p' + mm(S.uv),
+    'MAX WORKPIECE ' + mm(S.work[0]) + ' x ' + mm(S.work[1]) + ' x ' + mm(S.work[2]) + ', ' + S.kg + ' KG',
+    'MAX TAPER 15%%d (AT ' + mm(S.taper) + ' THICK)',
+    o.origin === 'corner' ? 'ORIGIN: THE TABLE\'S FRONT-LEFT CORNER' : 'ORIGIN: MACHINE X0 Y0, THE WIRE AT THE LEFT-REAR END OF TRAVEL (X+ RIGHT, Y- TO THE FRONT)',
+    'CHECK A HOLE OR TWO ON THE MACHINE BEFORE RELYING ON THIS DRAWING',
+  ];
+  notes.forEach((s, i) => ents.push({ t: 'text', p: P(0, -40 - i * 11), h, s, layer: 'NOTES' }));
+  return { model, T, ents, k, inch };
+}
+const DXF_LAYERS = [['TABLE', 7, 'CONTINUOUS'], ['M8', 4, 'CONTINUOUS'], ['TRAVEL', 1, 'DASHED'], ['CENTER', 8, 'CENTER'], ['ZERO', 3, 'CONTINUOUS'], ['NOTES', 7, 'CONTINUOUS']];
+/* An AutoCAD R12 ASCII DXF, which every CAD system reads; $INSUNITS says mm or inch. */
+function tableDXF(model, opt) {
+  const D = tableDrawing(model, opt); if (!D) return '';
+  const L = [], w = (c, v) => L.push(String(c), String(v)), f = v => String(+(+v).toFixed(6));
+  const sc = D.k;
+  w(0, 'SECTION'); w(2, 'HEADER'); w(9, '$ACADVER'); w(1, 'AC1009'); w(9, '$INSUNITS'); w(70, D.inch ? 1 : 4); w(9, '$MEASUREMENT'); w(70, D.inch ? 0 : 1); w(0, 'ENDSEC');
+  w(0, 'SECTION'); w(2, 'TABLES');
+  w(0, 'TABLE'); w(2, 'LTYPE'); w(70, 3);
+  w(0, 'LTYPE'); w(2, 'CONTINUOUS'); w(70, 0); w(3, 'Solid line'); w(72, 65); w(73, 0); w(40, 0);
+  w(0, 'LTYPE'); w(2, 'DASHED'); w(70, 0); w(3, '__ __ __'); w(72, 65); w(73, 2); w(40, f(15 * sc)); w(49, f(10 * sc)); w(49, f(-5 * sc));
+  w(0, 'LTYPE'); w(2, 'CENTER'); w(70, 0); w(3, '____ _ ____'); w(72, 65); w(73, 4); w(40, f(40 * sc)); w(49, f(25 * sc)); w(49, f(-5 * sc)); w(49, f(5 * sc)); w(49, f(-5 * sc));
+  w(0, 'ENDTAB');
+  w(0, 'TABLE'); w(2, 'LAYER'); w(70, DXF_LAYERS.length);
+  DXF_LAYERS.forEach(([n, c, lt]) => { w(0, 'LAYER'); w(2, n); w(70, 0); w(62, c); w(6, lt); });
+  w(0, 'ENDTAB'); w(0, 'ENDSEC');
+  w(0, 'SECTION'); w(2, 'ENTITIES');
+  D.ents.forEach(e => {
+    if (e.t === 'line') { w(0, 'LINE'); w(8, e.layer); w(10, f(e.a[0])); w(20, f(e.a[1])); w(30, 0); w(11, f(e.b[0])); w(21, f(e.b[1])); w(31, 0); }
+    else if (e.t === 'circle') { w(0, 'CIRCLE'); w(8, e.layer); w(10, f(e.c[0])); w(20, f(e.c[1])); w(30, 0); w(40, f(e.r)); }
+    else if (e.t === 'text') { w(0, 'TEXT'); w(8, e.layer); w(10, f(e.p[0])); w(20, f(e.p[1])); w(30, 0); w(40, f(e.h)); w(1, e.s); }
+  });
+  w(0, 'ENDSEC'); w(0, 'EOF');
+  return L.join('\r\n') + '\r\n';
+}
+
+const EDM = { sampleJob, DEFAULTS, MACHINES, CYC, FM, TEMPLATES, USED_H, BLOCK, CODES, TABLES, tableOf, tableDrawing, tableDXF, list, newOp, fieldsOf, fromTemplate, check, program, snippet, plot, moves, vars, plan, fmt, cm, ptList };
+if (typeof module !== 'undefined' && module.exports) module.exports = EDM; else root.EDM = EDM;
+})(this);
+</script>
+
+<script>
+(function () {
+'use strict';
+const KEY = 'mach1-edm-job-v1';
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+
+let job = clone(EDM.DEFAULTS);
+try { const s = localStorage.getItem(KEY); if (s) { const j = JSON.parse(s); if (j && Array.isArray(j.ops)) job = Object.assign(clone(EDM.DEFAULTS), j); } } catch (e) { /* no storage */ }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(job)); } catch (e) { /* no storage */ } }
+
+/* ---------- settings ---------- */
+const S = (k, label, extra) => Object.assign({ k, label, kind: 'num' }, extra || {});
+const SIDE = [
+  S('name', 'Program name', { kind: 'text' }), S('progNo', 'Program number (L)'),
+  S('machine', 'Machine', { kind: 'sel', opts: Object.keys(EDM.MACHINES).map(k => [k, k === 'OTHER' ? 'Other' : k]) }),
+  S('travelX', 'Table travel X (mm)', { hint: 'blank = no check', show: () => job.machine === 'OTHER' }), S('travelY', 'Table travel Y (mm)', { hint: 'blank = no check', show: () => job.machine === 'OTHER' }),
+  S('units', 'Units (as the machine is set)', { kind: 'sel', opts: [['in', 'Inch'], ['mm', 'mm']] }),
+  S('wireFrom', 'Wire diameter', { kind: 'sel', opts: [['typed', 'Typed here'], ['read', 'Read from the control']] }),
+  S('wireDia', 'Wire diameter', { show: () => job.wireFrom !== 'read' }),
+  S('notch', 'Touch speed notch (P)', { hint: 'blank = machine default' }),
+  S('repeat', 'Repeat count (,P)', { hint: 'blank = machine default' }),
+  S('tol', 'Repeat tolerance (,R)', { hint: 'blank = machine default' }),
+  S('varBase', 'H-variables from'), S('labelBase', 'N labels from'), S('alarm', 'Alarm number (H3000=)'),
+  S('endCode', 'End with', { kind: 'sel', opts: [['M02', 'M02 (run on its own)'], ['G23', 'G23 (called with G22 L)']] }),
+  S('adaptiveOff', 'Adaptive off at start (M91)', { kind: 'chk' }),
+];
+function input(val, f, attrs) {
+  if (f.kind === 'sel' || f.kind === 'seg') return '<select ' + attrs + '>' + f.opts.map(([v, t]) => '<option value="' + esc(v) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + esc(t) + '</option>').join('') + '</select>';
+  if (f.kind === 'chk') return '<input type="checkbox" ' + attrs + (val ? ' checked' : '') + '>';
+  if (f.kind === 'pts' || f.kind === 'code') return '<textarea ' + attrs + (f.kind === 'code' ? ' class="code" wrap="off"' : '') + ' spellcheck="false">' + esc(val == null ? '' : val) + '</textarea>';
+  return '<input ' + attrs + ' value="' + esc(val == null ? '' : val) + '"' + (f.kind === 'num' ? ' inputmode="decimal"' : '') + (f.hint ? ' placeholder="' + esc(f.hint) + '"' : '') + '>';
+}
+function unitLabel(f) { return f.unit ? ' (' + (job.units === 'mm' ? 'mm' : 'in') + ')' : ''; }
+function renderSettings() {
+  $('#settings').innerHTML = '<h2>Job</h2><div class="grid">' + SIDE.filter(f => !f.show || f.show()).map(f =>
+    '<label class="f' + (f.kind === 'chk' ? ' chk full' : '') + '">' + (f.kind === 'chk' ? input(job[f.k], f, 'data-j="' + f.k + '"') + esc(f.label) : esc(f.label) + (f.k === 'wireDia' || f.k === 'tol' ? ' (' + (job.units === 'mm' ? 'mm' : 'in') + ')' : '') + input(job[f.k], f, 'data-j="' + f.k + '"')) + '</label>').join('') + '</div>';
+}
+
+/* ---------- operations ---------- */
+function renderAdd() {
+  const groups = {};
+  EDM.list().forEach(c => { (groups[c.group] = groups[c.group] || []).push(c); });
+  $('#addSel').innerHTML = Object.keys(groups).map(g => '<optgroup label="' + esc(g) + '">' + groups[g].map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('') + '</optgroup>').join('');
+  $('#tpl').innerHTML = '<option value="">Add a ready-made job…</option>' + EDM.TEMPLATES.map(t => '<option value="' + t.id + '">' + esc(t.name) + '</option>').join('');
+}
+function ofield(o, i, f) {
+  const a = 'data-o="' + i + '" data-k="' + f.k + '"';
+  if (f.kind === 'head') return '<div class="sub-h">' + esc(f.label) + '</div>';
+  if (f.kind === 'chk') return '<label class="f chk full">' + input(o[f.k], f, a) + esc(f.label) + '</label>';
+  return '<label class="f' + (f.kind === 'pts' || f.kind === 'code' ? ' full' : '') + '">' + esc(f.label + unitLabel(f)) + input(o[f.k], f, a) + '</label>';
+}
+let MSGS = [];
+function renderOps() {
+  const n = job.ops.length;
+  $('#ops').innerHTML = job.ops.map((o, i) => {
+    const c = EDM.CYC[o.type]; if (!c) return '';
+    const fs = EDM.fieldsOf(o).filter(f => !f.show || f.show(o));
+    const main = fs.filter(f => !f.adv), adv = fs.filter(f => f.adv);
+    const bad = MSGS.some(m => m.op === i && m.err);
+    return '<div class="op' + (bad ? ' bad' : '') + '" data-i="' + i + '"><div class="op-head"><b>' + (i + 1) + '. ' + esc(c.name) + '</b>' +
+      '<button data-act="up" data-i="' + i + '" ' + (i ? '' : 'disabled') + ' title="Move up">↑</button>' +
+      '<button data-act="down" data-i="' + i + '" ' + (i < n - 1 ? '' : 'disabled') + ' title="Move down">↓</button>' +
+      '<button data-act="dup" data-i="' + i + '" title="Duplicate">⧉</button>' +
+      '<button data-act="del" data-i="' + i + '" title="Delete">✕</button></div>' +
+      (c.info ? '<p class="info">' + esc(c.info) + '</p>' : '') +
+      '<div class="grid">' + main.map(f => ofield(o, i, f)).join('') + '</div>' +
+      (adv.length ? '<details><summary>Touch settings (P, ,P, ,R)</summary><div class="grid">' + adv.map(f => ofield(o, i, f)).join('') + '</div></details>' : '') +
+      '<div class="msgs" data-m="' + i + '"></div></div>';
+  }).join('');
+  renderMsgs();
+}
+function renderMsgs() {
+  const line = m => '<p class="msg ' + (m.err ? 'err' : 'warn') + '">' + (m.err ? '✕ ' : '! ') + esc(m.err || m.warn) + '</p>';
+  document.querySelectorAll('.msgs').forEach(el => { const i = +el.dataset.m; el.innerHTML = MSGS.filter(m => m.op === i).map(line).join(''); });
+  document.querySelectorAll('.op').forEach(el => el.classList.toggle('bad', MSGS.some(m => m.op === +el.dataset.i && m.err)));
+  $('#jobMsgs').innerHTML = MSGS.filter(m => m.op === -1).map(line).join('');
+}
+
+/* ---------- preview ---------- */
+let MOVES = [], PLOT = [];
+function draw(step) {
+  const svg = $('#plot'), W = svg.clientWidth || 600, H = svg.clientHeight || 360;
+  const pts = [];
+  PLOT.forEach(p => {
+    if (p.start) pts.push(p.start);
+    (p.touch || []).forEach(t => { pts.push([t[0], t[1]], [t[0] + t[2], t[1] + t[3]]); });
+    (p.circles || []).forEach(c => { pts.push([c[0] - c[2], c[1] - c[2]], [c[0] + c[2], c[1] + c[2]]); });
+    (p.lines || []).concat(p.dashed || []).forEach(l => { pts.push([l[0], l[1]], [l[2], l[3]]); });
+  });
+  if (!pts.length) { svg.innerHTML = '<text x="16" y="28" fill="currentColor" style="fill:var(--muted)">Add an operation to see it here.</text>'; return; }
+  let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+  const span = Math.max(x1 - x0, y1 - y0, job.units === 'mm' ? 5 : 0.2), pad = span * 0.12;
+  x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+  const s = Math.min(W / (x1 - x0), H / (y1 - y0)), ox = (W - (x1 - x0) * s) / 2, oy = (H - (y1 - y0) * s) / 2;
+  const X = x => ox + (x - x0) * s, Y = y => H - oy - (y - y0) * s;
+  let g = '';
+  if (x0 < 0 && x1 > 0) g += '<line x1="' + X(0) + '" y1="0" x2="' + X(0) + '" y2="' + H + '" stroke="var(--line)"/>';
+  if (y0 < 0 && y1 > 0) g += '<line x1="0" y1="' + Y(0) + '" x2="' + W + '" y2="' + Y(0) + '" stroke="var(--line)"/>';
+  const cur = step != null && MOVES[step] ? MOVES[step].op : null;
+  PLOT.forEach(p => {
+    const op = cur == null || cur === p.i ? 1 : 0.35;
+    g += '<g opacity="' + op + '">';
+    (p.circles || []).forEach(c => { g += '<circle cx="' + X(c[0]) + '" cy="' + Y(c[1]) + '" r="' + Math.max(c[2] * s, 2) + '" fill="none" stroke="var(--part)" stroke-width="1.5"/>'; });
+    (p.lines || []).forEach(l => { g += '<line x1="' + X(l[0]) + '" y1="' + Y(l[1]) + '" x2="' + X(l[2]) + '" y2="' + Y(l[3]) + '" stroke="var(--part)" stroke-width="2"/>'; });
+    (p.dashed || []).forEach(l => { g += '<line x1="' + X(l[0]) + '" y1="' + Y(l[1]) + '" x2="' + X(l[2]) + '" y2="' + Y(l[3]) + '" stroke="var(--rapid)" stroke-dasharray="4 3"/>'; });
+    (p.touch || []).forEach(t => {
+      if (!t[2] && !t[3]) { g += '<circle cx="' + X(t[0]) + '" cy="' + Y(t[1]) + '" r="4" fill="var(--touch)"/>'; return; }
+      const ax = X(t[0] + t[2]), ay = Y(t[1] + t[3]), bx = X(t[0]), by = Y(t[1]), ang = Math.atan2(ay - by, ax - bx);
+      g += '<line x1="' + bx + '" y1="' + by + '" x2="' + ax + '" y2="' + ay + '" stroke="var(--touch)" stroke-width="2"/>' +
+        '<path d="M' + ax + ',' + ay + ' L' + (ax - 8 * Math.cos(ang - 0.4)) + ',' + (ay - 8 * Math.sin(ang - 0.4)) + ' L' + (ax - 8 * Math.cos(ang + 0.4)) + ',' + (ay - 8 * Math.sin(ang + 0.4)) + 'Z" fill="var(--touch)"/>';
+    });
+    (p.pts || []).forEach(q => { g += '<text x="' + (X(q[0]) + 6) + '" y="' + (Y(q[1]) - 6) + '" font-size="11" style="fill:var(--muted)">' + esc(q[2]) + '</text>'; });
+    if (p.start) g += '<text x="' + (X(p.start[0]) + 6) + '" y="' + (Y(p.start[1]) + 14) + '" font-size="11" style="fill:var(--ink)">' + (p.i + 1) + '</text>';
+    g += '</g>';
+  });
+  MOVES.forEach((m, k) => {
+    if (m.kind !== 'rapid' || (step != null && k > step)) return;
+    g += '<line x1="' + X(m.from[0]) + '" y1="' + Y(m.from[1]) + '" x2="' + X(m.x) + '" y2="' + Y(m.y) + '" stroke="var(--rapid)" stroke-dasharray="5 4"/>';
+  });
+  if (step != null && MOVES[step]) g += '<circle cx="' + X(MOVES[step].x) + '" cy="' + Y(MOVES[step].y) + '" r="6" fill="none" stroke="var(--accent)" stroke-width="2.5"/>';
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.innerHTML = g;
+}
+function timeline() {
+  const tl = $('#tl');
+  tl.max = Math.max(0, MOVES.length - 1);
+  if (+tl.value > +tl.max) tl.value = tl.max;
+  showStep(MOVES.length ? +tl.value : null);
+}
+function showStep(k) {
+  draw(k);
+  const m = k != null ? MOVES[k] : null, d = job.units === 'mm' ? 3 : 4;
+  $('#tlInfo').textContent = m ? 'Op ' + (m.op + 1) + ' · ' + m.label + ' · X' + EDM.fmt(m.x, d) + ' Y' + EDM.fmt(m.y, d) + ' (' + (PLOT.find(p => p.i === m.op) || {}).frame + ' coords)' : '';
+  hlListing(m ? m.op : null);
+}
+let playing = null;
+$('#tlPlay').onclick = () => {
+  if (playing) { clearInterval(playing); playing = null; $('#tlPlay').textContent = '▶'; return; }
+  const tl = $('#tl'); if (+tl.value >= +tl.max) tl.value = 0;
+  $('#tlPlay').textContent = '❚❚';
+  playing = setInterval(() => { if (+tl.value >= +tl.max) { $('#tlPlay').onclick(); return; } tl.value = +tl.value + 1; showStep(+tl.value); }, 600);
+};
+$('#tl').oninput = e => showStep(+e.target.value);
+
+/* ---------- output ---------- */
+let FILES = [], TAB = 0;
+function fileName() { return String(job.name || 'SETUP').toUpperCase().replace(/[^A-Z0-9_.-]+/g, '_'); }
+function output() {
+  const blocked = MSGS.some(m => m.err);
+  const n = fileName();
+  FILES = [
+    { name: n + '.NC', role: 'L' + job.progNo + ': the whole set-up program. Load it into the control and run it, or call it from your cut program with G22 L' + job.progNo + ' (then end with G23).', text: blocked ? '' : EDM.program(job) },
+    { name: n + '-SETUP.NC', role: 'The probing block only. Paste it at the top of an existing cut program, after its L line.', text: blocked ? '' : EDM.snippet(job) },
+  ];
+  if (job.ops.some(o => o.type === 'job')) {
+    FILES = FILES.slice(0, 1);
+    FILES[0].role = 'L' + job.progNo + ': the whole job in one program, no subprograms. Set the H-variables at the top (last part, start-from part, skips) on the control before running.';
+  }
+  if (TAB >= FILES.length) TAB = 0;
+  $('#tabs').innerHTML = FILES.map((f, i) => '<button data-tab="' + i + '"' + (i === TAB ? ' class="on"' : '') + '>' + esc(f.name) + '</button>').join('');
+  $('#fileRole').textContent = blocked ? 'Fix the errors (✕) to get the files.' : FILES[TAB].role;
+  $('#dlOne').disabled = $('#dlAll').disabled = blocked;
+  const lines = FILES[TAB].text.replace(/\r\n$/, '').split('\r\n');
+  $('#listing').innerHTML = blocked ? '' : lines.map(l => '<span>' + esc(l) + '</span>').join('\n');
+}
+function hlListing(op) {
+  const spans = [...document.querySelectorAll('#listing span')];
+  let cur = null, first = null;
+  spans.forEach(s => {
+    const m = /^\((\d+) /.exec(s.textContent);
+    if (m) cur = +m[1] - 1;
+    else if (s.textContent === '' || /^(M02|G23|%)/.test(s.textContent)) cur = s.textContent === '' ? cur : null;
+    const on = op != null && cur === op;
+    s.classList.toggle('hl', on);
+    if (on && !first) first = s;
+  });
+  if (first) { const pre = $('#listing'); pre.scrollTop = first.offsetTop - pre.offsetTop - 20; }
+}
+function dl(name, data, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], { type: type || 'text/plain' }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+$('#tabs').onclick = e => { const b = e.target.closest('[data-tab]'); if (!b) return; TAB = +b.dataset.tab; output(); hlListing(null); };
+$('#dlOne').onclick = () => dl(FILES[TAB].name, FILES[TAB].text);
+$('#dlAll').onclick = () => FILES.forEach((f, i) => setTimeout(() => dl(f.name, f.text), i * 300));
+
+/* ---------- refresh and events ---------- */
+function refresh(full) {
+  MSGS = EDM.check(job);
+  PLOT = EDM.plot(job); MOVES = EDM.moves(job);
+  if (full) { renderSettings(); renderOps(); } else renderMsgs();
+  output(); timeline();
+}
+function changed(full) { save(); refresh(full); }
+
+$('#settings').addEventListener('input', e => {
+  const k = e.target.dataset.j; if (!k) return;
+  job[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  changed(e.target.tagName === 'SELECT');
+});
+$('#ops').addEventListener('input', e => {
+  const i = e.target.dataset.o, k = e.target.dataset.k; if (i == null || !k) return;
+  const o = job.ops[+i];
+  o[k] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+  if (o.type === 'fm' && k === 'm') EDM.fieldsOf(o).forEach(f => { if (!(f.k in o)) o[f.k] = ''; });
+  changed(e.target.tagName === 'SELECT' || e.target.type === 'checkbox');
+});
+$('#ops').addEventListener('click', e => {
+  const b = e.target.closest('button[data-act]'); if (!b) return;
+  const i = +b.dataset.i, a = b.dataset.act, ops = job.ops;
+  if (a === 'up' && i > 0) [ops[i - 1], ops[i]] = [ops[i], ops[i - 1]];
+  if (a === 'down' && i < ops.length - 1) [ops[i + 1], ops[i]] = [ops[i], ops[i + 1]];
+  if (a === 'dup') ops.splice(i + 1, 0, clone(ops[i]));
+  if (a === 'del') ops.splice(i, 1);
+  changed(true);
+});
+$('#addBtn').onclick = () => { job.ops.push(EDM.newOp($('#addSel').value)); changed(true); };
+$('#tpl').onchange = e => { if (!e.target.value) return; EDM.fromTemplate(e.target.value).forEach(o => job.ops.push(o)); e.target.value = ''; changed(true); };
+$('#newJob').onclick = () => { if (job.ops.length && !confirm('Start a new job? The current operations are cleared.')) return; job = clone(EDM.DEFAULTS); changed(true); };
+$('#sampleDl').onclick = () => dl('SAMPLE-JOB.NC', EDM.program(EDM.sampleJob()));
+$('#saveJob').onclick = () => dl(fileName() + '-edm-probe.json', JSON.stringify(Object.assign({ mach1edm: 1 }, job), null, 1), 'application/json');
+$('#openJob').onclick = () => $('#openFile').click();
+$('#openFile').onchange = e => {
+  const f = e.target.files[0]; if (!f) return;
+  f.text().then(t => {
+    try { const j = JSON.parse(t); if (!Array.isArray(j.ops)) throw new Error('no operations'); delete j.mach1edm; job = Object.assign(clone(EDM.DEFAULTS), j); changed(true); }
+    catch (err) { alert('Not an EDM probing job: ' + err.message); }
+  });
+  e.target.value = '';
+};
+window.addEventListener('resize', () => showStep(MOVES.length ? +$('#tl').value : null));
+
+/* ---------- G and M code reference ---------- */
+const bare = c => c.replace(/^([GM])0(\d)$/, '$1$2');
+function renderRef() {
+  const q = $('#refQ').value.trim().toLowerCase(), kind = $('#refKind').value, words = q.split(/\s+/).filter(Boolean);
+  let rows = EDM.CODES.filter(r => kind === 'gen' ? r.gen : kind === 'O' ? !/^[GM]\d/.test(r.c) : kind ? r.c[0] === kind && /^[GM]\d/.test(r.c) : true)
+    .filter(r => { const t = [r.c, bare(r.c), r.g, r.d, r.ex, r.note].join(' ').toLowerCase(); return words.every(w => t.includes(w)); });
+  // a code typed in full comes first
+  if (words.length === 1) rows = rows.filter(r => [r.c, bare(r.c)].some(c => c.toLowerCase() === words[0])).concat(rows.filter(r => ![r.c, bare(r.c)].some(c => c.toLowerCase() === words[0])));
+  let grp = null;
+  const tr = r => {
+    const head = !q && r.g !== grp ? '<tr class="grp"><td colspan="2">' + esc((grp = r.g)) + '</td></tr>' : '';
+    return head + '<tr data-code="' + esc(r.c) + '"><td class="c">' + esc(r.c) + '</td><td class="d">' + esc(r.d) +
+      (r.gen ? '<span class="tag" title="The generator writes this code">this generator</span>' : '') +
+      (r.ex ? '<br><code class="ex">' + esc(r.ex) + '</code>' : '') + (r.note ? '<div class="note">' + esc(r.note) + '</div>' : '') +
+      '</td></tr>';
+  };
+  $('#refBody').innerHTML = rows.length
+    ? '<table class="codes"><thead><tr><th>Code</th><th>What it does</th></tr></thead><tbody>' + rows.map(tr).join('') + '</tbody></table>'
+    : '<p class="info" style="padding:12px 0">Nothing matches. Try another word, or a code such as G92.</p>';
+}
+$('#refFoot').textContent = 'What each code does, in our own words, and the other words a program uses. Some codes need an option your machine may not have. Prove a code single block on the machine before you rely on it.';
+$('#refBtn').onclick = () => { renderRef(); $('#ref').showModal(); $('#refQ').focus(); $('#refQ').select(); };
+$('#refClose').onclick = () => $('#ref').close();
+$('#ref').addEventListener('click', e => { if (e.target === $('#ref')) $('#ref').close(); });
+$('#refQ').addEventListener('input', renderRef);
+$('#refKind').addEventListener('input', renderRef);
+
+/* ---------- machine table drawing ---------- */
+const TBL_COL = { TABLE: 'var(--ink)', M8: 'var(--part)', TRAVEL: 'var(--touch)', CENTER: 'var(--muted)', ZERO: 'var(--ok)' };
+const TBL_DASH = { TRAVEL: '8 4', CENTER: '14 3 3 3' };
+const tblOpt = () => ({ units: $('#tblUnits').value, origin: $('#tblOrigin').value });
+function renderTable() {
+  const m = $('#tblModel').value, D = EDM.tableDrawing(m, tblOpt()), T = D.T, S = T.spec, inch = D.inch;
+  const geo = D.ents.filter(e => e.t !== 'text');
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  geo.forEach(e => (e.t === 'line' ? [e.a, e.b] : [[e.c[0] - e.r, e.c[1] - e.r], [e.c[0] + e.r, e.c[1] + e.r]]).forEach(p => { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }));
+  const pad = (x1 - x0) * 0.04, n = v => +v.toFixed(4);
+  const Y = y => n(y0 + y1 - y);   // up is +Y, as in the drawing
+  let g = '';
+  geo.forEach(e => {
+    const st = 'stroke="' + TBL_COL[e.layer] + '" fill="none" vector-effect="non-scaling-stroke" stroke-width="' + (e.layer === 'TABLE' ? 1.6 : 1.1) + '"' + (TBL_DASH[e.layer] ? ' stroke-dasharray="' + TBL_DASH[e.layer] + '"' : '');
+    if (e.t === 'line') g += '<line x1="' + n(e.a[0]) + '" y1="' + Y(e.a[1]) + '" x2="' + n(e.b[0]) + '" y2="' + Y(e.b[1]) + '" ' + st + '/>';
+    else g += '<circle cx="' + n(e.c[0]) + '" cy="' + Y(e.c[1]) + '" r="' + n(e.r) + '" ' + st + '/>';
+  });
+  const z = D.ents.find(e => e.t === 'text' && e.layer === 'ZERO'), fs = (x1 - x0) / 45;
+  g += '<text x="' + n(z.p[0]) + '" y="' + n(Y(z.p[1]) - fs * 0.3) + '" font-size="' + n(fs) + '" fill="var(--ok)">' + (tblOpt().origin === 'zero' ? 'X0 Y0' : 'MACHINE X0 Y0') + '</text>';
+  if (tblOpt().origin === 'corner') g += '<text x="' + n(fs * 0.3) + '" y="' + n(Y(0) - fs * 0.3) + '" font-size="' + n(fs) + '" fill="var(--muted)">0,0</text>';
+  $('#tblSvg').setAttribute('viewBox', [x0 - pad, y0 - pad, x1 - x0 + 2 * pad, y1 - y0 + 2 * pad].map(n).join(' '));
+  $('#tblSvg').innerHTML = g;
+  const mm = v => inch ? EDM.fmt(v / 25.4, 3) + ' in (' + v + ' mm)' : v + ' mm';
+  $('#tblTitle').textContent = m + ' table (' + T.kind + ')';
+  $('#tblSpec').innerHTML = [
+    ['Table', mm(T.w) + ' × ' + mm(T.d) + ', ' + T.holes.length + ' M8 tapped holes'],
+    ['Travel', 'X ' + mm(S.x) + ', Y ' + mm(S.y) + ', Z ' + mm(S.z) + ', U / V ±' + mm(S.uv)],
+    ['Largest workpiece', mm(S.work[0]) + ' × ' + mm(S.work[1]) + ' × ' + mm(S.work[2]) + ', ' + S.kg + ' kg'],
+    ['Taper', '15° at ' + mm(S.taper) + ' thick'],
+    ['Machine X0 Y0', 'the wire at the left-rear end of travel: ' + mm(T.stroke[0]) + ' in from the table\'s left edge, ' + mm(T.d - T.stroke[3]) + ' in from its back edge'],
+  ].map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td></tr>').join('');
+}
+$('#tblModel').innerHTML = Object.keys(EDM.TABLES).map(k => '<option value="' + k + '">' + k + (k === 'MV4800' ? ' (S and R)' : '') + '</option>').join('');
+$('#tblBtn').onclick = () => {
+  const t = EDM.tableOf(job.machine);
+  $('#tblModel').value = t ? Object.keys(EDM.TABLES).find(k => EDM.TABLES[k] === t) : 'MV2400S';
+  $('#tblUnits').value = job.units === 'mm' ? 'mm' : 'in';
+  renderTable(); $('#tbl').showModal();
+};
+['#tblModel', '#tblUnits', '#tblOrigin'].forEach(k => $(k).addEventListener('input', renderTable));
+$('#tblDl').onclick = () => { const o = tblOpt(); dl($('#tblModel').value + '-TABLE-' + (o.units === 'in' ? 'INCH' : 'MM') + '.dxf', EDM.tableDXF($('#tblModel').value, o), 'application/dxf'); };
+$('#tblClose').onclick = () => $('#tbl').close();
+$('#tbl').addEventListener('click', e => { if (e.target === $('#tbl')) $('#tbl').close(); });
+
+renderAdd();
+refresh(true);
+})();
+</script>
+</body>
+</html>
