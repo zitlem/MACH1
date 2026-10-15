@@ -17,6 +17,7 @@
     </div>
     <button type="button" data-act="open" title="Open programs (Ctrl+O). You can also drop files on the window.">Open</button>
     <button type="button" data-act="folder" title="Open a folder of programs, such as a machine's data folder from Smooth CAM Ai: list, search and check them all">Open folder</button>
+    <button type="button" data-act="machines" title="Send programs to the machines and receive them, through each control's shared program folder">Machines</button>
     <button type="button" data-act="save" data-need-doc title="Save (Ctrl+S)">Save</button>
     <div class="menu">
       <button type="button" data-act="saveas-menu" data-need-doc data-need-program title="Save a copy, converting between Matrix and Smooth">Save as</button>
@@ -126,6 +127,17 @@
 <dialog class="dlg devdlg" id="devDlg">
   <div class="tpchead"><b id="devTitle">Tool development</b><span class="grow"></span><button type="button" id="devApply" class="on">Apply</button><button type="button" id="devClose">Close</button></div>
   <div class="devwrap"><div id="devPrev"></div><div id="devParams"></div></div>
+</dialog>
+<dialog class="dlg macdlg" id="macDlg">
+  <div class="tpchead"><b>Machines</b><span class="grow"></span><button type="button" id="macClose">Close</button></div>
+  <div id="macBody"></div>
+</dialog>
+<dialog class="dlg" id="sendDlg">
+  <h3 id="sendTitle">Send</h3>
+  <div class="dlgrow"><label for="sendName">File name</label><input id="sendName" class="grow" autocomplete="off" spellcheck="false"><b id="sendExt"></b></div>
+  <p class="hint" id="sendInfo"></p>
+  <label class="hint" id="sendTblRow" hidden><input type="checkbox" id="sendTbl"> Also write the program's comment into the machine's <code>index.tbl</code> (a Smooth's own files have no room for it)</label>
+  <div class="dlgrow"><span class="grow"></span><button type="button" id="sendGo" class="on">Send</button><button type="button" id="sendCancel">Cancel</button></div>
 </dialog>
 <dialog class="dlg chkdlg" id="chkDlg">
   <div class="tpchead"><b id="chkTitle">Program check</b><span class="grow"></span><button type="button" id="chkClose">Close</button></div>

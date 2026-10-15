@@ -1068,6 +1068,179 @@ const check = (name, cond, detail) => {
     }
   }
   }
+  // Machines: send and receive through a control's shared program folder. The browser's own private folders
+  // (OPFS) stand in for the network shares; the folder picker is stubbed to hand one back. OPFS needs a web origin,
+  // so this part loads the page from a local server (on file:// the real folder picker works, OPFS does not).
+  {
+    const srv = require('http').createServer((q, r) => { r.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); r.end(fs.readFileSync(page)); }).listen(0, '127.0.0.1');
+    await new Promise(r => srv.on('listening', r));
+    await send('Page.navigate', { url: 'http://127.0.0.1:' + srv.address().port + '/editor.html' }); await sleep(1500);
+    await open('SAMPLE1.PBM');
+    await ev(`(async () => {
+      const root = await navigator.storage.getDirectory();
+      for await (const [n] of root.entries()) await root.removeEntry(n, { recursive: true });
+      const share = await root.getDirectoryHandle('SHARE-A', { create: true }), mp = await share.getDirectoryHandle('MC_Machine Programs', { create: true });
+      const p = MazEditor.doc().p, raw = Maz.serialize({ ctl: p.ctl, name: 'SAMPLE1.MAZ', header: p.header, recs: p.recs, raw: true });
+      const put = async (n, b) => { const w = await (await mp.getFileHandle(n, { create: true })).createWritable(); await w.write(b); await w.close(); };
+      await put('SAMPLE1.MAZ', raw);
+      await put('OTHER.EIA', new TextEncoder().encode('O100\\r\\nG0X0Y0\\r\\nM30\\r\\n'));
+      await put('index.tbl', new TextEncoder().encode('# M64 Comment List\\r\\nOTHER.EIA\\tSOME PROGRAM\\r\\n'));
+      window.__share = share; window.__raw0 = Array.from(raw);
+      window.showDirectoryPicker = async () => share;
+      window.confirm = () => true;
+    })()`);
+    await ev(`document.querySelector('[data-act="machines"]').click()`); await sleep(150);
+    await ev(`document.getElementById('macNewName').value = 'HCN-A'; document.getElementById('macPick').click()`); await sleep(300);
+    const m1 = await ev(`({ open: document.getElementById('macDlg').open, rows: Array.from(document.querySelectorAll('#macBody .mactab tr')).map(r => r.textContent) })`);
+    check('Machines: a machine is added with its folder', m1.open && m1.rows.some(r => /HCN-A.*SHARE-A/.test(r)), m1);
+    check('Machines: its control is told from the programs in its folder (a Smooth\'s memory files)', await ev(`MazEditor.machines().list[0].kind === 'SmoothM.raw' && document.querySelector('[data-mac-kind="0"]').value === 'SmoothM.raw'`));
+    const kept = await ev(`new Promise(res => { const q = indexedDB.open('mazed-session'); q.onsuccess = () => { const g = q.result.transaction('kv').objectStore('kv').get('machines'); g.onsuccess = () => res(g.result.map(m => m.name + '|' + m.dir.name)); }; })`);
+    check('Machines: kept in the browser with the folder handle', kept.length === 1 && kept[0] === 'HCN-A|SHARE-A', kept);
+    await shot('machines.png');
+    // receive: the machine's programs (from its MC_Machine Programs) in the folder panel
+    await ev(`document.querySelector('[data-mac-recv="0"]').click()`); await sleep(500);
+    const rv = await ev(`({ name: document.getElementById('folderName').textContent, rows: Array.from(document.querySelectorAll('#folderList .pr')).map(x => x.textContent) })`);
+    check('Machines: Programs lists the machine\'s programs', rv.name === 'HCN-A' && rv.rows.some(r => /SAMPLE1\.MAZ/.test(r)) && rv.rows.some(r => /OTHER\.EIA.*SOME PROGRAM/.test(r)), rv);
+    const ri = await ev(`MazEditor.folder().programs.findIndex(e => e.name === 'OTHER.EIA')`);
+    await ev(`MazEditor.openFromFolder(${ri})`); await sleep(150);
+    await ev(`MazEditor.doc().g.text = MazEditor.doc().g.text.replace('G0X0Y0', 'G0X1.Y2.'); MazEditor.doc().dirty = true`);
+    await ev(`MazEditor.save()`); await sleep(300);
+    const back = await ev(`(async () => { const mp = await window.__share.getDirectoryHandle('MC_Machine Programs'); return await (await (await mp.getFileHandle('OTHER.EIA')).getFile()).text(); })()`);
+    check('Machines: a program opened from the machine saves back to it', /G0X1\.Y2\./.test(back), back);
+    // send: SAMPLE1.PBM goes as the Smooth's own file (.MAZ) and replaces the one there, which is kept
+    await open('SAMPLE1.PBM');
+    await ev(`MazEditor.doc().p.recs[1][40] ^= 1`);
+    await ev(`Maz.setComment(MazEditor.doc().p, 'SAMPLE ONE OP1')`);
+    await ev(`MazEditor.sendTo(0)`); await sleep(300);
+    const sd = await ev(`({ open: document.getElementById('sendDlg').open, name: document.getElementById('sendName').value, ext: document.getElementById('sendExt').textContent,
+      go: document.getElementById('sendGo').textContent, info: document.getElementById('sendInfo').textContent, tbl: !document.getElementById('sendTblRow').hidden })`);
+    check('Send: as the machine\'s own .MAZ, replacing the file there', sd.open && sd.name === 'SAMPLE1' && sd.ext === '.MAZ' && sd.go === 'Replace' && /Smooth mill machine file/.test(sd.info) && /Replaces SAMPLE1\.MAZ/.test(sd.info), sd);
+    await shot('send.png');
+    await ev(`document.getElementById('sendName').value = 'BAD:NAME'; document.getElementById('sendName').dispatchEvent(new Event('input'))`); await sleep(150);
+    check('Send: a name the folder cannot hold is refused', await ev(`document.getElementById('sendGo').disabled && /cannot hold/.test(document.getElementById('sendInfo').textContent)`));
+    await ev(`document.getElementById('sendName').value = 'SAMPLE1'; document.getElementById('sendName').dispatchEvent(new Event('input'))`); await sleep(150);
+    check('Send: offers to put the comment into index.tbl', sd.tbl, sd);
+    await ev(`document.getElementById('sendTbl').checked = true`);
+    await ev(`document.getElementById('sendGo').click()`); await sleep(400);
+    const sent = await ev(`(async () => {
+      const mp = await window.__share.getDirectoryHandle('MC_Machine Programs'), p = MazEditor.doc().p;
+      const want = Array.from(Maz.serialize({ ctl: p.ctl, name: 'SAMPLE1.MAZ', header: p.header, recs: p.recs, raw: true }));
+      const got = Array.from(new Uint8Array(await (await (await mp.getFileHandle('SAMPLE1.MAZ')).getFile()).arrayBuffer()));
+      const tbl = await (await (await mp.getFileHandle('index.tbl')).getFile()).text();
+      const bk = MazEditor.machines().backups;
+      return { same: got.join() === want.join(), changed: got.join() !== window.__raw0.join(), kept: bk.some(x => x.name === 'SAMPLE1.MAZ' && Array.from(x.bytes).join() === window.__raw0.join()),
+        tbl, comment: Maz.comment(p).trim(), closed: !document.getElementById('sendDlg').open };
+    })()`);
+    check('Send: the file on the machine is the program, and the one it replaced is kept', sent.same && sent.changed && sent.kept && sent.closed, sent);
+    check('Send: the comment goes into index.tbl, the other lines kept', sent.tbl.includes('SAMPLE1.MAZ\t' + sent.comment + '\r\n') && sent.tbl.includes('OTHER.EIA\tSOME PROGRAM\r\n') && sent.tbl.startsWith('# M64 Comment List\r\n'), sent.tbl);
+    // put back
+    await ev(`MazEditor.openMachines()`); await sleep(200);
+    const bi = await ev(`MazEditor.machines().backups.findIndex(x => x.name === 'SAMPLE1.MAZ')`);
+    await ev(`document.querySelector('[data-bk-back="${bi}"]').click()`); await sleep(400);
+    const pb = await ev(`(async () => { const mp = await window.__share.getDirectoryHandle('MC_Machine Programs');
+      return { back: Array.from(new Uint8Array(await (await (await mp.getFileHandle('SAMPLE1.MAZ')).getFile()).arrayBuffer())).join() === window.__raw0.join(), n: MazEditor.machines().backups.filter(x => x.name === 'SAMPLE1.MAZ').length }; })()`);
+    check('Put back: the replaced copy is on the machine again, and the one it replaced is kept too', pb.back && pb.n === 2, pb);
+    await ev(`document.getElementById('macDlg').close()`);
+    // a Matrix program is converted for the Smooth; an EIA program goes as it is; a lathe program is refused
+    await open('SAMPLE1.PBD');
+    await ev(`MazEditor.sendTo(0)`); await sleep(300);
+    const cv = await ev(`({ ext: document.getElementById('sendExt').textContent, info: document.getElementById('sendInfo').textContent })`);
+    check('Send: a Matrix program is converted for a Smooth machine', cv.ext === '.MAZ' && /converted from Matrix mill/.test(cv.info), cv);
+    await ev(`document.getElementById('sendCancel').click()`); await sleep(100);
+    await ev(`MazEditor.openBytes(new TextEncoder().encode('O2000\\r\\nG0X0\\r\\nM30\\r\\n'), 'O2000.EIA', null)`); await sleep(150);
+    await ev(`MazEditor.sendTo(0)`); await sleep(300);
+    const ex = await ev(`({ ext: document.getElementById('sendExt').textContent, go: document.getElementById('sendGo').textContent })`);
+    await ev(`document.getElementById('sendGo').click()`); await sleep(400);
+    const eiaSent = await ev(`(async () => { const mp = await window.__share.getDirectoryHandle('MC_Machine Programs'); return await (await (await mp.getFileHandle('O2000.EIA')).getFile()).text(); })()`);
+    check('Send: an EIA program goes as it is, as a new file', ex.ext === '.EIA' && ex.go === 'Send' && /^O2000\r\nG0X0\r\nM30/.test(eiaSent), { ex, eiaSent });
+    const LP = 'SLN/Samples/LATHEPART-MM.PBP';
+    if (fs.existsSync(kp(LP))) {
+      await open(LP);
+      await ev(`MazEditor.sendTo(0)`); await sleep(300);
+      const rf = await ev(`({ open: document.getElementById('sendDlg').open, msg: document.getElementById('msg').textContent })`);
+      check('Send: a lathe program is not sent to a mill', !rf.open && /HCN-A is a Smooth mill; .* is a Smooth lathe program/.test(rf.msg), rf);
+    }
+    // a Matrix's transfer folder (.PBD): a Smooth program is converted for it
+    await ev(`(async () => {
+      const root = await navigator.storage.getDirectory(), x = await root.getDirectoryHandle('XFER-M', { create: true }), e = await root.getDirectoryHandle('XFER-E', { create: true });
+      const w = await (await x.getFileHandle('OLD.PBD', { create: true })).createWritable(); await w.write(Uint8Array.from(atob(${JSON.stringify(fs.readFileSync(kp('SAMPLE1.PBD')).toString('base64'))}), c => c.charCodeAt(0))); await w.close();
+      window.__xm = x; window.__xe = e;
+    })()`);
+    await ev(`MazEditor.openMachines()`); await sleep(150);
+    await ev(`window.showDirectoryPicker = async () => window.__xm; document.getElementById('macNewName').value = 'MATRIX-6800'; document.getElementById('macPick').click()`); await sleep(300);
+    await ev(`window.showDirectoryPicker = async () => window.__xe; document.getElementById('macNewName').value = 'EMPTY'; document.getElementById('macPick').click()`); await sleep(300);
+    const ks = await ev(`({ kinds: MazEditor.machines().list.map(m => m.kind), pick: document.querySelector('[data-mac-kind="2"]').value, msg: document.getElementById('msg').textContent })`);
+    check('Machines: a Matrix transfer folder is told by its .PBD; an empty one asks for the control', ks.kinds[1] === 'MatrixM' && ks.kinds[2] === '' && ks.pick === '' && /pick its control/.test(ks.msg), ks);
+    await ev(`document.getElementById('macDlg').close()`);
+    await open('SAMPLE1.PBM');
+    await ev(`MazEditor.sendTo(1)`); await sleep(300);
+    const mx = await ev(`({ ext: document.getElementById('sendExt').textContent, info: document.getElementById('sendInfo').textContent })`);
+    await ev(`document.getElementById('sendGo').click()`); await sleep(400);
+    const mxf = await ev(`(async () => { const b = new Uint8Array(await (await (await window.__xm.getFileHandle('SAMPLE1.PBD')).getFile()).arrayBuffer()); const q = Maz.parse(b, 'SAMPLE1.PBD'); return { ctl: q.ctl, n: q.recs.length, want: MazEditor.doc().p.recs.length }; })()`);
+    check('Send: a Smooth program goes to the Matrix as a .PBD, converted', mx.ext === '.PBD' && /Matrix mill program, converted from Smooth mill/.test(mx.info) && mxf.ctl === 'MatrixM' && mxf.n === mxf.want, { mx, mxf });
+    // the empty folder: no send until its control is picked, then as the control's DATA I/O file
+    await ev(`MazEditor.sendTo(2)`); await sleep(200);
+    check('Send: refused until the machine\'s control is picked', await ev(`!document.getElementById('sendDlg').open && /Pick EMPTY's control in Machines first/.test(document.getElementById('msg').textContent)`));
+    await ev(`MazEditor.openMachines()`); await sleep(150);
+    await ev(`(()=>{const s=document.querySelector('[data-mac-kind="2"]');s.value='SmoothM';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(200);
+    await ev(`document.getElementById('macDlg').close()`);
+    await ev(`MazEditor.sendTo(2)`); await sleep(300);
+    const em = await ev(`({ ext: document.getElementById('sendExt').textContent, go: document.getElementById('sendGo').textContent })`);
+    await ev(`document.getElementById('sendGo').click()`); await sleep(400);
+    const emf = await ev(`(async () => { const b = Array.from(new Uint8Array(await (await (await window.__xe.getFileHandle('SAMPLE1.PBM')).getFile()).arrayBuffer())); return b.join() === Array.from(Maz.serialize(MazEditor.doc().p)).join(); })()`);
+    check('Send: with its control picked, the program goes as the control\'s .PBM (with its header and comment)', em.ext === '.PBM' && em.go === 'Send' && emf && await ev(`MazEditor.machines().list[2].kind === 'SmoothM'`), em);
+    // a folder of machines (CIMCO's transfer folders in one place): every machine folder found at once
+    await ev(`(async () => {
+      const root = await navigator.storage.getDirectory(), c = await root.getDirectoryHandle('CIMCO', { create: true });
+      const put = async (dir, n, b) => { const w = await (await dir.getFileHandle(n, { create: true })).createWritable(); await w.write(b); await w.close(); };
+      const b64 = s => Uint8Array.from(atob(s), ch => ch.charCodeAt(0));
+      await put(await c.getDirectoryHandle('HCN-6000', { create: true }), 'SAMPLE1.PBM', b64(${JSON.stringify(fs.readFileSync(kp('SAMPLE1.PBM')).toString('base64'))}));
+      await put(await c.getDirectoryHandle('MATRIX-6800', { create: true }), 'OLD.PBD', b64(${JSON.stringify(fs.readFileSync(kp('SAMPLE1.PBD')).toString('base64'))}));
+      await c.getDirectoryHandle('QT-350', { create: true });
+      await c.getDirectoryHandle('.hidden', { create: true });
+      const sm = await (await c.getDirectoryHandle('MCH-SM', { create: true })).getDirectoryHandle('MC_Machine Programs', { create: true });
+      const p = Maz.parse(b64(${JSON.stringify(fs.readFileSync(kp('SAMPLE1.PBM')).toString('base64'))}), 'SAMPLE1.PBM');
+      await put(sm, 'A1.MAZ', Maz.serialize({ ctl: p.ctl, name: 'A1.MAZ', header: p.header, recs: p.recs, raw: true }));
+      await put(c, 'readme.txt', new TextEncoder().encode('transfer folders'));
+      window.__cimco = c; window.showDirectoryPicker = async () => c;
+    })()`);
+    await ev(`MazEditor.openMachines()`); await sleep(150);
+    await ev(`document.getElementById('macPickAll').click()`); await sleep(400);
+    const found = await ev(`({ rows: MazEditor.machines().found.rows.map(r => r.name + ':' + r.kind + ':' + r.n), head: document.querySelector('#macBody h3').textContent,
+      btn: document.getElementById('macFoundAdd').textContent })`);
+    check('Machines in a folder: one per machine folder, with its control from its programs (hidden folders and files left out)',
+      found.rows.join() === 'HCN-6000:SmoothM:1,MATRIX-6800:MatrixM:1,MCH-SM:SmoothM.raw:1,QT-350::0' && found.head === 'Machines found in CIMCO' && found.btn === 'Add 4 machines', found);
+    await shot('machines-found.png');
+    await ev(`(()=>{const s=document.querySelector('[data-found-kind="3"]');s.value='SmoothT';s.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(100);
+    await ev(`(()=>{const i=document.querySelector('[data-found-name="0"]');i.value='HCN-6000 #1';i.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    await ev(`(()=>{const c=document.querySelector('[data-found-on="1"]');c.checked=false;c.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(100);
+    check('Machines in a folder: unticking one takes it off the count', await ev(`document.getElementById('macFoundAdd').textContent === 'Add 3 machines'`));
+    await ev(`(()=>{const c=document.querySelector('[data-found-on="1"]');c.checked=true;c.dispatchEvent(new Event('change',{bubbles:true}))})()`); await sleep(100);
+    await ev(`document.getElementById('macFoundAdd').click()`); await sleep(400);
+    const added = await ev(`MazEditor.machines().list.slice(3).map(m => m.name + ':' + m.kind + ':' + (m.root && m.root.name))`);
+    check('Machines in a folder: added with their names and controls, each keeping the folder above', added.join() === 'HCN-6000 #1:SmoothM:CIMCO,MATRIX-6800:MatrixM:CIMCO,MCH-SM:SmoothM.raw:CIMCO,QT-350:SmoothT:CIMCO', added);
+    const kept2 = await ev(`new Promise(res => { const q = indexedDB.open('mazed-session'); q.onsuccess = () => { const g = q.result.transaction('kv').objectStore('kv').get('machines'); g.onsuccess = () => res(g.result.filter(m => m.root).map(m => m.root.name + '/' + m.dir.name)); }; })`);
+    check('Machines in a folder: kept in the browser with both folders', kept2.join() === 'CIMCO/HCN-6000,CIMCO/MATRIX-6800,CIMCO/MCH-SM,CIMCO/QT-350', kept2);
+    await ev(`document.getElementById('macDlg').close()`);
+    await open('SAMPLE1.PBM');
+    await ev(`MazEditor.sendTo(3)`); await sleep(300);
+    const s3 = await ev(`({ ext: document.getElementById('sendExt').textContent, go: document.getElementById('sendGo').textContent })`);
+    await ev(`document.getElementById('sendCancel').click()`); await sleep(100);
+    await ev(`MazEditor.sendTo(6)`); await sleep(200);
+    const s6 = await ev(`({ open: document.getElementById('sendDlg').open, msg: document.getElementById('msg').textContent })`);
+    check('Machines in a folder: a send goes in each one\'s format; a mill program is not sent to the lathe', s3.ext === '.PBM' && s3.go === 'Replace' && !s6.open && /QT-350 is a Smooth lathe/.test(s6.msg), { s3, s6 });
+    await ev(`MazEditor.openMachines()`); await sleep(150);
+    await ev(`document.getElementById('macPickAll').click()`); await sleep(400);
+    check('Machines in a folder: picking it again finds nothing new', await ev(`MazEditor.machines().found.rows.length === 0 && /already in the list/.test(document.getElementById('macBody').textContent)`));
+    await ev(`document.getElementById('macFoundCancel').click()`); await sleep(100);
+    // forget: the machine leaves the list, the folder is not touched
+    await ev(`MazEditor.openMachines()`); await sleep(150);
+    await ev(`document.querySelector('[data-mac-del="0"]').click()`); await sleep(200);
+    const fg = await ev(`(async () => { const mp = await window.__share.getDirectoryHandle('MC_Machine Programs'); let n = 0; for await (const x of mp.keys()) n++; return { n, list: MazEditor.machines().list.map(m => m.name).join() }; })()`);
+    check('Forget: the machine leaves the list, its folder keeps its files', fg.list === 'MATRIX-6800,EMPTY,HCN-6000 #1,MATRIX-6800,MCH-SM,QT-350' && fg.n === 4, fg);
+    await ev(`document.getElementById('macDlg').close()`);
+    srv.close();
+  }
   console.log(`${passes} passed, ${failures} failed; screenshots in ${shots}`);
   ws.close();
   chrome.kill();

@@ -18,6 +18,10 @@ It also opens:
   machine's tool data from it, read-only;
 - EIA/ISO (G-code) programs: `.EIA`, `.NC`, `.TAP`, `.CNC`, `.ISO`.
 
+**Machines** sends programs to the machines and receives them through each control's shared program folder on
+the network (a Smooth's `MC_Machine Programs`, mapped as a drive). The format matches what the machine holds,
+converting Matrix ↔ Smooth when needed. A file that a send replaces is kept, to put back. See `docs/editor.md`.
+
 It is one offline HTML file, `../apps/Mazatrol Editor.html` (build it with `python3 editor/build.py`). Open it in Chrome or Edge. Those browsers can save
 back into the file you opened; other browsers save as a download.
 

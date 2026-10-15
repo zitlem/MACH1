@@ -430,6 +430,24 @@ body.twpop .tw-in { height: 100vh; }
 .refalh { margin-top: 3px; font-size: 12px; color: #c3ccd4; } .refalh b { color: var(--muted); font-weight: 600; }
 .chkdlg { width: min(900px, calc(100vw - 32px)); max-width: none; background: #0d1217; color: var(--text); } .chkrow { cursor: pointer; } .chkrow:hover td { background: #16212b; } .grow { flex: 1; }
 
+/* machines: send and receive */
+.macdlg { width: min(860px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 40px); overflow: auto; }
+.mactab { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0 10px; }
+.mactab th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.mactab td { padding: 4px 6px; border-bottom: 1px solid #1d252d; vertical-align: middle; }
+.mactab .dim, .dlg .dim { color: var(--muted); }
+.mactab .macbtns { text-align: right; white-space: nowrap; }
+.mactab .macbtns button { margin-left: 4px; }
+.mactab select { background: #0b0f13; color: var(--text); border: 1px solid #26303a; border-radius: 3px; padding: 3px 6px; font: inherit; font-size: 12.5px; max-width: 260px; }
+html[data-theme="light"] .mactab select { background: #fff; color: #111; border-color: #b8c3cc; }
+.mactab input.macname { width: 100%; box-sizing: border-box; background: #0b0f13; color: var(--text); border: 1px solid #26303a; border-radius: 3px; padding: 3px 6px; font: inherit; }
+html[data-theme="light"] .mactab input.macname { background: #fff; color: #111; border-color: #b8c3cc; }
+.macadd input { flex: 1; min-width: 0; background: #0b0f13; color: var(--text); border: 1px solid #26303a; border-radius: 3px; padding: 4px 8px; font: inherit; }
+#sendDlg input#sendName { background: #0b0f13; color: var(--text); border: 1px solid #26303a; border-radius: 3px; padding: 4px 8px; font: inherit; }
+#sendInfo .bad { color: #ff7a7a; } #sendInfo .warn { color: #f0b04a; }
+html[data-theme="light"] .macadd input, html[data-theme="light"] #sendDlg input#sendName { background: #fff; color: #111; border-color: #b8c3cc; }
+html[data-theme="light"] .mactab td { border-bottom-color: #d7dee4; }
+
 /* EIA guidance */
 .guide { margin: 4px 0 2px; padding: 6px 8px; border: 1px solid #2c3a46; border-left: 3px solid var(--sk-edge); border-radius: 3px; background: #0b1117; }
 .gd-t { font-size: 13px; margin-bottom: 4px; } .gd-t b { color: var(--sk-text); }

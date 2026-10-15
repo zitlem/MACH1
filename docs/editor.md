@@ -21,6 +21,47 @@ comes back too; if the browser asks again, PROGRAM FILE opens it.
 
 Drop files on the window, use Open, or start with New. **Open folder** reads a whole folder, for example a Smooth
 CAM Ai machine folder (`C:\Users\Public\Documents\MAZATROL\Smooth\<machine>`) or the folder of all machines.
+**Machines** sends programs to the machines and receives them (below).
+
+## Machines: send and receive
+
+Each machine is its control's shared program folder on the shop network. That is the transfer folder CIMCO uses
+(on the Smooth and the Matrix controls alike), or a Smooth's `MC_Machine Programs`
+(`C:\ymw\M8Y\data\MC_Machine Programs`). Map it as a drive on the PC that runs the editor (for example `M:`).
+This works in Chrome or Edge, which can read and write a folder.
+
+1. **Add a machine**: in **Machines**, type its name and pick its folder. You can pick the folder itself or the
+   folder above it. The list is kept in this browser. Each visit, the browser asks once for permission to read and
+   write the folder.
+   - **Control and files** says what the folder takes. It is told from the programs already in the folder, and you
+     can change it:
+     - the control's DATA I/O files: `.PBD` `.PBF` `.PBE` on a Matrix, `.PBM` `.PBP` `.PBN` on a Smooth;
+     - a Smooth's own memory files (`.MAZ` `.MTP` `.MPR`, as in `MC_Machine Programs`).
+   - An empty folder asks you to pick its control before anything is sent.
+   - **Add every machine in a folder…**: when the transfer folders are all in one place (one folder per machine,
+     for example on the CIMCO PC), pick that folder once.
+     - Every folder in it is listed, with its name, how many programs it holds and the control they are for.
+     - Untick any that are not machines, rename them, and pick the control of empty ones. Then add them all.
+     - Each visit the browser then asks once, for that one folder, instead of once per machine.
+     - Picking it again later lists only folders that are new.
+
+   The page can't search the network for machines by itself: a browser may only use a folder you pick.
+2. **Receive**: **Programs** lists the machine's programs in the folder panel, with their comments and tool checks.
+   A program opened from there saves straight back to the machine with Save. Use Save as to keep a copy on this PC.
+3. **Send**: open the program, then **Send … here**.
+   - It goes as the machine's control and files say: for example a mill program goes to a Matrix as `.PBD`, to a
+     Smooth transfer folder as `.PBM`, and into a Smooth's `MC_Machine Programs` as `.MAZ`.
+   - A Matrix program is converted for a Smooth machine, and a Smooth one for a Matrix.
+   - A lathe program is not sent to a mill.
+   - An EIA/ISO program goes as it is.
+   - You can change the file name.
+   - If a file of that name is already there, the button says **Replace**. The file it replaces is kept in this
+     browser, and **Put back** writes it onto the machine again. The last 30 are kept.
+   - A Smooth's own files have no room for the program comment, so there is a box to write it into the machine's
+     `index.tbl`, which holds the comments.
+
+Don't replace a program the machine is running. On the control, load a program from the transfer folder the way
+you do with CIMCO now. Check on one machine that a sent program loads and runs as expected before you rely on it.
 
 ## Editing
 

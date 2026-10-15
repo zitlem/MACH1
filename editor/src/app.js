@@ -1532,7 +1532,7 @@
       await readDir(dir);
     } catch (e) { note(e.message); }
   }
-  async function readDir(dir, quiet) {
+  async function readDir(dir, quiet, label) {
     {
       const entries = [];
       const walk = async (h, prefix, depth) => {
@@ -1542,7 +1542,7 @@
         }
       };
       await walk(dir, '', 0);
-      await loadFolder(dir.name, entries, quiet);
+      await loadFolder(label || dir.name, entries, quiet);
     }
   }
   const dirOf = path => path.slice(0, path.lastIndexOf('/') + 1);
@@ -1648,6 +1648,313 @@
     render();
     el.input.focus();
   }
+
+  // ------------------------------------------------------------------ machines: send and receive
+  // A machine is its control's shared program folder on the network (on a Smooth, MC_Machine Programs, mapped as a
+  // drive on this PC), kept in this browser with its name. Receiving lists it in the folder panel: a program opened
+  // there saves back to the machine. Sending writes the open program into it in the format the machine holds (a
+  // Matrix program is converted for a Smooth, and back), and keeps the file it replaces so it can be put back.
+  const MACH = { list: [], backups: [], loaded: false, send: null };
+  const BACKUPS_KEPT = 30;
+  const BAD_NAME = /[\\/:*?"<>|\x00-\x1f]/;
+  async function machinesLoad() {
+    if (MACH.loaded) return;
+    try { MACH.list = (await sessionGet('machines')) || []; MACH.backups = (await sessionGet('sentBackups')) || []; } catch (e) { /* storage is off */ }
+    MACH.loaded = true;
+  }
+  const machinesKeep = () => Promise.all([sessionPut('machines', MACH.list), sessionPut('sentBackups', MACH.backups)])
+    .catch(e => note('Could not keep the machines in this browser (' + e.message + ').'));
+  async function mayUse(dir, mode) {
+    if (!dir.queryPermission) return true;
+    if ((await dir.queryPermission({ mode })) === 'granted') return true;
+    return (await dir.requestPermission({ mode })) === 'granted';
+  }
+  // a machine found in a folder of machines keeps that folder too (root): asking for it once covers them all
+  async function mayUseMachine(m, mode) {
+    if (m.root && !(await mayUse(m.root, mode))) return false;
+    return mayUse(m.dir, mode);
+  }
+  // where a machine's programs are: the MC_Machine Programs inside the folder picked, if it has one
+  async function programDir(m) {
+    try { return await m.dir.getDirectoryHandle('MC_Machine Programs'); } catch (e) { return m.dir; }
+  }
+  async function fileIn(dir, name) {
+    try { return await dir.getFileHandle(name); } catch (e) { return null; }
+  }
+  // how many files of each extension a machine holds
+  async function machineExts(pdir) {
+    const seen = {};
+    for await (const [name, x] of pdir.entries()) if (x.kind === 'file') { const e = Maz.extOf(name); seen[e] = (seen[e] || 0) + 1; }
+    return seen;
+  }
+  // A machine's control and the files its folder takes: the control's data I/O files (.PBM .PBD ...), or on a Smooth
+  // its own memory files (.MAZ .MTP .MPR, as in MC_Machine Programs). Kinds are 'SmoothM', 'SmoothM.raw', 'MatrixM' ...
+  const MACH_KINDS = [].concat(...Object.entries(Maz.CONTROLS).map(([k, c]) => [[k, c.label + ' (.' + c.ext + ')']].concat(c.raw ? [[k + '.raw', c.label + ', memory files (.' + c.raw + ')']] : [])));
+  const kindOf = v => { const [ctl, raw] = String(v || '').split('.'); return Maz.CONTROLS[ctl] ? { ctl, raw: raw === 'raw' } : null; };
+  // the kind the folder's own programs suggest: the most common Mazatrol file there (none in an empty folder)
+  function guessKind(seen) {
+    let best = null;
+    for (const [k, c] of Object.entries(Maz.CONTROLS)) {
+      const own = (seen[c.ext] || 0) + (c.exts || []).reduce((a, e) => a + (seen[e] || 0), 0), mem = c.raw ? seen[c.raw] || 0 : 0;
+      if (own && (!best || own > best.n)) best = { v: k, n: own };
+      if (mem && (!best || mem > best.n)) best = { v: k + '.raw', n: mem };
+    }
+    return best ? best.v : '';
+  }
+  // the control and file kind a Mazatrol program goes to the machine as (converted between Matrix and Smooth)
+  function sendFormat(d, m) {
+    const K = Maz.CONTROLS[d.p.ctl], want = kindOf(m.kind);
+    if (!want) return { refuse: 'Pick ' + m.name + '\'s control in Machines first: its folder has no Mazatrol programs to tell from.' };
+    const W = Maz.CONTROLS[want.ctl];
+    if (W.type !== K.type) return { refuse: m.name + ' is a ' + W.label + '; ' + d.p.name + ' is a ' + K.label + ' program.' };
+    return want;
+  }
+  const fileSize = n => n < 1024 ? n + ' bytes' : (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB';
+  const when = t => new Date(t).toLocaleString([], { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  async function openMachines() {
+    await machinesLoad();
+    MACH.found = null;
+    renderMachines();
+    if (!$('#macDlg').open) $('#macDlg').showModal();
+  }
+  function renderMachines() {
+    const b = $('#macBody');
+    if (!window.showDirectoryPicker) {
+      b.innerHTML = '<p class="hint">Sending and receiving needs Chrome or Edge: they can read and write a folder on the network. This browser cannot.</p>';
+      return;
+    }
+    const d = doc(), what = !d ? '' : isTool(d) ? '' : d.p.name;
+    let h = '<p class="hint">Each machine is its control\'s shared program folder on the network: the transfer folder CIMCO uses, or a Smooth\'s <code>MC_Machine Programs</code>. Map it as a drive on this PC (for example <code>M:</code>) and pick it here. The browser asks once a visit to read and write it. <b>Control and files</b> says what the folder takes: the control\'s DATA I/O files (<code>.PBD</code> on a Matrix, <code>.PBM</code> <code>.PBP</code> on a Smooth), or a Smooth\'s own memory files (<code>.MAZ</code> <code>.MTP</code>).</p>';
+    if (MACH.list.length) {
+      h += '<table class="mactab"><tr><th>Machine</th><th>Folder</th><th>Control and files</th><th></th></tr>' + MACH.list.map((m, i) =>
+        `<tr><td><b>${esc(m.name)}</b></td><td class="dim">${esc(m.dir.name)}</td>` +
+        `<td><select data-mac-kind="${i}" title="The control, and the files its folder takes: what the control's DATA I/O writes, or on a Smooth its own memory files (MC_Machine Programs)">` +
+        (m.kind ? '' : '<option value="" selected>Pick the control…</option>') + MACH_KINDS.map(([v, t]) => `<option value="${v}"${v === m.kind ? ' selected' : ''}>${esc(t)}</option>`).join('') + '</select></td><td class="macbtns">' +
+        `<button type="button" data-mac-recv="${i}" title="List the machine's programs in the folder panel: a program opened there saves back to the machine">Programs</button>` +
+        `<button type="button" data-mac-send="${i}"${what ? '' : ' disabled'} title="${what ? 'Write ' + esc(what) + ' into the machine\'s folder' : 'Open the program to send first'}">Send ${what ? esc(what) : 'program'} here</button>` +
+        `<button type="button" data-mac-ren="${i}">Rename</button><button type="button" data-mac-del="${i}">Forget</button></td></tr>`).join('') + '</table>';
+    } else h += '<p class="hint">No machines yet.</p>';
+    if (MACH.found) {
+      const F = MACH.found;
+      h += '<h3>Machines found in ' + esc(F.root.name) + '</h3>';
+      if (!F.rows.length) h += '<p class="hint">' + (F.skipped ? 'Every folder in it is already in the list.' : 'It has no folders in it: pick the folder that holds one folder per machine.') + '</p>';
+      else h += '<p class="hint">One folder per machine. Untick any that are not machines; pick the control of a folder with no programs to tell from.</p><table class="mactab">' +
+        F.rows.map((r, i) => `<tr><td><input type="checkbox" data-found-on="${i}"${r.on ? ' checked' : ''}></td><td><input class="macname" data-found-name="${i}" value="${esc(r.name)}" spellcheck="false"></td>` +
+          `<td><select data-found-kind="${i}">${r.kind ? '' : '<option value="" selected>Pick the control…</option>'}` + MACH_KINDS.map(([v, t]) => `<option value="${v}"${v === r.kind ? ' selected' : ''}>${esc(t)}</option>`).join('') + '</select></td>' +
+          `<td class="dim">${r.n} program${r.n === 1 ? '' : 's'}</td></tr>`).join('') + '</table>';
+      h += '<div class="dlgrow"><span class="grow"></span>' + (F.rows.length ? `<button type="button" id="macFoundAdd" class="on">Add ${F.rows.filter(r => r.on).length} machine${F.rows.filter(r => r.on).length === 1 ? '' : 's'}</button>` : '') + '<button type="button" id="macFoundCancel">' + (F.rows.length ? 'Cancel' : 'Close') + '</button></div>';
+    }
+    h += '<div class="dlgrow macadd"><input id="macNewName" placeholder="Machine name, e.g. HCN-6000" autocomplete="off" spellcheck="false"><button type="button" id="macPick" class="on">Add: pick its folder…</button></div>';
+    h += '<div class="dlgrow"><span class="hint grow">CIMCO\'s transfer folders all in one place (one folder per machine)? Pick that folder once.</span><button type="button" id="macPickAll" title="Pick the folder that holds one folder per machine: each one is listed with its name and control, to add them all">Add every machine in a folder…</button></div>';
+    if (MACH.backups.length) {
+      h += '<h3>Replaced on the machines</h3><p class="hint">Each file a send replaced, newest first (the last ' + BACKUPS_KEPT + ' are kept in this browser).</p><table class="mactab">' +
+        MACH.backups.map((x, i) => `<tr><td>${esc(when(x.t))}</td><td><b>${esc(x.machine)}</b></td><td>${esc(x.name)} <span class="dim">${fileSize(x.bytes.length)}</span></td>` +
+          `<td class="macbtns"><button type="button" data-bk-open="${i}" title="Open the replaced copy">Open</button><button type="button" data-bk-back="${i}" title="Write the replaced copy back onto the machine">Put back</button></td></tr>`).join('') + '</table>';
+    }
+    b.innerHTML = h;
+  }
+  async function addMachine() {
+    const name = ($('#macNewName').value || '').trim();
+    if (!name) { $('#macNewName').focus(); return note('Name the machine first.'); }
+    let dir;
+    try { dir = await window.showDirectoryPicker({ id: 'mazed-machine', mode: 'readwrite' }); } catch (e) { if (e.name !== 'AbortError') note(e.message); return; }
+    for (const m of MACH.list) if (await m.dir.isSameEntry(dir)) return note(m.name + ' already uses that folder.');
+    const m = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, dir, kind: '' };
+    try { m.kind = guessKind(await machineExts(await programDir(m))); } catch (e) { /* read later */ }
+    MACH.list.push(m);
+    await machinesKeep();
+    renderMachines();
+    note('Added ' + name + ' (' + dir.name + ')' + (m.kind ? ', ' + MACH_KINDS.find(k => k[0] === m.kind)[1] + ' by the programs in it.' : ': its folder has no Mazatrol programs, so pick its control.'), !!m.kind);
+  }
+  // a folder of machines: each folder in it (not hidden ones) with its name, how many programs it holds and the
+  // control those programs are for; folders already in the list are left out
+  async function findMachines() {
+    let root;
+    try { root = await window.showDirectoryPicker({ id: 'mazed-machines', mode: 'readwrite' }); } catch (e) { if (e.name !== 'AbortError') note(e.message); return; }
+    const rows = [];
+    let skipped = 0;
+    try {
+      for await (const [name, x] of root.entries()) {
+        if (x.kind !== 'directory' || /^[.$~]/.test(name)) continue;
+        let known = false;
+        for (const m of MACH.list) if (await m.dir.isSameEntry(x)) known = true;
+        if (known) { skipped++; continue; }
+        const seen = await machineExts(await programDir({ dir: x }));
+        const n = Object.entries(seen).filter(([e]) => PROGRAM_EXT.test('x.' + e) || EIA_EXTS.includes(e)).reduce((a, [, k]) => a + k, 0);
+        rows.push({ name, dir: x, kind: guessKind(seen), n, on: true });
+      }
+    } catch (e) { return note(root.name + ': ' + e.message); }
+    rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+    MACH.found = { root, rows, skipped };
+    renderMachines();
+  }
+  async function addFound() {
+    const F = MACH.found; if (!F) return;
+    const add = F.rows.filter(r => r.on && r.name.trim());
+    for (const r of add) MACH.list.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: r.name.trim(), dir: r.dir, root: F.root, kind: r.kind });
+    MACH.found = null;
+    await machinesKeep();
+    renderMachines();
+    const pick = add.filter(r => !r.kind).length;
+    note('Added ' + add.length + ' machine' + (add.length === 1 ? '' : 's') + ' from ' + F.root.name + '.' + (pick ? ' Pick the control of ' + pick + ' with no programs to tell from.' : ''), !pick);
+  }
+  async function receiveFrom(i) {
+    const m = MACH.list[i];
+    try {
+      if (!await mayUseMachine(m, 'readwrite')) return note('The browser was not given leave to use ' + m.name + '\'s folder.');
+      $('#macDlg').close();
+      await readDir(m.dir, false, m.name);
+      sessionPut('folder', m.dir).catch(() => {});
+    } catch (e) { note(m.name + ': ' + e.message); }
+  }
+  // the send dialog: the file name, what it goes as, whether it replaces a file there
+  async function sendTo(i) {
+    const m = MACH.list[i], d = doc();
+    if (!d || isTool(d)) return note('Open the program to send first (tool data is not sent).');
+    let pdir;
+    try {
+      if (!await mayUseMachine(m, 'readwrite')) return note('The browser was not given leave to write ' + m.name + '\'s folder.');
+      pdir = await programDir(m);
+    } catch (e) { return note(m.name + ': ' + e.message); }
+    const S = { m, pdir, d, warnings: [] };
+    if (isEia(d)) {
+      S.bytes = latin1Bytes(d.g.text.replace(/\n/g, d.g.eol));
+      S.base = d.p.name.replace(/\.[^.]*$/, ''); S.ext = Maz.extOf(d.p.name) || 'EIA';
+      S.what = 'EIA/ISO program';
+    } else {
+      if (!m.kind) { m.kind = guessKind(await machineExts(pdir)); if (m.kind) machinesKeep(); }
+      const f = sendFormat(d, m);
+      if (f.refuse) return note(f.refuse);
+      let p;
+      try { p = f.ctl === d.p.ctl ? { ctl: f.ctl, name: d.p.name, header: d.p.header ? d.p.header.slice() : null, recs: d.p.recs.map(r => r.slice()), warnings: [] } : Maz.convert(d.p, f.ctl); }
+      catch (e) { return note(e.message); }
+      const K = Maz.CONTROLS[f.ctl];
+      if (f.raw) p.raw = true; else delete p.raw;
+      S.bytes = Maz.serialize(p);
+      S.base = d.p.name.replace(/\.[^.]*$/, ''); S.ext = f.raw ? K.raw : K.ext;
+      S.what = K.label + (f.raw ? ' machine file' : ' program') + (f.ctl !== d.p.ctl ? ', converted from ' + Maz.CONTROLS[d.p.ctl].label : '');
+      S.warnings = p.warnings || [];
+      S.comment = d.p.raw || !d.p.header ? '' : Maz.comment(d.p).trim();
+      S.raw = f.raw;
+    }
+    MACH.send = S;
+    $('#sendTitle').textContent = 'Send to ' + m.name;
+    $('#sendName').value = S.base;
+    $('#sendExt').textContent = '.' + S.ext;
+    $('#sendTblRow').hidden = !(S.raw && S.comment);
+    $('#sendTbl').checked = false;
+    await sendCheck();
+    $('#macDlg').close();
+    $('#sendDlg').showModal();
+    $('#sendName').focus(); $('#sendName').select();
+  }
+  async function sendCheck() {
+    const S = MACH.send; if (!S) return;
+    const base = $('#sendName').value.trim(), name = base + '.' + S.ext, info = [];
+    S.name = name; S.ok = !!base && !BAD_NAME.test(base);
+    info.push('As ' + esc(S.what) + ', ' + fileSize(S.bytes.length) + ', into <b>' + esc(S.m.name) + '</b> (' + esc(S.pdir.name) + ').');
+    if (!base) info.push('<span class="bad">Give the file a name.</span>');
+    else if (BAD_NAME.test(base)) info.push('<span class="bad">A file name cannot hold \\ / : * ? " &lt; &gt; |.</span>');
+    S.old = S.ok ? await fileIn(S.pdir, name) : null;
+    if (S.old) {
+      const f = await S.old.getFile();
+      info.push('<span class="warn">Replaces ' + esc(name) + ' there (' + fileSize(f.size) + ', ' + esc(when(f.lastModified)) + '). A copy of it is kept here, to put back. Don\'t replace the program the machine is running.</span>');
+    }
+    if (S.warnings.length) info.push(S.warnings.map(esc).join(' '));
+    $('#sendInfo').innerHTML = info.join('<br>');
+    $('#sendGo').textContent = S.old ? 'Replace' : 'Send';
+    $('#sendGo').disabled = !S.ok;
+  }
+  async function sendGo() {
+    const S = MACH.send; if (!S || !S.ok) return;
+    try {
+      if (S.old) {
+        const old = new Uint8Array(await (await S.old.getFile()).arrayBuffer());
+        backupKeep(S.m, S.name, old);
+      }
+      const h = await S.pdir.getFileHandle(S.name, { create: true });
+      await writeHandle(h, S.bytes);
+      const extra = $('#sendTbl').checked && S.comment ? await commentIntoIndex(S) : '';
+      await machinesKeep();
+      $('#sendDlg').close();
+      MACH.send = null;
+      note('Sent ' + S.name + ' to ' + S.m.name + (S.old ? ' (the file it replaced is kept under Machines)' : '') + '.' + extra, true);
+    } catch (e) { note('Could not send ' + S.name + ' to ' + S.m.name + ' (' + e.message + ').'); }
+  }
+  function backupKeep(m, name, bytes) {
+    MACH.backups.unshift({ t: Date.now(), mid: m.id, machine: m.name, name, bytes });
+    MACH.backups.length = Math.min(MACH.backups.length, BACKUPS_KEPT);
+  }
+  // a Smooth keeps the comments of its own files (.MAZ ...) in index.tbl: name, a tab, the comment
+  async function commentIntoIndex(S) {
+    const h = await fileIn(S.pdir, 'index.tbl');
+    if (!h) return ' There is no index.tbl in the folder, so the comment was not written.';
+    const old = new Uint8Array(await (await h.getFile()).arrayBuffer()), text = latin1(old);
+    const eol = /\r\n/.test(text) ? '\r\n' : '\n', lines = text.split(/\r?\n/), key = S.name.toUpperCase(), line = S.name + '\t' + S.comment;
+    const at = lines.findIndex(l => l.slice(0, l.indexOf('\t')).trim().toUpperCase() === key);
+    if (at >= 0) lines[at] = line;
+    else { const end = lines.length && lines[lines.length - 1] === '' ? lines.length - 1 : lines.length; lines.splice(end, 0, line); }
+    backupKeep(S.m, 'index.tbl', old);
+    await writeHandle(h, latin1Bytes(lines.join(eol)));
+    return ' Its comment is in index.tbl.';
+  }
+  async function backupBack(i) {
+    const x = MACH.backups[i], m = MACH.list.find(q => q.id === x.mid);
+    if (!m) return note('The machine ' + x.machine + ' is no longer in the list.');
+    if (!confirm('Write the copy of ' + x.name + ' from ' + when(x.t) + ' back onto ' + m.name + '? The file there now is kept too.')) return;
+    try {
+      if (!await mayUseMachine(m, 'readwrite')) return note('The browser was not given leave to write ' + m.name + '\'s folder.');
+      const pdir = await programDir(m), cur = await fileIn(pdir, x.name);
+      if (cur) backupKeep(m, x.name, new Uint8Array(await (await cur.getFile()).arrayBuffer()));
+      await writeHandle(await pdir.getFileHandle(x.name, { create: true }), x.bytes);
+      await machinesKeep();
+      renderMachines();
+      note('Put ' + x.name + ' back on ' + m.name + '.', true);
+    } catch (e) { note('Could not put ' + x.name + ' back (' + e.message + ').'); }
+  }
+  $('#macBody').addEventListener('click', async e => {
+    const t = e.target.closest('button'); if (!t) return;
+    const ds = t.dataset;
+    if (t.id === 'macPick') return addMachine();
+    if (t.id === 'macPickAll') return findMachines();
+    if (t.id === 'macFoundAdd') return addFound();
+    if (t.id === 'macFoundCancel') { MACH.found = null; return renderMachines(); }
+    if (ds.macRecv !== undefined) return receiveFrom(+ds.macRecv);
+    if (ds.macSend !== undefined) return sendTo(+ds.macSend);
+    if (ds.macRen !== undefined) {
+      const m = MACH.list[+ds.macRen], n = (prompt('Name for this machine', m.name) || '').trim();
+      if (n) { m.name = n; await machinesKeep(); renderMachines(); }
+      return;
+    }
+    if (ds.macDel !== undefined) {
+      const m = MACH.list[+ds.macDel];
+      if (!confirm('Forget ' + m.name + '? Its folder and the programs in it are not touched.')) return;
+      MACH.list.splice(+ds.macDel, 1); await machinesKeep(); renderMachines();
+      return;
+    }
+    if (ds.bkOpen !== undefined) { const x = MACH.backups[+ds.bkOpen]; $('#macDlg').close(); openBytes(x.bytes, x.name, null); note('The copy of ' + x.name + ' replaced on ' + x.machine + ' ' + when(x.t) + ' (not linked to a file: Save asks where).', true); return; }
+    if (ds.bkBack !== undefined) return backupBack(+ds.bkBack);
+  });
+  $('#macBody').addEventListener('change', async e => {
+    const ds = e.target.dataset || {}, F = MACH.found;
+    if (F && ds.foundOn !== undefined) { F.rows[+ds.foundOn].on = e.target.checked; return renderMachines(); }
+    if (F && ds.foundKind !== undefined) { F.rows[+ds.foundKind].kind = e.target.value; return renderMachines(); }
+    const i = ds.macKind;
+    if (i === undefined) return;
+    MACH.list[+i].kind = e.target.value;
+    await machinesKeep();
+    renderMachines();
+  });
+  $('#macBody').addEventListener('input', e => {
+    const i = e.target.dataset && e.target.dataset.foundName;
+    if (i !== undefined && MACH.found) MACH.found.rows[+i].name = e.target.value;
+  });
+  $('#macBody').addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'macNewName') { e.preventDefault(); addMachine(); } });
+  $('#macClose').addEventListener('click', () => $('#macDlg').close());
+  $('#sendName').addEventListener('input', () => sendCheck());
+  $('#sendName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendGo(); } });
+  $('#sendGo').addEventListener('click', () => sendGo());
+  $('#sendCancel').addEventListener('click', () => { $('#sendDlg').close(); MACH.send = null; });
 
   // ------------------------------------------------------------------ compare
   // The current program against another open one of the same kind of machine: by default one with the same
@@ -3872,6 +4179,7 @@
     tools() { side(toolsOn ? null : 'tools'); },
     compare() { side(cmpOn ? null : 'compare'); },
     folder: openFolder,
+    machines: openMachines,
     edit() { setEditing(!editing); },
     time() { toggleTime(); },
     text: openText,
@@ -4100,7 +4408,7 @@
   sessionRestore();
 
   // test hook
-  window.MazEditor = { docs, doc, openBytes, select, enterValue, commit, insertUnit, insertLine, deleteSelection, copySelection, paste, moveSelection, undo, saveAs, listing, newProgram, render, ctx, setToolType, toolCheck, setupSheet, side, loadFolder, openFromFolder, folder: () => folder,
+  window.MazEditor = { machines: () => MACH, openMachines, sendTo, sendGo, receiveFrom, findMachines, docs, doc, openBytes, select, enterValue, commit, insertUnit, insertLine, deleteSelection, copySelection, paste, moveSelection, undo, saveAs, listing, newProgram, render, ctx, setToolType, toolCheck, setupSheet, side, loadFolder, openFromFolder, folder: () => folder,
     plotStats: () => lastStats, playAction, playTo, gotoLine, scene: () => (doc() ? doc().scene : null), save, duplicateSelection, cutSelection, contextAction,
     setEditing, editing: () => editing, cube: () => cubeHit, openDevelop, openTpc, openRef, openCalc, wpcFromHoles, wpcFromHolesY, fitHoles, boltCircle, parseAlarmHelp, openCheck, programCheck: () => programCheck(doc()), softKey: id => { const k = SK[id]; if (!k || (k.off && k.off())) return false; k.run(); renderSoftKeys(); return true; },
     skOn: id => !!(SK[id].on && SK[id].on()), skOff: id => !!(SK[id].off && SK[id].off()), pressSoftKey,
