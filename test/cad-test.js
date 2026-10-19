@@ -173,6 +173,17 @@ ok('DXF out and back in: lines, arcs both ways, circles and points, on all three
   assert.deepStrictEqual(r.levels.map(l => l.name).sort(), ['0', 'HOLES', 'PART']);
   assert.strictEqual(r.ents.find(e => e.g.t === 'line' && e.pl === 'top').col, '#ff0000');
 });
+ok('chains: walked back from the first piece through pieces either way round', () => {
+  const c = G.chains([G.line([1, 0], [2, 0]), G.line([3, 0], [2, 0]), G.line([1, 0], [0, 0]), G.line([-1, 0], [0, 0])]);
+  assert.ok(c.length === 1 && c[0].items.length === 4, JSON.stringify(c));
+});
+ok('DXF out: a spline goes out as a few arcs and lines, end to end, within the tolerance', () => {
+  const sp = G.splineThrough([[0, 0], [1, 0.6], [2, 0.4], [3, 1.2], [4, 0.2], [5, 0.9]]);
+  const r = IO.readDXF(IO.writeDXF([{ g: sp, pl: 'top', z: 0, lv: 1 }], []), 'in'), P = r.ents.map(e => e.g);
+  assert.ok(P.length > 0 && P.length < 60 && P.every(g => g.t === 'arc' || g.t === 'line') && P.some(g => g.t === 'arc'), P.length + ' ' + P.map(g => g.t));
+  assert.ok(G.chains(P).length === 1 && G.chains(P)[0].items.length === P.length, 'one chain');
+  for (let i = 0; i <= 400; i++) { const p = G.at(sp, i / 400), d = Math.min(...P.map(g => { const q = G.nearest(g, p).p; return Math.hypot(q[0] - p[0], q[1] - p[1]); })); assert.ok(d <= 0.00021, 'off by ' + d); }
+});
 ok('DXF in: bulges, millimetres, ellipses, splines, mirrored circles, rotated blocks, old polylines', () => {
   const D = (...p) => p.join('\n');
   const txt = D('0', 'SECTION', '2', 'HEADER', '9', '$INSUNITS', '70', '4', '0', 'ENDSEC',
