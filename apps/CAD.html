@@ -15447,7 +15447,8 @@ three/examples/jsm/libs/fflate.module.js:
   //   1 point (x y) · 3 line (start end, then its length and normal) · 6 arc (start end, signed sweep, centre, radius;
   //   a full circle sweeps 2π) · 7 a curve by name: the group of that name holds a NURBS curve, field 15 records 201
   //   (degree), 202 (a control point x y and weight), 203 (a knot) and 204 (the knots' range). Such a group also holds
-  //   the arcs the machine fits to the curve; the curve itself is taken, exact.
+  //   the arcs the machine fits to the curve, end to end; those are taken (the shape the machine works from), and the
+  //   curve itself only when its arcs are missing or do not run from its start to its end.
   // The file says nothing of its units: the caller gives them (the numbers are read as inches, and units 'mm' scales).
   // Returns {ents, levels, skipped, notes, extent (the biggest number, as read)}.
   function readMSWIN(bytes, units) {
@@ -15487,28 +15488,41 @@ three/examples/jsm/libs/fflate.module.js:
     }
     const byName = new Map(groups.map(q => [q.name, q])), k0 = units === 'mm' ? 1 / 25.4 : 1, S = p => [p[0] * k0, p[1] * k0], out = [];
     let extent = 0; const seen = p => { extent = Math.max(extent, Math.abs(p[0]), Math.abs(p[1])); return p; };
-    const n = { pt: 0, line: 0, arc: 0, spline: 0 };
+    const n = { pt: 0, line: 0, arc: 0, spline: 0, fit: 0 };
+    const arcOf = (a, fit) => {
+      const p = seen([a[0], a[1]]), q = [a[2], a[3]], sw = a[4], c = fit ? [a[5], a[6]] : seen([a[5], a[6]]), r = Math.abs(a[7]);   // a fitted arc's centre can be far off: not counted in the extent
+      if (!(r > 1e-12)) return null;
+      // a full turn, or the arc from its start round its centre the way its sweep goes
+      if (Math.abs(Math.abs(sw) - 2 * Math.PI) < 1e-9 || Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-12 && Math.abs(sw) > 1) return G.circle(S(c), r * k0);
+      return G.arcCenter(S(c), S(p), S(q), sw > 0);
+    };
+    // a curve's own arcs, when they run end to end from its start to its end
+    const fitted = (q, sp) => {
+      const A = q.ents.filter(x => x.kind === 6 && x.nums.length >= 8).map(x => arcOf(x.nums, true));
+      if (!A.length || A.some(x => !x || G.isCircle(x))) return null;
+      const tol = 1e-6 * Math.max(1, ...sp.cp.map(p => Math.max(Math.abs(p[0]), Math.abs(p[1])))), same = (p, r) => Math.hypot(p[0] - r[0], p[1] - r[1]) <= tol;
+      if (!same(G.start(A[0]), G.start(sp)) || !same(G.end(A[A.length - 1]), G.end(sp))) return null;
+      for (let j = 1; j < A.length; j++) if (!same(G.end(A[j - 1]), G.start(A[j]))) return null;
+      return A;
+    };
     for (const en of byName.get('root').ents) {
       const a = en.nums;
       if (en.kind === 1 && a.length >= 2) { out.push(G.pt(S(seen([a[0], a[1]])))); n.pt++; }
       else if (en.kind === 3 && a.length >= 4) { const p = seen([a[0], a[1]]), q = seen([a[2], a[3]]); if (Math.hypot(q[0] - p[0], q[1] - p[1]) > 1e-12) { out.push(G.line(S(p), S(q))); n.line++; } }
       else if (en.kind === 6 && a.length >= 8) {
-        const p = seen([a[0], a[1]]), q = [a[2], a[3]], sw = a[4], c = seen([a[5], a[6]]), r = Math.abs(a[7]);
-        if (!(r > 1e-12)) { skip('arc (no radius)'); continue; }
-        // a full turn, or the arc from its start round its centre the way its sweep goes
-        if (Math.abs(Math.abs(sw) - 2 * Math.PI) < 1e-9 || Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-12 && Math.abs(sw) > 1) out.push(G.circle(S(c), r * k0));
-        else out.push(G.arcCenter(S(c), S(p), S(q), sw > 0));
-        n.arc++;
+        const g2 = arcOf(a); if (!g2) { skip('arc (no radius)'); continue; }
+        out.push(g2); n.arc++;
       } else if (en.kind === 7 && en.name) {
         const q = byName.get(en.name), c = q && q.curve;
         if (!c || c.cp.length < 2 || c.kn.length !== c.cp.length + c.deg + 1) { skip('curve (' + en.name + ' not found)'); continue; }
         c.cp.forEach(seen);
-        out.push({ t: 'spline', deg: c.deg, kn: c.kn.slice(), cp: c.cp.map(S), w: c.w.some(x => Math.abs(x - 1) > 1e-12) ? c.w.slice() : null }); n.spline++;
+        const sp = { t: 'spline', deg: c.deg, kn: c.kn.slice(), cp: c.cp.map(S), w: c.w.some(x => Math.abs(x - 1) > 1e-12) ? c.w.slice() : null }, A = fitted(q, sp);
+        if (A) { out.push(...A); n.fit++; n.arc += A.length; } else { out.push(sp); n.spline++; }
       } else skip('entity of kind ' + en.kind);
     }
     const what = [['line', 'line', 'lines'], ['arc', 'arc or circle', 'arcs and circles'], ['spline', 'spline', 'splines'], ['pt', 'point', 'points']].filter(([k]) => n[k]).map(([k, one, many]) => n[k] + ' ' + (n[k] === 1 ? one : many)).join(', ');
     return { ents: out.map(g2 => ({ g: g2, pl: 'top', z: 0, lv: 1, col: '#e8e8e8' })), levels: [{ n: 1, name: 'EDM', vis: true }], units: units || 'in', skipped, extent,
-      notes: ['Read as a Mitsubishi EDM drawing: ' + (what || 'nothing') + '.' + (n.spline ? ' The splines are exact; the arcs the machine fits to them were left out.' : '')] };
+      notes: ['Read as a Mitsubishi EDM drawing: ' + (what || 'nothing') + '.' + (n.fit ? ' ' + n.fit + (n.fit === 1 ? ' curve came' : ' curves came') + ' in as the arcs the machine fits to ' + (n.fit === 1 ? 'it' : 'them') + '.' : '') + (n.spline ? ' The splines came in exact.' : '')] };
   }
 
   // ================================================================ DWG (through LibreDWG's reader)

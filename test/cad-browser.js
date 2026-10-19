@@ -750,7 +750,7 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
     check('a Mitsubishi EDM drawing asks its units, offering millimetres', q && /Mitsubishi EDM/.test(q.text) && q.first === 'Millimetres', q);
     await ev(`document.querySelector('#dlgBody [data-u="mm"]').click()`); await ev(`window.__open`); await sleep(200);
     const ed = await ev(`(()=>{const L=CADAPP.doc.list();return {kinds:L.map(e=>e.g.t).join(','),len:CADGeom.length(L.find(e=>e.g.t==='line').g),toast:document.getElementById('toast').textContent}})()`);
-    check('it opens: a point, a line, two arcs, a spline and a circle, in inches', ed.kinds === 'pt,line,arc,arc,spline,arc' && Math.abs(ed.len - 2) < 1e-9 && /Mitsubishi EDM drawing/.test(ed.toast), ed);
+    check('it opens: a point, a line, two arcs, the curve as the machine\'s 8 arcs and a circle, in inches', ed.kinds === 'pt,line,arc,arc,' + 'arc,'.repeat(8) + 'arc' && Math.abs(ed.len - 2) < 1e-9 && /Mitsubishi EDM drawing/.test(ed.toast), ed);
     await ev(`(()=>{const b=Uint8Array.from(atob('${rz}'),c=>c.charCodeAt(0));return CADAPP.openFile(new File([b],'rect.dwg'))})()`); await sleep(100);
     check('a compressed DXF named .dwg opens as the DXF it is', await ev(`CADAPP.doc.list().length`) === 4);
     await ev(`CADAPP.openFile(new File([new Uint8Array([1,2,3,4,5,6,7,8])],'junk.dwg'))`); await sleep(50);

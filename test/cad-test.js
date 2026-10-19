@@ -546,15 +546,20 @@ ok('files compressed with Unix compress: 9, 12 and 16 bit codes, as compress its
   assert.throws(() => IO.unlzw(new Uint8Array([0x1f, 0x9d, 0x90, 0xff, 0xff, 0xff])), /damaged/);
   assert.ok(IO.sniff(new Uint8Array(Buffer.from('AC1032xxxx'))) === 'dwg' && IO.sniff(new Uint8Array(Buffer.from('hello'))) === null && IO.sniff(EDM()) === 'mswin');
 });
-ok('a Mitsubishi EDM drawing: points, lines, arcs both ways, circles and exact splines, in millimetres or inches', () => {
+ok('a Mitsubishi EDM drawing: points, lines, arcs both ways, circles and curves as the machine\'s arcs, in millimetres or inches', () => {
   const r = IO.readMSWIN(EDM(), 'mm'), gs = r.ents.map(e => e.g);
-  assert.deepStrictEqual(gs.map(g => g.t), ['pt', 'line', 'arc', 'arc', 'spline', 'arc'], 'the fitted arc left out');
+  assert.deepStrictEqual(gs.map(g => g.t), ['pt', 'line', 'arc', 'arc', ...Array(8).fill('arc'), 'arc'], 'the curve as its 8 fitted arcs');
   assert.ok(nearP(gs[0].p, [1, -1]) && near(G.length(gs[1]), 2), 'millimetres made inches');
   assert.ok(gs[2].sw > 0 && near(gs[2].r, 1) && nearP(G.end(gs[2]), [3, 1]) && gs[3].sw < 0 && near(gs[3].r, 1) && nearP(G.end(gs[3]), [2, 2]), 'arcs: anticlockwise and clockwise, ending where they say');
-  assert.ok(G.isCircle(gs[5]) && nearP(gs[5].c, [1, 4]), 'a circle');
-  assert.ok(gs[4].deg === 3 && gs[4].kn.length === 8 && nearP(G.start(gs[4]), [2, 2]) && nearP(G.end(gs[4]), [0, 0]), 'the curve, from its own group');
-  const ch = G.chains(gs.slice(1, 5)); assert.ok(ch.length === 1 && ch[0].closed, 'the outline closes');
-  assert.ok(near(r.extent, 101.6) && r.units === 'mm' && r.notes[0] === 'Read as a Mitsubishi EDM drawing: 1 line, 3 arcs and circles, 1 spline, 1 point. The splines are exact; the arcs the machine fits to them were left out.', r.notes[0]);
+  assert.ok(G.isCircle(gs[12]) && nearP(gs[12].c, [1, 4]), 'a circle');
+  assert.ok(nearP(G.start(gs[4]), [2, 2]) && nearP(G.end(gs[11]), [0, 0]), 'the fitted arcs run along the curve');
+  const ch = G.chains(gs.slice(1, 12)); assert.ok(ch.length === 1 && ch[0].closed, 'the outline closes');
+  assert.ok(near(r.extent, 101.6) && r.units === 'mm' && r.notes[0] === 'Read as a Mitsubishi EDM drawing: 1 line, 11 arcs and circles, 1 point. 1 curve came in as the arcs the machine fits to it.', r.notes[0]);
+  for (const fit of ['none', 'off']) {
+    const s = IO.readMSWIN(EDM(fit), 'mm'), sp = s.ents[4].g;
+    assert.ok(s.ents.map(e => e.g.t).join() === 'pt,line,arc,arc,spline,arc' && sp.deg === 3 && sp.kn.length === 8 && nearP(G.start(sp), [2, 2]) && nearP(G.end(sp), [0, 0]), 'the exact curve when its arcs are ' + fit);
+    assert.ok(/1 spline/.test(s.notes[0]) && /splines came in exact/.test(s.notes[0]), s.notes[0]);
+  }
   assert.ok(nearP(IO.readMSWIN(EDM(), 'in').ents[0].g.p, [25.4, -25.4]), 'as inches, the numbers as they are');
   assert.throws(() => IO.readMSWIN(EDM().subarray(0, 300), 'mm'), /cut short/);
 });
