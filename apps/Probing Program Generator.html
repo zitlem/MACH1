@@ -2757,11 +2757,14 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
         let ok = 0;
         try { ok = evaluate(b.whileCond, vars); } catch (err) { fail(err); }
         if (ok) { loops.push({ label: b.doLabel, start: pc, prog }); pc++; return true; }
+        // on to the END with this loop's number, past loops of the same number inside it (loops with other
+        // numbers nest inside and are passed over whole)
         let depth = 0, i = pc + 1;
+        const doN = new RegExp('(WHILE\\s*\\[.*\\]\\s*|^\\s*(N\\d+\\s*)?)DO\\s*' + b.doLabel + '(?!\\d)'), endN = new RegExp('END\\s*' + b.doLabel + '(?!\\d)');
         for (; i < prog.lines.length; i++) {
           const c = stripComments(prog.lines[i]).toUpperCase();
-          if (/WHILE\s*\[.*\]\s*DO\s*\d/.test(c) || /^\s*(N\d+\s*)?DO\s*\d/.test(c)) depth++;
-          else if (new RegExp('END\\s*' + b.doLabel + '(?!\\d)').test(c)) { if (!depth) break; depth--; }
+          if (doN.test(c)) depth++;
+          else if (endN.test(c)) { if (!depth) break; depth--; }
         }
         pc = i + 1; return true;
       }

@@ -48,6 +48,12 @@ ok('G-code: macro variables, IF/GOTO, WHILE and G65 arguments', () => {
   assert.deepStrictEqual(xs, [1, 2, 7], JSON.stringify(xs));            // X0 Y0 is no move; the G65 call gets A=#1=5 B=#2=2
   assert.ok(!xs.includes(99), 'GOTO jumps over the X99 line');
 });
+ok('G-code: a WHILE that ends goes on after its own END, past loops with other numbers inside it', () => {
+  // two DO1 loops one after the other, the first with a DO2 inside: when the first ends, the second still runs
+  const text = '#1=1\nWHILE[#1LE2]DO1\n#2=1\nWHILE[#2LE2]DO2\nG1 X[#1*10+#2] F10.\n#2=#2+1\nEND2\n#1=#1+1\nEND1\n#1=1\nWHILE[#1LE2]DO1\nG1 Y#1\n#1=#1+1\nEND1\nG1 Z-1.\nM30\n';
+  const r = G.run('T', text, {}), ends = r.moves.map(m => end(m).map(v => +v.toFixed(6)).join(' '));
+  assert.deepStrictEqual(ends, ['11 0 0', '12 0 0', '21 0 0', '22 0 0', '22 1 0', '22 2 0', '22 2 -1'], JSON.stringify(ends));
+});
 ok('G-code: subprograms from other files and M98 repeats', () => {
   const r = G.run('MAIN', 'G0 X0 Y0 Z0\nM98 P1234 L2\nM30\n', { resolve: k => (k === '1234' ? 'O1234\nG91 G1 X1. F10.\nG90\nM99\n' : null) });
   assert.deepStrictEqual(r.moves.map(m => end(m)[0]), [1, 2]);
