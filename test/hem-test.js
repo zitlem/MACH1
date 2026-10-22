@@ -103,7 +103,7 @@ function coneCheck(cfg, label) {
   ok(label + ': never past the wall; roughing leaves the finish stock; the finish touches', () => {
     let rough = Infinity, fin = Infinity;
     for (const q of at) { const d = clear(q); if (q.s === 'FINISH') fin = Math.min(fin, d); else rough = Math.min(rough, d); }
-    if (r.cfg.rough) assert(rough > C.a - tol, 'roughing comes ' + rough.toFixed(5) + ' from the wall, finish stock ' + C.a);
+    if (r.cfg.rough) { assert(rough > C.a - tol, 'roughing comes ' + rough.toFixed(5) + ' from the wall, finish stock ' + C.a); assert(rough < C.a + 1e-3, 'the last pass should leave just the finish stock: ' + rough.toFixed(5)); }
     if (r.cfg.finish) { assert(fin > -tol, 'finish past the wall by ' + (-fin).toFixed(5)); assert(fin < 1e-3, 'finish should touch: ' + fin.toFixed(5)); }
   });
   if (r.cfg.passes === 'both' && !QUICK) ok(label + ': all the material is cut but the finish ridges', () => {
@@ -176,10 +176,15 @@ ok('cone: a ball says what it leaves on the floor; a flat end mill leaves it fla
   assert(HEM.generate({ ...IN, coneCR: '0.25' }).geo.info.some(w => /peak about 0.08\d+ high in the middle/.test(w)));
   assert(!HEM.generate(IN).geo.info.some(w => /The floor is left/.test(w)));
 });
-ok('cone: roughing levels keep the steps on the wall under a quarter of the tool', () => {
-  const r = HEM.generate({ ...IN, coneTopD: '4', coneBotD: '1', depth: '1.5' });
-  assert(r.geo.cone.ta * r.K.ap <= 0.25 * r.K.D + 1e-9, 'step ' + r.geo.cone.ta * r.K.ap);
-  assert.strictEqual(r.K.levels, r.geo.coneLevels.length);
+ok('cone: roughing passes are helixes down the cone, stepping across by no more than the stepover', () => {
+  for (const cfg of [{ ...IN, coneTopD: '4', coneBotD: '1', depth: '1.5' }, OUT]) {
+    const r = HEM.generate(cfg), P = HEM.conePlan(r.cfg, r.K, HEM.coneOf(r.cfg, r.K));
+    assert(P.n > 3 && P.s <= r.K.ae + 1e-9, P.n + ' passes ' + P.s + ' apart');
+    let sec = '', helical = 0, flat = 0, prev = null;
+    for (const m of r.moves) { if (m.t === 'SEC') { sec = m.name; continue; } if (sec === 'ROUGH' && m.k === 'rough' && (m.t === 'G2' || m.t === 'G3') && prev) (Math.abs(m.z - prev.z) > 1e-9 ? helical++ : flat++); if (m.x !== undefined) prev = m; }
+    assert(helical > 10 * flat, helical + ' helical arcs, ' + flat + ' flat (floor turns only)');
+    assert(r.geo.conePasses.length === P.n);
+  }
 });
 
 // speeds and feeds from the conversation: 3/4 5-flute in A36, 500 SFM, 0.0045 chip, 0.06 stepover

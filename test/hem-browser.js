@@ -28,12 +28,12 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
   check('loads', await ev('!!window.HEM && !!window.MACH1'));
   await seg('op', 'cone'); await waitDone(); await sleep(400);
   check('cone fields shown', await ev(`!!document.querySelector('#form input[data-k="coneTopD"]') && !!document.querySelector('#form input[data-k="coneCR"]') && !!document.querySelector('#form input[data-k="coneStep"]')`));
-  check('section shown', await ev(`!document.getElementById('sectWrap').hidden && document.querySelectorAll('#sect path').length > 4`));
+  check('section shown', await ev(`!document.getElementById('sectWrap').hidden && document.querySelectorAll('#sect line').length > 6`));
   check('angle hint', (await ev(`document.querySelector('[data-hint="coneBotD"]').textContent`)).includes('° a side'));
   check('macro tab', await ev(`[...document.querySelectorAll('#tabs button')].map(b=>b.textContent).join('|')`) === 'G-code|Mazatrol|Macro|Cutting data|Dimensions');
   await ev(`document.querySelector('#tabs [data-t="mac"]').click()`); await sleep(200);
   const mac = await ev(`document.querySelector('#out pre').textContent`);
-  check('macro listing', /WHILE\[#152LE#167\]DO1/.test(mac) && /M99\n%/.test(mac));
+  check('macro listing', /WHILE\[#165LE#166\]DO2/.test(mac) && /WHILE\[#165LE#166\]DO1/.test(mac) && /M99\n%/.test(mac));
   check('SUB PRO listing', /SUB PRO\s+HEM-CONE|SUB PRO\s+CONE/.test(await ev(`document.querySelectorAll('#out pre')[1].textContent`)), await ev(`document.querySelectorAll('#out pre')[1].textContent`));
   check('download buttons', /^Download .+\.EIA\|Copy\|SUB PRO \.PBD\|SUB PRO \.PBM$/.test(await ev(`[...document.querySelectorAll('#dls button')].map(b=>b.textContent).join('|')`)));
   await shot('inside.png');

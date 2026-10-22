@@ -273,7 +273,8 @@ const SECTIONS = [
   ] },
   { h: 'Work zero (X0 Y0)', items: [{ origin: true, draw: true }] },
   { h: 'Depth', items: [
-    { row: [F('depth', 'Depth', 'in', 'Z0 is the top of the part'), F('apMax', 'Max depth per level', 'in', '', { hintFn: c => c.op === 'cone' ? 'A cone also gets levels shallow enough that the steps left on its wall stay under a quarter of the tool across.' : '0 = full depth in one level' })] },
+    { row: [F('depth', 'Depth', 'in', 'Z0 is the top of the part'), F('apMax', 'Max depth per level', 'in', '0 = full depth in one level')], show: c => c.op !== 'cone' },
+    F('depth', 'Depth', 'in', 'Z0 is the top of the part', { show: isOp('cone') }),
   ] },
   { h: 'Stock', show: c => c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside'), items: [
     F('stockType', '', '', '', { show: c => c.op !== 'cone', kind: 'seg', opts: [['even', 'Passes around the part'], ['rect', 'Clear a rectangular block']], hintFn: c => c.stockType === 'rect' ? 'Clears the whole block, corners and all, down to the part.' : 'Loops follow the part all the way round, from the stock per side in to the wall. Nothing else is cleared.' }),
@@ -312,11 +313,12 @@ const SECTIONS = [
     { pick: true, show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) },
     F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
     { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.op === 'cone' ? 'Left on the wall by roughing, square to it' : c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside') },
+    F('coneRoughStep', 'Roughing step down per turn', 'in', '', { show: c => c.op === 'cone' && c.passes !== 'finish', hintFn: c => 'Blank = a quarter of the tool (' + f4(0.25 * Math.abs(num(c.toolD, 0.75))) + '). Each roughing pass spirals down the cone this far a turn, cutting a band the stepover wide.' }),
     F('coneStep', 'Finish step down per turn', 'in', '', { show: c => c.op === 'cone' && c.finish, hintFn: coneStepNote }),
     F('spring', 'Spring pass (repeat the finish pass)', '', '', { kind: 'chk', show: c => c.finish && c.op !== 'cone' }),
     F('link', 'Between loops', '', 'Stay down: feed across in the clear at depth. Lift: small lift and rapid.', { kind: 'seg', opts: [['depth', 'Stay at depth'], ['lift', 'Lift']], show: c => c.passes !== 'finish' && c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch') }),
     F('lift', 'Lift', 'in', '', { show: c => c.passes !== 'finish' && c.link === 'lift' && (c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch')) }),
-    F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: c => c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish'), hintFn: c => 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
+    F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: c => c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish'), hintFn: c => c.op === 'cone' ? 'The bore at the centre the roughing passes start from: it cuts Ø' + f4(num(c.helixD) + num(c.toolD)) + ', straight down at the helix ramp angle.' : 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
     { row: [F('ramp', 'Helix ramp angle', '°'), F('rampPct', 'Helix feed', '% of rough')], show: c => c.op === 'pocket' || c.slotEntry === 'helix' || c.op === 'custom' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish') },
     F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk' }),
     { note: () => 'Checked along the whole roughing toolpath by simulating the cut: where more of the cutter is in the material than the stepover gives (corners, narrow gaps, trochoid fronts), the feed drops to keep the chip the same.' },
@@ -1001,12 +1003,15 @@ function drawSection(cur) {
     pts.push([r + Rt, zTop]);
     return `<path d="M${pts.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}" fill="none" ${attr}/>`;
   };
-  (g.coneLevels || []).forEach(q => out.push(tool(q.r, q.z, 'stroke="var(--rough)" stroke-width="1.2" opacity=".75"')));
+  // each roughing pass: the surface it leaves, from Z0 down to where it stops; the last is the finish allowance
+  (g.conePasses || []).forEach((q, i, all) => out.push(`<line x1="${X(q.x0)}" y1="${Y(0)}" x2="${X(q.x1)}" y2="${Y(q.z1)}" stroke="var(--rough)" stroke-width="${i === all.length - 1 ? 1.8 : 1}" opacity="${i === all.length - 1 ? 1 : .55}"/>`));
+  if (g.coneCore) out.push(`<line x1="${X(g.coneCore)}" y1="${Y(0)}" x2="${X(g.coneCore)}" y2="${Y(-C.H)}" stroke="var(--entry)" stroke-width="1.2" stroke-dasharray="4 3"/>`);
   if (g.coneFin) { out.push(tool(g.coneFin.p0, g.coneFin.t0, 'stroke="var(--finish)" stroke-width="1.6"')); out.push(tool(g.coneFin.pE, g.coneFin.tE, 'stroke="var(--finish)" stroke-width="1.6"')); }
   if (cur && !isNaN(cur.x) && cur.z < zTop) out.push(tool(Math.hypot(cur.x - cx, cur.y - cy), cur.z, 'stroke="var(--red)" stroke-width="2"'));
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = out.join('');
-  $('sectTitle').textContent = 'Section through the centre: the tool at each roughing level' + (g.coneLevels && g.coneLevels.length ? ' (blue)' : '') + (g.coneFin ? ', the finish tool at the top and bottom of its spiral (green)' : '') + (cur ? ', the tool at the slider (red)' : '') + '.';
+  const np = (g.conePasses || []).length;
+  $('sectTitle').textContent = 'Section through the centre' + (np ? ': the surface each of the ' + np + ' roughing passes leaves (blue; the last, darker, is ' + f4(C.a) + ' off the wall: the finish allowance)' + (g.coneCore ? ', the helix bore (purple)' : '') : '') + (g.coneFin ? ', the finish tool at the top and bottom of its spiral (green)' : '') + (cur ? ', the tool at the slider (red)' : '') + '.';
 }
 // A click (or a typed point) on the preview with a drawing tool. p: the point (snapped or typed); raw: the unsnapped
 // point (the point an arc passes through); onFirst: on the shape's first point (closes it).

@@ -12507,11 +12507,13 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     stockType: 'even', stockX: '5', stockY: '4', stockW: '0.5',
     // circular pocket
     pocketD: '3', helixD: '0.375', ramp: '2',
-    // cone: inside (a tapered hole, helix in, spiral out level by level) or outside (a tapered boss, passes
-    // around it level by level), sized by its diameters at the top (Z0) and bottom, or by the top and the
+    // cone: inside (a tapered hole: a helix bore, then passes out) or outside (a tapered boss: passes in from
+    // the stock), every pass a spiral down the cone; sized by its diameters at the top (Z0) and bottom, or by the top and the
     // included angle; finished in one spiral down the wall on the tool's corner (coneCR: 0 flat end mill,
     // half the diameter a ball), coneStep down per turn
     coneSide: 'inside', coneTopD: '2', coneBy: 'dia', coneBotD: '1', coneAngle: '60', coneCR: '0', coneStep: '0.01',
+    // roughing passes' step down per turn: blank = a quarter of the tool
+    coneRoughStep: '',
     // the cone as an EIA/ISO macro: its numbers at the top, worked out on the control; ends with M99 (from a
     // Mazatrol SUB PRO) or M30 (on its own)
     macroEnd: 'M99',
@@ -12873,13 +12875,14 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
   // ---------------------------------------------------------------- cone
   // A cone about (cx, cy) from Z0 down to the depth: inside, a tapered hole that gets smaller toward the bottom;
   // outside, a tapered boss that gets bigger toward it. ta is the change in radius per unit of depth (the tangent
-  // of the angle from vertical). Roughing goes in levels shallow enough that the steps left on the wall stay
-  // under a quarter of the tool across, each level cut to the wall at its bottom plus the finish stock (taken
-  // square to the wall). The finish is one spiral down the wall on the tool's corner, then a flat turn on the
-  // floor. Where the corner (radius rc) touches the wall at height z, the tool's centre is rho(z) from the axis
-  // and its tip at tip(z): the corner's centre sits rc off the wall, square to it.
+  // of the angle from vertical). Where the tool's corner (radius rc) touches the wall at height z, the tool's centre
+  // is rho(z) from the axis and its tip at tip(z): the corner's centre sits rc off the wall, square to it.
+  // Roughing: inside, a helix bore at the centre, then passes from the inside out; outside, passes from the stock
+  // in. Every pass is a spiral down the cone, the stepover apart across, the last one the finish stock off the wall
+  // (rhoA); a pass stops where it would only cut air (inside, where the cone has narrowed to the bore; outside,
+  // where it has left the stock), and a pass that reaches the floor ends with a flat turn on it.
+  // The finish is one spiral down the wall on the corner, then a flat turn on the floor.
   // The cone macro (toMacro) works out the same moves on the control from the same numbers.
-  const CONE_STEP = 0.25;                                  // steps left on the wall by roughing, × the tool diameter
   function coneOf(c, K) {
     const inside = c.coneSide !== 'outside', H = K.depth, R = K.R, rT = Math.abs(num(c.coneTopD, 2)) / 2;
     let rB;
@@ -12887,110 +12890,121 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     else rB = Math.abs(num(c.coneBotD, 1)) / 2;
     const ta = H > 0 ? (inside ? rT - rB : rB - rT) / H : 0, sec = Math.sqrt(1 + ta * ta), cos = 1 / sec, sin = ta / sec;
     const rc = Math.min(Math.abs(num(c.coneCR, 0)), R), a = K.finStock, ah = a * sec, sg = inside ? -1 : 1;
-    const wall = z => inside ? rT + ta * z : rT - ta * z;
-    const levels = Math.max(K.levels, ta > 1e-9 ? Math.ceil(H * ta / (CONE_STEP * K.D) - 1e-9) : 1);
-    return { inside, H, R, rT, rB, ta, sec, cos, sin, rc, a, ah, wall, levels,
-      rho: z => wall(z) + sg * (rc * cos + R - rc), tip: z => z + rc * sin - rc,
+    const wall = z => inside ? rT + ta * z : rT - ta * z, rho = z => wall(z) + sg * (rc * cos + R - rc);
+    return { inside, H, R, rT, rB, ta, sec, cos, sin, rc, a, ah, wall, rho, rhoA: z => rho(z) + sg * ah, dr: inside ? ta : -ta,
+      tip: z => z + rc * sin - rc,
       zEnd: -H + rc * (1 - sin),                          // the corner's lowest touch, with the tip on the floor
       step: Math.max(0.0005, Math.abs(num(c.coneStep, 0.01))), half: Math.atan(ta) * 180 / Math.PI };
   }
-  // arcs a turn for the finish spiral: each arc runs between two points of the spiral about a centre near the
-  // axis; the fewest (of these) whose middle stays within 0.0001 of the spiral
-  function coneArcs(C) {
-    const D = -C.zEnd, N = Math.max(1, Math.ceil(D / C.step - 1e-9)), p = D / N;
-    const off = (m, z0) => {
-      const th = TAU / m, z1 = z0 - p / m, zm = (z0 + z1) / 2, S = [C.rho(z0), 0], E = [C.rho(z1) * Math.cos(th), C.rho(z1) * Math.sin(th)];
-      const Cc = arcCentre(S, E, [0, 0]), M = [C.rho(zm) * Math.cos(th / 2), C.rho(zm) * Math.sin(th / 2)];
-      return Math.abs(Math.hypot(M[0] - Cc[0], M[1] - Cc[1]) - Math.hypot(S[0] - Cc[0], S[1] - Cc[1]));
-    };
-    for (const m of [4, 6, 8, 12, 16, 24, 36]) if (Math.max(off(m, 0), off(m, C.zEnd + p / m)) < 1e-4) return m;
-    return 36;
+  // The roughing: the helix bore (inside), then each pass's radius at the top (r0), where it stops (zStop) and its
+  // turns (the roughing step down per turn, evened out over the pass); arcs a turn for them all. A pass cuts a band
+  // only the stepover wide, so only the bore keeps to the helix ramp angle.
+  function conePlan(c, K, C) {
+    const R = K.R, ramp = Math.min(30, Math.max(0.2, num(c.ramp, 2))) * Math.PI / 180, P = Math.abs(num(c.coneRoughStep, 0)) > 0 ? Math.abs(num(c.coneRoughStep)) : 0.25 * K.D;
+    let rh = 0, raMin = 0, rS = 0, total;
+    if (C.inside) {
+      raMin = C.rhoA(C.zEnd); rh = Math.abs(num(c.helixD, 0.5 * K.D)) / 2;
+      if (rh > raMin) rh = raMin;
+      if (rh < 0.01) rh = Math.min(raMin, 0.1 * K.D);
+      total = C.rhoA(0) - rh;
+    } else { rS = C.rB + Math.abs(num(c.stockW, 0)); total = rS + R - C.rhoA(0); }
+    const n = Math.max(0, Math.ceil(total / K.ae - 1e-6)), s = n ? total / n : 0, passes = [];
+    for (let k = 1; k <= n; k++) {
+      const r0 = C.rhoA(0) + (C.inside ? -1 : 1) * (n - k) * s;
+      let zStop = C.zEnd;
+      if (C.ta > 1e-12) zStop = Math.max(C.zEnd, C.inside ? (rh - r0) / C.ta : -(rS + R - r0) / C.ta);
+      passes.push({ r0, zStop, turns: Math.max(1, Math.ceil(-zStop / P - 1e-9)), floor: zStop <= C.zEnd + 1e-9 });
+    }
+    const m = spiralArcs(passes.map(q => [q.r0, q.zStop, -q.zStop / q.turns]), C.dr, 1e-4);
+    return { rh, raMin, rS, n, s, passes, m, ramp, drop: TAU * rh * Math.tan(ramp), P };
   }
+  // arcs a turn for spirals down a cone (each [r0, zStop, step a turn], the radius r0 + dr·z): each arc runs between
+  // two points of the spiral about the point nearest the axis on the square through its chord, with Z even along
+  // it; the fewest (of these) that stay within tol of where the spiral is at the same height, at both ends
+  function spiralArcs(list, dr, tol) {
+    const off = (m, r0, z0, p) => {
+      const r = z => r0 + dr * z, th = TAU / m, z1 = z0 - p / m, S = [r(z0), 0], E = [r(z1) * Math.cos(th), r(z1) * Math.sin(th)];
+      const Cc = arcCentre(S, E, [0, 0]), R0 = Math.hypot(S[0] - Cc[0], S[1] - Cc[1]), a0 = Math.atan2(S[1] - Cc[1], S[0] - Cc[0]);
+      let sw = Math.atan2(E[1] - Cc[1], E[0] - Cc[0]) - a0; while (sw <= 0) sw += TAU;
+      let worst = 0;
+      for (let k = 1; k < 20; k++) { const a = a0 + sw * k / 20; worst = Math.max(worst, Math.abs(Math.hypot(Cc[0] + R0 * Math.cos(a), Cc[1] + R0 * Math.sin(a)) - r(z0 + (z1 - z0) * k / 20))); }
+      return worst;
+    };
+    for (const m of [4, 6, 8, 12, 16, 24, 36, 48, 72]) if (list.every(([r0, zs, p]) => Math.max(off(m, r0, 0, p), off(m, r0, zs + p / m, p)) < tol)) return m;
+    return 72;
+  }
+  // the finish spiral's arcs a turn (0.0001)
+  function coneArcs(C) {
+    const D = -C.zEnd, N = Math.max(1, Math.ceil(D / C.step - 1e-9));
+    return spiralArcs([[C.rho(0), C.zEnd, D / N]], C.dr, 1e-4);
+  }
+  // ridges a corner (rc) leaves between passes s apart along a surface; a flat corner leaves the step × sine
+  const ridgeOf = (rc, s, flat) => rc > 0 && s / 2 < rc ? rc - Math.sqrt(rc * rc - s * s / 4) : flat;
   function genCone(c, K, B, W, G) {
     const C = coneOf(c, K), cx = num(c.cx), cy = num(c.cy), R = K.R, H = K.depth, f2 = v => fx(2 * v);
-    { const { wall, rho, tip, ...plain } = C; G.cone = plain; }          // numbers only: results cross from a worker
+    { const { wall, rho, rhoA, tip, ...plain } = C; G.cone = plain; }    // numbers only: results cross from a worker
     G.axis = [[cx, cy], [1, 0]];
     G.climbNote = C.inside ? 'Inside cone: climb is counter-clockwise with the spindle in M3.' : 'Outside cone: climb is clockwise with the spindle in M3.';
     G.part = { t: 'circle', cx, cy, r: Math.max(0, C.inside ? C.rT : C.rB), hole: C.inside };
     G.part2 = { t: 'circle', cx, cy, r: Math.max(0, C.inside ? C.rB : C.rT) };
-    G.coneLevels = [];                                    // for a section: each roughing level's Z and tool centre radius
+    G.conePasses = [];                                    // for a section: the surface each roughing pass leaves
     if (!(H > 0)) { W.push('Enter the depth of the cone.'); return; }
     if (!(C.rT > 0)) { W.push('Enter the diameter at the top of the cone.'); return; }
     if (C.inside && !(C.rB > 0)) { W.push('The cone comes to a point before the depth: at this angle it closes ' + fx(C.rT / C.ta) + ' down. Make it shallower or the angle smaller.'); return; }
     if (C.ta < -1e-9) { W.push(C.inside ? 'An inside cone gets smaller toward the bottom: make the bottom diameter smaller than the top. Wider at the bottom is an undercut, which an end mill cannot reach.' : 'An outside cone gets bigger toward the bottom: make the bottom diameter larger than the top.'); return; }
+    if (!(-C.zEnd > 0)) { W.push('The cone is too shallow for the tool\'s corner radius.'); return; }
     if (C.ta < 1e-9) G.info.push('The wall is straight (top and bottom the same): Round pocket or Profile does this faster.');
-    K.levels = C.levels; K.ap = H / C.levels; K.mrr = K.ae * K.ap * K.rough.feed; K.hpNeed = K.mrr * K.unitHp;
-    const zs = levelsZ(K), fr = K.rough.feed, ff = K.fin.feed, air = K.airFeed, Lead = Math.abs(num(c.leadR, 0.25));
+    const Pl = conePlan(c, K, C), fr = K.rough.feed, ff = K.fin.feed, air = K.airFeed, Lead = Math.abs(num(c.leadR, 0.25));
+    K.levels = 1; K.ap = Pl.passes.length ? Math.max(...Pl.passes.map(q => -q.zStop / q.turns)) : 0; K.mrr = K.ae * K.ap * fr; K.hpNeed = K.mrr * K.unitHp;
     G.info.push('Cone Ø' + f2(C.rT) + ' at Z0 to Ø' + f2(C.rB) + ' at Z' + fx(-H) + ': ' + fx(C.half) + '° a side (' + fx(2 * C.half) + '° included)');
-    if (c.rough) G.info.push(C.levels + ' roughing level' + (C.levels > 1 ? 's' : '') + ' of ' + fx(K.ap) + ', leaving steps up to ' + fx(C.ta * K.ap) + ' across on the wall for the finish');
-    if (!c.finish && C.ta > 1e-9) W.push('Rough only leaves steps up to ' + fx(C.ta * K.ap + C.ah) + ' across on the cone wall: the finish spiral is what makes it a cone.');
     if (C.inside) {
-      const ra = z => C.wall(z) - R - C.ah, raMin = ra(-H);
-      if (c.rough && !(raMin > 0.005)) { W.push('The bottom of the cone (Ø' + f2(C.rB) + ') is too small to rough with this tool: it needs more than the tool diameter plus twice the finish stock. Use a smaller tool, or make the cone wider at the bottom.'); return; }
+      if (c.rough && !(Pl.raMin > 0.005)) { W.push('The bottom of the cone (Ø' + f2(C.rB) + ') is too small to rough with this tool: it needs more than the tool diameter plus twice the finish stock. Use a smaller tool, or make the cone wider at the bottom.'); return; }
       if (c.finish && C.rho(C.zEnd) < 0) { W.push('The bottom of the cone (Ø' + f2(C.rB) + ') is too small for this tool to finish: use a smaller tool.'); return; }
-      if (c.rough) {
-        let rh = Math.abs(num(c.helixD, 0.5 * K.D)) / 2;
-        if (rh > raMin) { rh = raMin; W.push('Helix diameter cut to ' + fx(2 * rh) + ' to fit the bottom of the cone.'); }
-        if (rh < 0.01) { rh = Math.min(raMin, 0.1 * K.D); W.push('Helix diameter raised to ' + fx(2 * rh) + ': a helix needs some diameter.'); }
-        const ramp = Math.min(30, Math.max(0.2, num(c.ramp, 2))) * Math.PI / 180, drop = TAU * rh * Math.tan(ramp);
-        G.info.push('Helix Ø' + fx(2 * rh) + ' at ' + fx(ramp * 180 / Math.PI) + '° at each level: ' + fx(drop) + ' down per turn, then a spiral out to the wall');
-        B.sec('ROUGH', K.rough.rpm); start(B, K, cx + rh, cy);
-        let zTop = K.rapidZ;
-        zs.forEach((z, li) => {
-          B.note('LEVEL ' + (li + 1) + ' OF ' + zs.length + ' Z' + fx(z));
-          if (li) B.g1(cx + rh, cy, null, fr, 'link');
-          const turns = Math.max(1, Math.ceil((zTop - z) / drop - 1e-9));
-          B.turn(true, cx, cy, turns * TAU, z, K.helixFeed, 'entry');
-          B.turn(true, cx, cy, TAU, z, K.helixFeed, 'entry');
-          const Ra = ra(z), n = Math.max(0, Math.ceil((Ra - rh) / K.ae - 1e-6)), s = n ? (Ra - rh) / n : 0;
-          G.coneLevels.push({ z, r: Ra });
-          let r = rh;
-          for (let i = 0; i < n; i++) {
-            B.arc(true, cx - r, cy, cx, cy, z, fr, 'rough');
-            B.arc(true, cx + r + s, cy, cx + s / 2, cy, z, fr, 'rough');
-            r += s;
-          }
-          if (n) B.turn(true, cx, cy, TAU, z, fr, 'rough');
-          zTop = z;
-        });
-        // a corner radius leaves the floor uneven: ridges where the passes' flats do not meet, a peak in the middle
-        const raLast = ra(-H), nLast = Math.max(0, Math.ceil((raLast - rh) / K.ae - 1e-6)), flat = R - C.rc;
-        const gap = (nLast ? (raLast - rh) / nLast : 0) - 2 * flat, ridge = C.rc > 0 && gap > 0 ? C.rc - Math.sqrt(Math.max(0, C.rc * C.rc - gap * gap / 4)) : 0;
-        const peak = C.rc > 0 && rh > flat ? C.rc - Math.sqrt(Math.max(0, C.rc * C.rc - (rh - flat) * (rh - flat))) : 0;
-        if (ridge > 1e-4 || peak > 1e-4) G.info.push('The floor is left as roughed: with the corner radius it keeps ' + (ridge > 1e-4 ? 'ridges about ' + fx(ridge) + ' high between the passes' : '') + (ridge > 1e-4 && peak > 1e-4 ? ' and ' : '') + (peak > 1e-4 ? 'a peak about ' + fx(peak) + ' high in the middle' : '') + '. A flat end mill (or a corner radius under ' + fx(R - rh) + ') leaves it flat.');
-      }
+      if (c.rough && Math.abs(num(c.helixD, 0.5 * K.D)) / 2 > Pl.rh + 1e-9) W.push('Helix diameter cut to ' + fx(2 * Pl.rh) + ' to fit the bottom of the cone.');
     } else {
-      const rS = C.rB + Math.abs(num(c.stockW, 0)), A0 = rS + R, af = z => C.wall(z) + C.ah + R;
-      G.stock = { t: 'circle', cx, cy, r: rS };
-      if (A0 < af(-H) - 1e-9) W.push('The stock (Ø' + f2(rS) + ') is smaller than the base of the cone plus the finish stock.');
-      if (c.rough) {
-        const plan = zs.map(z => { const n = Math.max(0, Math.ceil((A0 - af(z)) / K.ae - 1e-6)); return { z, n, s: n ? (A0 - af(z)) / n : 0 }; });
-        let Lr = Math.max(0.01, Lead);
-        const need = Math.max(...plan.map(q => q.s), C.a) * 1.05;
-        if (Lr < need) { W.push('Lead radius raised to ' + fx(need) + ' so every loop starts in the clear (it must be more than the stepover).'); Lr = need; }
-        G.info.push('Passes around the cone from the stock (Ø' + f2(rS) + ') in: ' + plan.map(q => q.n).join(', ') + ' per level');
-        plan.forEach(q => { if (q.n) G.coneLevels.push({ z: q.z, r: A0 - q.n * q.s }); });
-        const last = plan[plan.length - 1], gap = last.s - 2 * (R - C.rc), ridge = C.rc > 0 && gap > 0 ? C.rc - Math.sqrt(Math.max(0, C.rc * C.rc - gap * gap / 4)) : 0;
-        if (ridge > 1e-4) G.info.push('The floor round the cone is left as roughed: with the corner radius it keeps ridges about ' + fx(ridge) + ' high between the passes. A flat end mill leaves it flat.');
-        B.sec('ROUGH', K.rough.rpm);
-        plan.forEach((q, li) => {
-          B.note('LEVEL ' + (li + 1) + ' OF ' + zs.length + ' Z' + fx(q.z));
-          for (let k = 1; k <= q.n; k++) {
-            const A = A0 - k * q.s, Cx = cx + A + Lr;
-            if (k === 1) { if (isNaN(B.pos().x)) start(B, K, Cx, cy + Lr); else hop(B, K, Cx, cy + Lr); B.g1(null, null, q.z, air, 'air'); }
-            else B.g1(Cx, cy + Lr, q.z, fr, 'link');
-            B.arc(true, cx + A, cy, Cx, cy, q.z, fr, 'entry');
-            B.turn(false, cx, cy, TAU, q.z, fr, 'rough');
-            B.arc(true, Cx, cy - Lr, Cx, cy, q.z, fr, 'entry');
-          }
-        });
+      G.stock = { t: 'circle', cx, cy, r: Pl.rS };
+      if (Pl.rS + R < C.rhoA(C.zEnd) - 1e-9) W.push('The stock (Ø' + f2(Pl.rS) + ') is smaller than the base of the cone plus the finish stock.');
+    }
+    // one spiral down the cone: the tool's centre r0 + dr·z from the corner touching at z = 0 down to zStop
+    const spiral = (r0, zStop, turns, m, ccw, f, k) => {
+      for (let j = 1, segs = turns * m; j <= segs; j++) {
+        const t = j / segs, z = zStop * t, th = (ccw ? 1 : -1) * TAU * turns * t, r = r0 + C.dr * z, P = B.pos();
+        const x = j === segs ? cx + r : cx + r * Math.cos(th), y = j === segs ? cy : cy + r * Math.sin(th), Cc = arcCentre([P.x, P.y], [x, y], [cx, cy]);
+        B.arc(ccw, x, y, Cc[0], Cc[1], C.tip(z), f, k);
       }
+    };
+    if (c.rough) {
+      const ps = Pl.passes, side = C.inside ? -1 : 1;
+      ps.forEach((q, i) => G.conePasses.push({ x0: C.wall(0) + side * (C.ah + (Pl.n - 1 - i) * Pl.s), x1: C.wall(q.zStop) + side * (C.ah + (Pl.n - 1 - i) * Pl.s), z1: q.zStop }));
+      if (C.inside) G.coneCore = Pl.rh + R;
+      const pMax = ps.length ? Math.max(...ps.map(q => -q.zStop / q.turns)) : 0;
+      G.info.push((C.inside ? 'A helix bore at the centre Ø' + fx(2 * Pl.rh) + ' (cuts Ø' + fx(2 * Pl.rh + K.D) + ') at ' + fx(Pl.ramp * 180 / Math.PI) + '°, ' + fx(Pl.drop) + ' down per turn, then ' : '') +
+        Pl.n + ' roughing pass' + (Pl.n === 1 ? '' : 'es') + (C.inside ? ' out' : ' in from the stock (Ø' + f2(Pl.rS) + ')') + ', ' + fx(Pl.s) + ' apart, each a spiral down the cone (up to ' + fx(pMax) + ' down per turn, ' + Pl.m + ' arcs a turn)' +
+        (C.a > 0 ? '; the last leaves the finish stock, ' + fx(C.a) + ', on the wall' : '; the last cuts the wall to size'));
+      if (!c.finish && C.ta > 1e-9) { const pl = ps.length ? -ps[ps.length - 1].zStop / ps[ps.length - 1].turns : 0; W.push('Rough only leaves ridges about ' + fx(ridgeOf(C.rc, pl * C.sec, pl * C.sin)) + ' high on the cone wall (the roughing step down × the sine of the angle with a flat corner): the finish spiral is what makes it smooth.'); }
+      // a corner radius leaves the floor uneven: ridges where the passes' flats do not meet, a peak in the middle
+      const flat = R - C.rc, gap = Pl.s - 2 * flat, ridge = C.rc > 0 && gap > 0 ? ridgeOf(C.rc, gap, 0) : 0;
+      const peak = C.inside && C.rc > 0 && Pl.rh > flat ? C.rc - Math.sqrt(Math.max(0, C.rc * C.rc - (Pl.rh - flat) * (Pl.rh - flat))) : 0;
+      if (ridge > 1e-4 || peak > 1e-4) G.info.push('The floor' + (C.inside ? '' : ' round the cone') + ' is left as roughed: with the corner radius it keeps ' + (ridge > 1e-4 ? 'ridges about ' + fx(ridge) + ' high between the passes' : '') + (ridge > 1e-4 && peak > 1e-4 ? ' and ' : '') + (peak > 1e-4 ? 'a peak about ' + fx(peak) + ' high in the middle' : '') + '. A flat end mill leaves it flat.');
+      B.sec('ROUGH', K.rough.rpm);
+      if (C.inside) {
+        start(B, K, cx + Pl.rh, cy);
+        B.note('HELIX BORE');
+        B.turn(true, cx, cy, Math.max(1, Math.ceil((K.rapidZ + H) / Pl.drop - 1e-9)) * TAU, -H, K.helixFeed, 'entry');
+        B.turn(true, cx, cy, TAU, -H, K.helixFeed, 'entry');
+      }
+      ps.forEach((q, i) => {
+        B.note('PASS ' + (i + 1) + ' OF ' + ps.length);
+        if (isNaN(B.pos().x)) start(B, K, cx + q.r0, cy); else hop(B, K, cx + q.r0, cy);
+        B.g1(null, null, C.tip(0), air, 'air');
+        spiral(q.r0, q.zStop, q.turns, Pl.m, C.inside, fr, 'rough');
+        if (q.floor) B.turn(C.inside, cx, cy, TAU, C.tip(q.zStop), fr, 'rough');
+      });
     }
     if (c.finish) {
       const p0 = C.rho(0), t0 = C.tip(0), D = -C.zEnd, pE = C.rho(C.zEnd), tE = C.tip(C.zEnd);
-      if (!(D > 0)) { W.push('The cone is too shallow for the tool\'s corner radius to finish it.'); B.g0(null, null, K.safeZ); return; }
       const N = Math.max(1, Math.ceil(D / C.step - 1e-9)), m = coneArcs(C), ccw = C.inside;
-      const sm = C.step * C.sec, scallop = C.rc > 0 && sm / 2 < C.rc ? C.rc - Math.sqrt(C.rc * C.rc - sm * sm / 4) : D / N * C.sin;
+      const scallop = ridgeOf(C.rc, C.step * C.sec, D / N * C.sin);
       G.info.push('Finish: one spiral down the wall, ' + N + ' turn' + (N > 1 ? 's' : '') + ' of ' + fx(D / N) + ' (' + m + ' arcs a turn) on the tool\'s ' + (C.rc > 0 ? 'corner radius ' + fx(C.rc) : 'corner') + ', ridges about ' + fx(scallop) + ' high' + (C.rc > 0 ? '' : ': a corner radius or a ball leaves less') + '. Then a flat turn on the floor.');
       B.sec('FINISH', K.fin.rpm);
       G.coneFin = { p0, t0, pE, tE, turns: N };
@@ -13001,16 +13015,12 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
         B.g1(cx + p0 - Lf, cy - Lf, t0, ff, 'link');
         B.arc(true, cx + p0, cy, cx + p0 - Lf, cy, t0, ff, 'finish');
       } else {
-        const Lf = Math.max(Lead, (c.rough ? C.wall(zs[0]) - C.rT : 0) + C.ah + C.rc + 0.02), Cx = cx + p0 + Lf;
+        const Lf = Math.max(Lead, C.ah + C.rc + 0.02), Cx = cx + p0 + Lf;
         if (isNaN(B.pos().x)) start(B, K, Cx, cy + Lf); else hop(B, K, Cx, cy + Lf);
         B.g1(null, null, t0, air, 'air');
         B.arc(true, cx + p0, cy, Cx, cy, t0, ff, 'finish');
       }
-      for (let j = 1, segs = N * m; j <= segs; j++) {
-        const t = j / segs, z = -D * t, th = (ccw ? 1 : -1) * TAU * N * t, r = C.rho(z), P = B.pos();
-        const x = j === segs ? cx + r : cx + r * Math.cos(th), y = j === segs ? cy : cy + r * Math.sin(th), Cc = arcCentre([P.x, P.y], [x, y], [cx, cy]);
-        B.arc(ccw, x, y, Cc[0], Cc[1], C.tip(z), ff, 'finish');
-      }
+      spiral(p0, C.zEnd, N, m, ccw, ff, 'finish');
       B.turn(ccw, cx, cy, TAU, tE, ff, 'finish');
       if (C.inside) { const Lf = Math.min(Lead, pE / 2); if (Lf > 0.005) B.arc(true, cx + pE - Lf, cy + Lf, cx + pE - Lf, cy, tE, ff, 'finish'); }
       else { const Lf = Math.max(Lead, C.a * 1.05, 0.01); B.arc(true, cx + pE + Lf, cy - Lf, cx + pE + Lf, cy, tE, ff, 'finish'); }
@@ -14118,37 +14128,36 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
   }
 
   // ---------------------------------------------------------------- the cone as a macro
-  // An EIA/ISO program that works the cone out on the control: its numbers in common variables #100-#128 at the
-  // top, then the same moves as genCone (roughing levels, the finish spiral, the floor turn and the leads), worked
-  // out in WHILE loops. Edit a number at the machine and the program follows it; the toolpath here does not change.
-  // Climb or conventional is fixed when it is written (G2/G3 and the sign on Y, #128).
+  // An EIA/ISO program that works the cone out on the control: its numbers in common variables #100-#129 at the
+  // top, then the same moves as genCone (the helix bore, the roughing passes, the finish spiral, the floor turns
+  // and the leads), worked out in WHILE loops. Edit a number at the machine and the program follows it; the
+  // toolpath here does not change. Climb or conventional is fixed when it is written (G2/G3 and the sign on Y, #128).
   function toMacro(r) {
     const c = r.cfg, K = r.K, C = r.geo.cone && coneOf(c, K);
-    if (c.op !== 'cone' || !C || r.warn.some(w => /^Enter |too small|comes to a point|gets (smaller|bigger) toward/.test(w))) return null;
-    const conv = c.dir === 'conv', G3 = conv ? 'G2' : 'G3', G2 = conv ? 'G3' : 'G2', v = x => numFmt(6)(+(+x).toFixed(6));
-    const L = [], add = s => L.push(s);
-    const cool = String(c.cool || '').trim().toUpperCase();
-    const lift = K.retractZ, rh = (() => { const raMin = C.wall(-C.H) - C.R - C.ah; let h = Math.abs(num(c.helixD, 0.5 * K.D)) / 2; if (h > raMin) h = raMin; if (h < 0.01) h = Math.min(raMin, 0.1 * K.D); return h; })();
-    const Mm = coneArcs(C), end = c.macroEnd === 'M30' ? 'M30' : 'M99';
+    if (c.op !== 'cone' || !C || r.warn.some(w => /^Enter |too small|comes to a point|gets (smaller|bigger) toward|too shallow/.test(w))) return null;
+    const Pl = conePlan(c, K, C), conv = c.dir === 'conv', G3 = conv ? 'G2' : 'G3', G2 = conv ? 'G3' : 'G2', v = x => numFmt(6)(+(+x).toFixed(6));
+    const L = [], add = s => L.push(s), cool = String(c.cool || '').trim().toUpperCase(), end = c.macroEnd === 'M30' ? 'M30' : 'M99';
+    const IN = C.inside, gCut = IN ? G3 : G2;          // climb: inside counter-clockwise, outside clockwise
     add('%');
     add('O' + String(Math.max(0, Math.round(num(c.prog, 1000)))).padStart(4, '0') + ' (' + clean(fileBase(c)).slice(0, 40) + ' MACRO)');
     describeLines(r).forEach(s => add('(' + s + ')'));
     add('(THE NUMBERS BELOW DRIVE THE PROGRAM: CHANGE ONE AND THE CUT FOLLOWS)');
-    add('(IT USES COMMON VARIABLES #100-#173)');
+    add('(IT USES COMMON VARIABLES #100-#179)');
     add(end === 'M99' ? '(ENDS WITH M99 TO RUN FROM THE MAZATROL SUB PRO: M30 TO RUN IT ON ITS OWN)' : '(ENDS WITH M30: M99 TO RUN IT FROM A MAZATROL SUB PRO)');
     const set = (n, val, what) => add('#' + n + '=' + v(val) + ' (' + what + ')');
     set(100, num(c.cx), 'CENTER X'); set(101, num(c.cy), 'CENTER Y');
     set(102, 2 * C.rT, 'DIAMETER AT THE TOP Z0'); set(103, 2 * C.rB, 'DIAMETER AT THE BOTTOM'); set(104, C.H, 'DEPTH');
     set(105, K.D, 'TOOL DIAMETER'); set(106, C.rc, 'TOOL CORNER RADIUS 0 FLAT HALF THE DIAMETER BALL');
     set(107, C.a, 'FINISH STOCK SQUARE TO THE WALL'); set(108, C.step, 'FINISH STEP DOWN PER TURN'); set(109, K.ae, 'ROUGHING STEPOVER');
-    set(110, Math.abs(num(c.apMax, 0)), 'MAX DEPTH PER LEVEL 0 ONE LEVEL');
-    if (C.inside) { set(111, 2 * rh, 'HELIX DIAMETER TOOL CENTRE'); set(112, Math.min(30, Math.max(0.2, num(c.ramp, 2))), 'HELIX RAMP DEGREES'); }
+    set(110, Pl.P, 'ROUGHING STEP DOWN PER TURN');
+    if (IN) { set(111, 2 * Pl.rh, 'HELIX BORE DIAMETER TOOL CENTRE'); set(112, Pl.ramp * 180 / Math.PI, 'HELIX RAMP DEGREES'); }
     else set(113, Math.abs(num(c.stockW, 0)), 'STOCK PER SIDE AT THE BASE');
     set(114, Math.abs(num(c.leadR, 0.25)), 'LEAD-IN RADIUS');
-    set(115, Mm, 'ARCS A TURN IN THE FINISH SPIRAL'); set(116, c.rough ? 1 : 0, 'ROUGH 1 YES 0 NO'); set(117, c.finish ? 1 : 0, 'FINISH 1 YES 0 NO');
+    set(115, coneArcs(C), 'ARCS A TURN IN THE FINISH SPIRAL'); set(129, Pl.m, 'ARCS A TURN IN THE ROUGHING PASSES');
+    set(116, c.rough ? 1 : 0, 'ROUGH 1 YES 0 NO'); set(117, c.finish ? 1 : 0, 'FINISH 1 YES 0 NO');
     set(118, K.rough.feed, 'ROUGHING FEED'); set(119, K.fin.feed, 'FINISH FEED'); set(120, K.helixFeed, 'HELIX FEED'); set(121, K.airFeed, 'FEED IN THE CLEAR');
     set(122, K.rough.rpm, 'ROUGHING RPM'); set(123, K.fin.rpm, 'FINISH RPM');
-    set(124, K.rapidZ, 'RAPID PLANE'); set(125, K.safeZ, 'CLEARANCE PLANE'); set(126, lift, 'LIFT TO BETWEEN CUTS');
+    set(124, K.rapidZ, 'RAPID PLANE'); set(125, K.safeZ, 'CLEARANCE PLANE'); set(126, K.retractZ, 'LIFT TO BETWEEN CUTS');
     add('#127=0 (SET WHEN THE TOOL HAS COME DOWN)');
     set(128, conv ? -1 : 1, 'Y SIGN 1 CLIMB -1 CONVENTIONAL');
     add('(WORKED OUT FROM THEM)');
@@ -14156,30 +14165,21 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     add('#131=#106');
     add('IF[#131LE#130]GOTO1');
     add('#131=#130');
-    add('N1 #132=' + (C.inside ? '[#102-#103]' : '[#103-#102]') + '/2/#104 (TAPER ON THE RADIUS PER UNIT OF DEPTH)');
+    add('N1 #132=' + (IN ? '[#102-#103]' : '[#103-#102]') + '/2/#104 (TAPER ON THE RADIUS PER UNIT OF DEPTH)');
     add('IF[#132GE0]GOTO2');
-    add('#3000=1 (' + (C.inside ? 'THE BOTTOM MUST BE SMALLER THAN THE TOP' : 'THE BOTTOM MUST BE LARGER THAN THE TOP') + ')');
+    add('#3000=1 (' + (IN ? 'THE BOTTOM MUST BE SMALLER THAN THE TOP' : 'THE BOTTOM MUST BE LARGER THAN THE TOP') + ')');
     add('N2 #133=SQRT[1+#132*#132]');
     add('#134=1/#133 (COSINE)');
     add('#135=#132/#133 (SINE)');
     add('#136=#107*#133 (FINISH STOCK ACROSS)');
     add('#137=#102/2 (TOP RADIUS)');
-    add('#138=1 (LEVELS)');
-    add('IF[#110LE0]GOTO3');
-    add('IF[#110GE[#104-.000000001]]GOTO3');
-    add('#138=FUP[#104/#110-.000000001]');
-    add('N3 #129=FUP[#104*#132/[' + v(CONE_STEP) + '*#105]-.000000001]');
-    add('IF[#132LE.000000001]GOTO4');
-    add('IF[#129LE#138]GOTO4');
-    add('#138=#129');
-    add('N4 #139=#131*#134+#130-#131 (TOOL CENTRE TO THE WALL ACROSS)');
+    add('#139=#131*#134+#130-#131 (TOOL CENTRE TO THE WALL ACROSS)');
     add('#140=#131*[1-#135]-#104 (LOWEST TOUCH OF THE CORNER)');
     add('#141=#131*#135-#131 (TIP BELOW THE TOUCH)');
     add('G20 G17 G40 G49 G80 G90 G94');
     if (c.toolChange) add('T' + K.toolNo + ' M6');
     add(String(c.wcs || 'G54').toUpperCase().trim());
-    // the wall at height #146 (or any z), moves written through #160-#164
-    const wallAt = z => '#137' + (C.inside ? '+' : '-') + '#132*' + z;
+    const wallAt = z => '#137' + (IN ? '+' : '-') + '#132*' + z, toWall = IN ? '-' : '+';   // tool centre from the wall: inward inside, outward outside
     const go = (g, f) => add(g + ' X#160 Y#161 Z#162' + (g === 'G0' ? '' : g === 'G1' ? ' F' + f : ' I#163 J#164 F' + f));
     const startOrHop = (x, y, lbl) => {
       add('#160=' + x); add('#161=' + y);
@@ -14195,14 +14195,40 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
       add('G0 Z#124');
       add('N' + (lbl + 1) + ' (DOWN)');
     };
+    // a whole turn about the axis at radius rv and Z#162, from (#100 + rv, #101): two halves
+    const flatTurn = (g, rv, f) => { add('#160=#100-' + rv); add('#161=#101'); add('#163=0-' + rv); add('#164=0'); go(g, f); add('#160=#100+' + rv); add('#163=' + rv); go(g, f); };
+    // a spiral down the cone from where the tool is (#160, #161: the tool centre r0 from the axis, the corner touching at
+    // Z0) to the touch at zs: turns × m arcs, each about the point nearest the axis on the square through its chord
+    const spiral = (dN, r0, zs, turns, m, g, f, lbl) => {
+      add('#166=' + turns + '*' + m + ' (ARCS)');
+      add('#165=1');
+      add('WHILE[#165LE#166]DO' + dN);
+      add('#167=#165/#166');
+      add('#174=' + zs + '*#167 (WHERE THE CORNER TOUCHES)');
+      add('#175=' + r0 + (IN ? '+' : '-') + '#132*#174');
+      add('#176=' + (IN ? '' : '0-') + '360*' + turns + '*#167');
+      add('#168=#160'); add('#169=#161');
+      add('#160=#100+#175*COS[#176]'); add('#161=#101+#128*#175*SIN[#176]');
+      add('IF[#165LT#166]GOTO' + lbl);
+      add('#160=#100+#175'); add('#161=#101');
+      add('N' + lbl + ' #170=SQRT[[#160-#168]*[#160-#168]+[#161-#169]*[#161-#169]] (CHORD)');
+      add('#171=[#169-#161]/#170'); add('#172=[#160-#168]/#170');
+      add('#173=[#100-[#160+#168]/2]*#171+[#101-[#161+#169]/2]*#172');
+      add('#163=[#160+#168]/2+#173*#171-#168'); add('#164=[#161+#169]/2+#173*#172-#169');
+      add('#162=#174+#141');
+      go(g, f);
+      add('#165=#165+1');
+      add('END' + dN);
+    };
     add('(===== ROUGHING =====)');
     add('IF[#116EQ0]GOTO100');
     add('S#122 M3');
-    if (C.inside) {
-      add('#142=' + wallAt('[0-#104]') + '-#130-#136 (SMALLEST POCKET RADIUS, TOOL CENTRE)');
+    add('#145=#137' + toWall + '#139' + toWall + '#136 (LAST PASS AT THE TOP, TOOL CENTRE)');
+    if (IN) {
+      add('#142=' + wallAt('#140') + '-#139-#136 (LAST PASS AT THE BOTTOM)');
       add('IF[#142GT.005]GOTO10');
       add('#3000=2 (THE BOTTOM OF THE CONE IS TOO SMALL FOR THE TOOL)');
-      add('N10 #143=#111/2');
+      add('N10 #143=#111/2 (HELIX BORE RADIUS)');
       add('IF[#143LE#142]GOTO11');
       add('#143=#142');
       add('N11 IF[#143GE.01]GOTO12');
@@ -14210,161 +14236,97 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
       add('IF[#143LE#142]GOTO12');
       add('#143=#142');
       add('N12 #144=6.283185307179586*#143*TAN[#112] (HELIX DOWN PER TURN)');
+      add('(HELIX BORE)');
       startOrHop('#100+#143', '#101', 13);
-      add('#147=#124 (TOP OF THE HELIX)');
-      add('#145=1');
-      add('WHILE[#145LE#138]DO1');
-      add('#146=0-#104*#145/#138 (LEVEL Z)');
-      add('IF[#145EQ1]GOTO20');
-      add('G1 X[#100+#143] F#118');
-      add('N20 #153=FUP[[#147-#146]/#144-.000000001] (HELIX TURNS)');
-      add('IF[#153GE1]GOTO21');
+      add('#153=FUP[[#124+#104]/#144-.000000001] (TURNS)');
+      add('IF[#153GE1]GOTO15');
       add('#153=1');
-      add('N21 #152=1');
-      add('WHILE[#152LE2*#153]DO2');
-      add('#154=1-2*[#152-FIX[#152/2]*2] (-1 ON THE FAR SIDE)');
-      add('#160=#100+#154*#143'); add('#161=#101'); add('#162=#147+[#146-#147]*#152/[2*#153]'); add('#163=#154*#143'); add('#164=0');
+      add('N15 #154=1');
+      add('WHILE[#154LE2*#153]DO1');
+      add('#155=1-2*[#154-FIX[#154/2]*2] (-1 ON THE FAR SIDE)');
+      add('#160=#100+#155*#143'); add('#161=#101'); add('#162=#124+[0-#104-#124]*#154/[2*#153]'); add('#163=#155*#143'); add('#164=0');
       go(G3, '#120');
-      add('#152=#152+1');
-      add('END2');
-      add('#160=#100-#143'); add('#162=#146'); add('#163=0-#143'); go(G3, '#120');
-      add('#160=#100+#143'); add('#163=#143'); go(G3, '#120');
-      add('#148=' + wallAt('#146') + '-#130-#136 (POCKET RADIUS AT THIS LEVEL)');
-      add('#149=FUP[[#148-#143]/#109-.000001] (SPIRAL TURNS)');
-      add('IF[#149GE0]GOTO22');
-      add('#149=0');
-      add('N22 #150=0');
-      add('IF[#149EQ0]GOTO23');
-      add('#150=[#148-#143]/#149');
-      add('N23 #151=#143');
-      add('#152=1');
-      add('WHILE[#152LE#149]DO2');
-      add('#160=#100-#151'); add('#163=0-#151'); go(G3, '#118');
-      add('#160=#100+#151+#150'); add('#163=#151+#150/2'); go(G3, '#118');
-      add('#151=#151+#150');
-      add('#152=#152+1');
-      add('END2');
-      add('IF[#149EQ0]GOTO24');
-      add('#160=#100-#148'); add('#163=0-#148'); go(G3, '#118');
-      add('#160=#100+#148'); add('#163=#148'); go(G3, '#118');
-      add('N24 #147=#146');
-      add('#145=#145+1');
+      add('#154=#154+1');
       add('END1');
+      add('#162=0-#104'); flatTurn(G3, '#143', '#120');
+      add('#146=#145-#143 (ACROSS FROM THE BORE TO THE LAST PASS)');
     } else {
       add('#142=#103/2+#113+#130 (STOCK, TOOL CENTRE)');
-      add('#143=#114 (LEAD RADIUS)');
-      add('IF[#143GE.01]GOTO10');
-      add('#143=.01');
-      add('N10 #154=#107 (LARGEST STEP: STOCK OR STEPOVER)');
-      add('#145=1');
-      add('WHILE[#145LE#138]DO1');
-      add('#146=0-#104*#145/#138');
-      add('#148=#142-[' + wallAt('#146') + '+#136+#130]');
-      add('#149=FUP[#148/#109-.000001]');
-      add('IF[#149LE0]GOTO11');
-      add('IF[#148/#149LE#154]GOTO11');
-      add('#154=#148/#149');
-      add('N11 #145=#145+1');
-      add('END1');
-      add('IF[#143GE#154*1.05]GOTO12');
-      add('#143=#154*1.05');
-      add('N12 #145=1');
-      add('WHILE[#145LE#138]DO1');
-      add('#146=0-#104*#145/#138 (LEVEL Z)');
-      add('#148=#142-[' + wallAt('#146') + '+#136+#130]');
-      add('#149=FUP[#148/#109-.000001] (PASSES AT THIS LEVEL)');
-      add('IF[#149GT0]GOTO13');
-      add('#149=0');
-      add('N13 #150=0');
-      add('IF[#149EQ0]GOTO14');
-      add('#150=#148/#149');
-      add('N14 #152=1');
-      add('WHILE[#152LE#149]DO2');
-      add('#151=#142-#152*#150 (PASS RADIUS)');
-      add('#162=#146');
-      add('IF[#152GT1]GOTO15');
-      startOrHop('#100+#151+#143', '#101+#128*#143', 16);
-      add('G1 Z#146 F#121');
-      add('GOTO18');
-      add('N15 #160=#100+#151+#143'); add('#161=#101+#128*#143'); go('G1', '#118');
-      add('N18 #160=#100+#151'); add('#161=#101'); add('#163=0'); add('#164=0-#128*#143'); go(G3, '#118');
-      add('#160=#100-#151'); add('#163=0-#151'); add('#164=0'); go(G2, '#118');
-      add('#160=#100+#151'); add('#163=#151'); go(G2, '#118');
-      add('#160=#100+#151+#143'); add('#161=#101-#128*#143'); add('#163=#143'); go(G3, '#118');
-      add('#152=#152+1');
-      add('END2');
-      add('#145=#145+1');
-      add('END1');
+      add('#146=#142-#145 (ACROSS FROM THE STOCK TO THE LAST PASS)');
     }
+    add('#147=FUP[#146/#109-.000001] (PASSES)');
+    add('IF[#147GE0]GOTO20');
+    add('#147=0');
+    add('N20 #148=0');
+    add('IF[#147EQ0]GOTO21');
+    add('#148=#146/#147 (APART)');
+    add('N21 #149=1');
+    add('WHILE[#149LE#147]DO1');
+    add('#150=#145' + (IN ? '-' : '+') + '[#147-#149]*#148 (THIS PASS AT THE TOP)');
+    add('#151=#140 (WHERE IT STOPS: THE FLOOR, OR WHERE IT WOULD CUT ONLY AIR)');
+    add('IF[#132LE.000000000001]GOTO22');
+    add('#152=' + (IN ? '[#143-#150]/#132' : '0-[#142-#150]/#132'));
+    add('IF[#152LE#151]GOTO22');
+    add('#151=#152');
+    add('N22 #153=FUP[[0-#151]/#110-.000000001] (TURNS)');
+    add('IF[#153GE1]GOTO23');
+    add('#153=1');
+    add('N23 (PASS)');
+    startOrHop('#100+#150', '#101', 24);
+    add('#162=#141'); go('G1', '#121');
+    spiral(2, '#150', '#151', '#153', '#129', gCut, '#118', 26);
+    add('IF[#151GT[#140+.000000001]]GOTO27');
+    add('#175=#150' + (IN ? '+' : '-') + '#132*#151');
+    add('#162=#151+#141'); flatTurn(gCut, '#175', '#118');
+    add('N27 #149=#149+1');
+    add('END1');
     add('N100 (===== FINISH PASS =====)');
     add('IF[#117EQ0]GOTO200');
     add('S#123 M3');
-    add('#155=#137' + (C.inside ? '-' : '+') + '#139 (TOOL CENTRE AT THE TOP)');
-    add('#156=' + wallAt('#140') + (C.inside ? '-' : '+') + '#139 (TOOL CENTRE AT THE BOTTOM)');
-    add('#157=#140+#141 (TIP AT THE BOTTOM)');
-    if (C.inside) {
-      add('#158=#114 (LEAD RADIUS)');
-      add('IF[#158LE#155/2]GOTO101');
-      add('#158=#155/2');
-      add('N101 IF[#158GE#107*1.05]GOTO102');
-      add('#158=#107*1.05');
+    add('#156=#137' + toWall + '#139 (TOOL CENTRE AT THE TOP)');
+    add('#157=' + wallAt('#140') + toWall + '#139 (TOOL CENTRE AT THE BOTTOM)');
+    add('#158=#140+#141 (TIP AT THE BOTTOM)');
+    if (IN) {
+      add('#177=#114 (LEAD RADIUS)');
+      add('IF[#177LE#156/2]GOTO101');
+      add('#177=#156/2');
+      add('N101 IF[#177GE#107*1.05]GOTO102');
+      add('#177=#107*1.05');
       add('N102 (LEAD IN)');
       startOrHop('#100', '#101', 120);
       add('G1 Z#141 F#121');
-      add('#160=#100+#155-#158'); add('#161=#101-#128*#158'); add('#162=#141'); go('G1', '#119');
-      add('#160=#100+#155'); add('#161=#101'); add('#163=0'); add('#164=#128*#158'); go(G3, '#119');
+      add('#160=#100+#156-#177'); add('#161=#101-#128*#177'); add('#162=#141'); go('G1', '#119');
+      add('#160=#100+#156'); add('#161=#101'); add('#163=0'); add('#164=#128*#177'); go(G3, '#119');
     } else {
-      add('#158=#136+#131+.02 (LEAD RADIUS)');
-      add('IF[#116EQ0]GOTO101');
-      add('#158=#158+#132*#104/#138');
-      add('N101 IF[#158GE#114]GOTO102');
-      add('#158=#114');
+      add('#177=#136+#131+.02 (LEAD RADIUS)');
+      add('IF[#177GE#114]GOTO102');
+      add('#177=#114');
       add('N102 (LEAD IN)');
-      startOrHop('#100+#155+#158', '#101+#128*#158', 120);
+      startOrHop('#100+#156+#177', '#101+#128*#177', 120);
       add('G1 Z#141 F#121');
-      add('#160=#100+#155'); add('#161=#101'); add('#162=#141'); add('#163=0'); add('#164=0-#128*#158'); go(G3, '#119');
+      add('#160=#100+#156'); add('#161=#101'); add('#162=#141'); add('#163=0'); add('#164=0-#128*#177'); go(G3, '#119');
     }
-    add('#165=0-#140 (DEPTH OF THE SPIRAL)');
-    add('#166=FUP[#165/#108-.000000001] (TURNS)');
-    add('IF[#166GE1]GOTO104');
-    add('#166=1');
-    add('N104 #167=#166*#115 (ARCS)');
-    add('#152=1');
-    add('WHILE[#152LE#167]DO1');
-    add('#159=#152/#167');
-    add('#146=0-#165*#159 (WHERE THE CORNER TOUCHES)');
-    add('#151=' + wallAt('#146') + (C.inside ? '-' : '+') + '#139');
-    add('#154=' + (C.inside ? '' : '0-') + '360*#166*#159');
-    add('#168=#160'); add('#169=#161');
-    add('#160=#100+#151*COS[#154]'); add('#161=#101+#128*#151*SIN[#154]');
-    add('IF[#152LT#167]GOTO105');
-    add('#160=#100+#151'); add('#161=#101');
-    // the arc's centre: on the square through the middle of the chord, nearest the axis
-    add('N105 #170=SQRT[[#160-#168]*[#160-#168]+[#161-#169]*[#161-#169]] (CHORD)');
-    add('#171=[#169-#161]/#170'); add('#172=[#160-#168]/#170');
-    add('#173=[#100-[#160+#168]/2]*#171+[#101-[#161+#169]/2]*#172');
-    add('#163=[#160+#168]/2+#173*#171-#168'); add('#164=[#161+#169]/2+#173*#172-#169');
-    add('#162=#146+#141');
-    go(C.inside ? G3 : G2, '#119');
-    add('#152=#152+1');
-    add('END1');
+    add('#179=FUP[[0-#140]/#108-.000000001] (TURNS)');
+    add('IF[#179GE1]GOTO104');
+    add('#179=1');
+    add('N104 (THE SPIRAL)');
+    spiral(1, '#156', '#140', '#179', '#115', gCut, '#119', 105);
     add('(FLAT TURN ON THE FLOOR)');
-    add('#160=#100-#156'); add('#161=#101'); add('#162=#157'); add('#163=0-#156'); add('#164=0'); go(C.inside ? G3 : G2, '#119');
-    add('#160=#100+#156'); add('#163=#156'); go(C.inside ? G3 : G2, '#119');
-    if (C.inside) {
-      add('#158=#114 (LEAD OUT)');
-      add('IF[#158LE#156/2]GOTO106');
-      add('#158=#156/2');
-      add('N106 IF[#158LE.005]GOTO107');
-      add('#160=#100+#156-#158'); add('#161=#101+#128*#158'); add('#163=0-#158'); add('#164=0'); go(G3, '#119');
+    add('#162=#158'); flatTurn(gCut, '#157', '#119');
+    if (IN) {
+      add('#177=#114 (LEAD OUT)');
+      add('IF[#177LE#157/2]GOTO106');
+      add('#177=#157/2');
+      add('N106 IF[#177LE.005]GOTO107');
+      add('#160=#100+#157-#177'); add('#161=#101+#128*#177'); add('#163=0-#177'); add('#164=0'); go(G3, '#119');
       add('N107 (OFF THE WALL)');
     } else {
-      add('#158=#114 (LEAD OUT)');
-      add('IF[#158GE#107*1.05]GOTO106');
-      add('#158=#107*1.05');
-      add('N106 IF[#158GE.01]GOTO107');
-      add('#158=.01');
-      add('N107 #160=#100+#156+#158'); add('#161=#101-#128*#158'); add('#163=#158'); add('#164=0'); go(G3, '#119');
+      add('#177=#114 (LEAD OUT)');
+      add('IF[#177GE#107*1.05]GOTO106');
+      add('#177=#107*1.05');
+      add('N106 IF[#177GE.01]GOTO107');
+      add('#177=.01');
+      add('N107 #160=#100+#157+#177'); add('#161=#101-#128*#177'); add('#163=#177'); add('#164=0'); go(G3, '#119');
     }
     add('N200 G0 Z#125');
     if (cool) add('M9');
@@ -14492,7 +14454,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     return c;
   }
 
-  const api = { toMacro, toMazatrolSub, coneOf, COATINGS, matNumbers, moveOrigin, openSettings, passes, CUSTOM_OPS, DEFAULTS, MATERIALS, OPS, calc, rctf, generate, toGcode, toMazatrol, settingsLines, readSettings, fileBase, mazName, arcSweep, describeLines };
+  const api = { toMacro, toMazatrolSub, coneOf, conePlan, COATINGS, matNumbers, moveOrigin, openSettings, passes, CUSTOM_OPS, DEFAULTS, MATERIALS, OPS, calc, rctf, generate, toGcode, toMazatrol, settingsLines, readSettings, fileBase, mazName, arcSweep, describeLines };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.HEM = api;
 })(this);
@@ -14580,7 +14542,8 @@ const SECTIONS = [
   ] },
   { h: 'Work zero (X0 Y0)', items: [{ origin: true, draw: true }] },
   { h: 'Depth', items: [
-    { row: [F('depth', 'Depth', 'in', 'Z0 is the top of the part'), F('apMax', 'Max depth per level', 'in', '', { hintFn: c => c.op === 'cone' ? 'A cone also gets levels shallow enough that the steps left on its wall stay under a quarter of the tool across.' : '0 = full depth in one level' })] },
+    { row: [F('depth', 'Depth', 'in', 'Z0 is the top of the part'), F('apMax', 'Max depth per level', 'in', '0 = full depth in one level')], show: c => c.op !== 'cone' },
+    F('depth', 'Depth', 'in', 'Z0 is the top of the part', { show: isOp('cone') }),
   ] },
   { h: 'Stock', show: c => c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside'), items: [
     F('stockType', '', '', '', { show: c => c.op !== 'cone', kind: 'seg', opts: [['even', 'Passes around the part'], ['rect', 'Clear a rectangular block']], hintFn: c => c.stockType === 'rect' ? 'Clears the whole block, corners and all, down to the part.' : 'Loops follow the part all the way round, from the stock per side in to the wall. Nothing else is cleared.' }),
@@ -14619,11 +14582,12 @@ const SECTIONS = [
     { pick: true, show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) },
     F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
     { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.op === 'cone' ? 'Left on the wall by roughing, square to it' : c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside') },
+    F('coneRoughStep', 'Roughing step down per turn', 'in', '', { show: c => c.op === 'cone' && c.passes !== 'finish', hintFn: c => 'Blank = a quarter of the tool (' + f4(0.25 * Math.abs(num(c.toolD, 0.75))) + '). Each roughing pass spirals down the cone this far a turn, cutting a band the stepover wide.' }),
     F('coneStep', 'Finish step down per turn', 'in', '', { show: c => c.op === 'cone' && c.finish, hintFn: coneStepNote }),
     F('spring', 'Spring pass (repeat the finish pass)', '', '', { kind: 'chk', show: c => c.finish && c.op !== 'cone' }),
     F('link', 'Between loops', '', 'Stay down: feed across in the clear at depth. Lift: small lift and rapid.', { kind: 'seg', opts: [['depth', 'Stay at depth'], ['lift', 'Lift']], show: c => c.passes !== 'finish' && c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch') }),
     F('lift', 'Lift', 'in', '', { show: c => c.passes !== 'finish' && c.link === 'lift' && (c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch')) }),
-    F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: c => c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish'), hintFn: c => 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
+    F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: c => c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish'), hintFn: c => c.op === 'cone' ? 'The bore at the centre the roughing passes start from: it cuts Ø' + f4(num(c.helixD) + num(c.toolD)) + ', straight down at the helix ramp angle.' : 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
     { row: [F('ramp', 'Helix ramp angle', '°'), F('rampPct', 'Helix feed', '% of rough')], show: c => c.op === 'pocket' || c.slotEntry === 'helix' || c.op === 'custom' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish') },
     F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk' }),
     { note: () => 'Checked along the whole roughing toolpath by simulating the cut: where more of the cutter is in the material than the stepover gives (corners, narrow gaps, trochoid fronts), the feed drops to keep the chip the same.' },
@@ -15308,12 +15272,15 @@ function drawSection(cur) {
     pts.push([r + Rt, zTop]);
     return `<path d="M${pts.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}" fill="none" ${attr}/>`;
   };
-  (g.coneLevels || []).forEach(q => out.push(tool(q.r, q.z, 'stroke="var(--rough)" stroke-width="1.2" opacity=".75"')));
+  // each roughing pass: the surface it leaves, from Z0 down to where it stops; the last is the finish allowance
+  (g.conePasses || []).forEach((q, i, all) => out.push(`<line x1="${X(q.x0)}" y1="${Y(0)}" x2="${X(q.x1)}" y2="${Y(q.z1)}" stroke="var(--rough)" stroke-width="${i === all.length - 1 ? 1.8 : 1}" opacity="${i === all.length - 1 ? 1 : .55}"/>`));
+  if (g.coneCore) out.push(`<line x1="${X(g.coneCore)}" y1="${Y(0)}" x2="${X(g.coneCore)}" y2="${Y(-C.H)}" stroke="var(--entry)" stroke-width="1.2" stroke-dasharray="4 3"/>`);
   if (g.coneFin) { out.push(tool(g.coneFin.p0, g.coneFin.t0, 'stroke="var(--finish)" stroke-width="1.6"')); out.push(tool(g.coneFin.pE, g.coneFin.tE, 'stroke="var(--finish)" stroke-width="1.6"')); }
   if (cur && !isNaN(cur.x) && cur.z < zTop) out.push(tool(Math.hypot(cur.x - cx, cur.y - cy), cur.z, 'stroke="var(--red)" stroke-width="2"'));
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = out.join('');
-  $('sectTitle').textContent = 'Section through the centre: the tool at each roughing level' + (g.coneLevels && g.coneLevels.length ? ' (blue)' : '') + (g.coneFin ? ', the finish tool at the top and bottom of its spiral (green)' : '') + (cur ? ', the tool at the slider (red)' : '') + '.';
+  const np = (g.conePasses || []).length;
+  $('sectTitle').textContent = 'Section through the centre' + (np ? ': the surface each of the ' + np + ' roughing passes leaves (blue; the last, darker, is ' + f4(C.a) + ' off the wall: the finish allowance)' + (g.coneCore ? ', the helix bore (purple)' : '') : '') + (g.coneFin ? ', the finish tool at the top and bottom of its spiral (green)' : '') + (cur ? ', the tool at the slider (red)' : '') + '.';
 }
 // A click (or a typed point) on the preview with a drawing tool. p: the point (snapped or typed); raw: the unsnapped
 // point (the point an arc passes through); onFirst: on the shape's first point (closes it).
