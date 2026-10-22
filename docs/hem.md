@@ -166,6 +166,12 @@ arc starts in the clear (outside the stock for the first pass, over the previous
 would not falls back to the automatic start, and the app says so. Pockets still open up in the middle first; their
 loops and finish pass start by the point. **Automatic** turns it off.
 
+**Stagger the starts (hide the lead-in marks)**: every loop, on every level, and the finish (and spring) pass lead in
+at another spot round the part, 137.5° (the golden angle) on from the last, so the marks never line up; the first
+starts at the start point when one is chosen. Between loops the tool lifts to the retract height and comes down
+at the next start in the clear. **Finish overlap**: the finish pass runs this far past its own start before it
+leads off, blending the start mark away.
+
 ## Heights
 
 - **Clearance plane**: above clamps and fixtures. The tool comes in and leaves here, and each Mazatrol unit starts

@@ -22,7 +22,12 @@ function segDist(p, a, b) {
 // every feed point of the G-code, arcs sampled, below the top of the part
 function cutPoints(text) {
   const run = G.run('T.nc', text, {}), pts = [];
-  for (const m of run.moves) if (m.kind !== 'rapid') for (const p of m.pts) if (p[2] < -1e-6) pts.push(p);
+  // straight moves along their length too (a link across the part shows only in its middle)
+  for (const m of run.moves) if (m.kind !== 'rapid') m.pts.forEach((p, i) => {
+    const q = i ? m.pts[i - 1] : null, n = q && !m.arc ? Math.ceil(Math.hypot(p[0] - q[0], p[1] - q[1]) / 0.02) : 0;
+    for (let k = 1; k < n; k++) { const t = k / n, r = [q[0] + (p[0] - q[0]) * t, q[1] + (p[1] - q[1]) * t, q[2] + (p[2] - q[2]) * t]; if (r[2] < -1e-6) pts.push(r); }
+    if (p[2] < -1e-6) pts.push(p);
+  });
   return { run, pts };
 }
 function check(cfg, label) {
@@ -71,6 +76,19 @@ check({ ...base, stockType: 'even', stockW: '0.3' }, 'profile even stock');
 check({ ...base, shape: 'circle', partD: '3', stockX: '3.6', stockY: '3.6', cx: '1', cy: '-2' }, 'profile circle, square stock');
 check({ ...base, cornerR: '0', spring: true }, 'profile sharp corners + spring');
 check({ ...base, finish: false }, 'profile no finish');
+check({ ...base, blend: true, apMax: '1', finOverlap: '0.1' }, 'profile staggered starts, finish overlap');
+check({ ...base, shape: 'circle', partD: '3', blend: true, spring: true, finOverlap: '0.05', dir: 'conv' }, 'profile circle staggered, spring, overlap, conventional');
+ok('staggered starts: every loop leads in somewhere else round the part; the finish runs past its start', () => {
+  const lead = r => { const out = []; let prev = null; for (const m of r.moves) { if (m.k === 'entry' && (m.t === 'G2' || m.t === 'G3') && prev && prev.k !== 'entry' && prev.k !== 'rough') out.push(Math.atan2(m.y, m.x)); prev = m; } return out; };
+  const plain = lead(HEM.generate({ ...base, apMax: '1' })), st = lead(HEM.generate({ ...base, apMax: '1', blend: true }));
+  assert(new Set(plain.map(a => a.toFixed(2))).size === 1, 'without it every loop starts in the same spot');
+  const sorted = st.slice().sort((a, b) => a - b), gaps = sorted.map((a, i) => (i ? a - sorted[i - 1] : a + 2 * Math.PI - sorted[sorted.length - 1]));
+  assert(st.length > 10 && Math.max(...gaps) < Math.PI / 2, st.length + ' starts, widest gap ' + Math.max(...gaps).toFixed(2));
+  const fin = r => r.stats.feedLen;
+  assert(fin(HEM.generate({ ...base, finOverlap: '0.25' })) > fin(HEM.generate(base)) + 0.2, 'the overlap adds its length');
+  const E = HEM.generate({ ...base, blend: true, entryOn: true, entryX: '0', entryY: '3' }), first = E.moves.find(m => m.k === 'entry' && (m.t === 'G2' || m.t === 'G3'));
+  assert(first.y > 1.5, 'the first pass starts at the chosen start point (top): ' + first.x + ',' + first.y);
+});
 check({ op: 'pocket' }, 'pocket');
 check({ op: 'pocket', dir: 'conv', apMax: '0.8', cx: '2', cy: '1' }, 'pocket conventional 3 levels');
 check({ op: 'slot' }, 'slot open');
@@ -279,6 +297,8 @@ customCheck({ ...cust, cop: 'outside' }, 'custom outside offset, L shape', 0.05)
 customCheck({ ...cust, cop: 'outside', dir: 'conv', stockType: 'even', stockW: '0.4', apMax: '0.5' }, 'custom outside offset, conventional, even stock', 0.05);
 customCheck({ ...cust, cop: 'outside', finish: false, smoothR: '0' }, 'custom outside offset, no smoothing, no finish', 0.05);
 customCheck({ ...cust, cop: 'outside', strategy: 'troch' }, 'custom outside trochoidal', 0.05);
+customCheck({ ...cust, cop: 'outside', blend: true, finOverlap: '0.1', apMax: '0.5', spring: true }, 'custom outside staggered starts, overlap, spring', 0.05);
+customCheck({ ...cust, cop: 'pocket', blend: true, finOverlap: '0.08' }, 'custom pocket staggered starts, overlap', 0.05);
 customCheck({ ...cust, cop: 'pocket', shapes: [{ closed: true, pts: [[-2.5, -1.5, 0.4], [2.5, -1.5, 0.4], [2.5, 1.5, 0.4], [-2.5, 1.5, 0.4]] }, circle(0.8, 0.2, 1)] }, 'custom pocket with an island', 0.05);
 customCheck({ ...cust, cop: 'pocket', dir: 'conv', apMax: '0.6', shapes: L_SHAPE }, 'custom pocket L shape, conventional, 2 levels', 0.05);
 customCheck({ ...cust, cop: 'path', slotW: '1', shapes: [{ closed: false, pts: [[-3, -1, 0], [0, -1, 0.5], [0, 1, 0.5], [3, 1, 0]] }] }, 'custom groove, open path', 0.04);

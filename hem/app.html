@@ -312,6 +312,9 @@ const SECTIONS = [
     F('entryOn', 'Choose where passes start', '', '', { kind: 'chk', show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) }),
     { row: [F('entryX', 'Start near X', 'in'), F('entryY', 'Start near Y', 'in')], show: c => c.entryOn && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))), hint: 'Each pass (and the finish pass) leads in at its point nearest here, where there is room for the lead arc in the clear. Pockets still open up in the middle first.' },
     { pick: true, show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) },
+    F('blend', 'Stagger the starts (hide the lead-in marks)', '', '', { kind: 'chk', show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) }),
+    { note: c => 'Every loop, on every level, and the finish' + (c.spring ? ' and spring passes lead' : ' pass leads') + ' in at another spot round the part, 137.5° on from the last, so the marks never line up.' + (c.entryOn ? ' The first starts at the start point above.' : ''), show: c => c.blend && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))) },
+    F('finOverlap', 'Finish overlap', 'in', 'The finish pass runs this far past its start before it leads off, blending the start mark away. 0 = none.', { show: c => c.finish && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))) }),
     F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
     { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.op === 'cone' ? 'Left on the wall by roughing, square to it' : c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside') },
     F('coneRoughStep', 'Roughing step down per turn', 'in', '', { show: c => c.op === 'cone' && c.passes !== 'finish', hintFn: c => 'Blank = a quarter of the tool (' + f4(0.25 * Math.abs(num(c.toolD, 0.75))) + '). Each roughing pass spirals down the cone this far a turn, cutting a band the stepover wide.' }),
@@ -423,7 +426,7 @@ function renderForm() {
   }).join('')}</section>`).join('');
   renderShapes();
 }
-const LAYOUT_KEYS = new Set(['coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+const LAYOUT_KEYS = new Set(['blend', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
 function set(k, v) {
   const was = cfg[k];
   cfg[k] = v;

@@ -65,6 +65,12 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
   await seg('op', 'pocket'); await waitDone(); await sleep(300);
   check('section hidden for a pocket', await ev(`document.getElementById('sectWrap').hidden`));
   check('macro tab gone', !(await ev(`[...document.querySelectorAll('#tabs button')].map(b=>b.textContent).join('|')`)).includes('Macro'));
+  // staggered starts and the finish overlap on a profile
+  await seg('op', 'profile'); await waitDone(); await sleep(300);
+  check('stagger and overlap shown for a profile', await ev(`!!document.querySelector('#form input[data-k="blend"]') && !!document.querySelector('#form input[data-k="finOverlap"]')`));
+  await ev(`document.querySelector('#form input[data-k="blend"]').click()`); await waitDone(); await sleep(300);
+  check('stagger explains itself', /137\.5°/.test(await ev(`document.getElementById('form').textContent`)));
+  await shot('profile-stagger.png');
   check('no page errors', errors.length === 0, errors);
   console.log(passes + ' passed, ' + fails + ' failed'); ws.close(); chrome.kill(); process.exit(fails ? 1 : 0);
 })().catch(e => { console.log('ERROR', e.message); chrome.kill(); process.exit(1); });
