@@ -37,6 +37,13 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
   check('macro listing', /WHILE\[#165LE#166\]DO2/.test(mac) && /WHILE\[#165LE#166\]DO1/.test(mac) && /M99\n%/.test(mac));
   check('SUB PRO listing', /SUB PRO\s+HEM-CONE|SUB PRO\s+CONE/.test(await ev(`document.querySelectorAll('#out pre')[1].textContent`)), await ev(`document.querySelectorAll('#out pre')[1].textContent`));
   check('download buttons', /^Download .+\.EIA\|Copy\|SUB PRO \.PBD\|SUB PRO \.PBM$/.test(await ev(`[...document.querySelectorAll('#dls button')].map(b=>b.textContent).join('|')`)));
+  // the existing hole, through, a finish tool, by ridge height
+  check('cone has hole, through, finish tool and ridge fields', await ev(`['coneHoleD','coneThrough','finTool','coneStepBy'].every(k => !!document.querySelector('#form [data-k="' + k + '"]'))`));
+  await ev(`document.querySelector('#form input[data-k="finTool"]').click()`); await waitDone(); await sleep(200);
+  await typeIn('finToolD', '0.375'); await typeIn('finToolCR', '0.06'); await seg('coneStepBy', 'ridge'); await waitDone(); await sleep(300);
+  check('finish tool and ridge shown', /Steps down 0\.\d+ a turn on the corner radius 0\.06/.test(await ev(`document.querySelector('[data-hint="coneRidge"]').textContent`)), await ev(`document.querySelector('[data-hint="coneRidge"]') && document.querySelector('[data-hint="coneRidge"]').textContent`));
+  check('the G-code changes tools', /T2 M6/.test(await ev(`HEM.toGcode(R)`)));
+  await ev(`document.querySelector('#form input[data-k="finTool"]').click()`); await seg('coneStepBy', 'step'); await waitDone(); await sleep(200);
   await shot('inside.png');
   await seg('coneSide', 'outside'); await waitDone(); await sleep(400);
   check('swapped to suit outside', await ev(`[document.querySelector('#form input[data-k="coneTopD"]').value, document.querySelector('#form input[data-k="coneBotD"]').value].join()`) === '1,2');

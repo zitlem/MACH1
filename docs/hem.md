@@ -29,6 +29,16 @@ It is one offline file; open it in Chrome or Edge. Inch.
     The hint gives the ridges it leaves: a flat end mill leaves about the step × the sine of the angle, a corner
     radius far less. With a corner radius the floor is left as roughed, and the status line says how high its
     ridges (and the peak at an inside cone's centre) come out; a flat end mill leaves it flat.
+  - **Existing hole Ø** (inside): a hole already bored or drilled the full depth; the roughing starts from it, with no
+    helix bore. **Through** (inside): open at the bottom; there is no floor turn, the finish runs out at the bottom
+    edge and lifts straight up the cone (which opens upward, away from the wall), and a helix bore goes 0.02 past
+    the bottom.
+  - **Finish with another tool**: its diameter, flutes, corner radius and T/H number (and its Mazatrol NOM-Ø and
+    suffix). The finish speeds and feeds are worked out for it; the G-code changes tools before the finish (home,
+    T M6, X Y, then G43 H with Z), the Mazatrol program writes the finish units with that tool, the macro changes
+    tools too.
+  - **Finish spiral by** the step down a turn, or by the **Ridge height** it may leave: the step is worked out from the
+    finish tool's corner radius and the angle (0.0005 on a 0.315 corner is about 0.035 a turn).
   - A **section through the centre** under the top view shows the cone, the surface each roughing pass leaves
     (the last, darker, at the finish allowance), the helix bore, the finish tool at the top and bottom of its
     spiral, and the tool where the slider is.
@@ -236,7 +246,7 @@ over 4× D, the power is over 80% of the spindle, or the stepover is too heavy f
 ## Output
 
 - **G-code `.nc`**: `T M6`, work offset, `G43 H`, coolant, arcs as G2/G3 with I J (centres adjusted to the
-  rounded end points so the radii agree), optional line numbers and `G91 G28 Z0`. Every setting,
+  rounded end points so the radii agree), optional line numbers and `G91 G28 Z0`, or the tool change position with G30 at the start and end (`G53 Z0`, `G91 G30 Z0`, `Y0`, `X0`, as on a horizontal; also before a tool change). The tool comment gives its T, H, diameter and corner radius. Every setting,
   your shapes included, is saved in comments after `M30`, twice: in plain words (`(SET depth=2.375 ...)`,
   `(SHAPE 1 CLOSED ...)` and `(PT x,y,fillet,arc ...)` lines) and as exact data (`(HEM SETTINGS DATA V2 ...)` and
   `(CFG ...)` lines, safe in upper case). **Open .nc…**, or dropping the file on the page, brings them all back. If
@@ -251,7 +261,9 @@ over 4× D, the power is over 80% of the spindle, or the stepover is too heavy f
   whatever its size. Its numbers sit at the top in common variables `#100`–`#129` (centre, diameters, depth, tool
   diameter and corner radius, finish stock, finish and roughing steps down, stepover, helix bore, stock, lead,
   arcs a turn, feeds, speeds, heights), and WHILE loops work out the same moves as the G-code tab on the control: change a number at the
-  machine and the cut follows. It uses `#100`–`#179`, alarms (`#3000`) if the bottom is the wrong way round or too
+  machine and the cut follows. On a Smooth its first line is `<NAME>`, the name the SUB PRO calls (Matrix: `%` and
+  the O number). Ending with M99 it sets no work offset of its own: run from the SUB PRO, the Mazatrol WPC is in
+  force. It uses `#100`–`#183`, alarms (`#3000`) if the bottom is the wrong way round or too
   small for the tool, and ends with **M99** to run from a Mazatrol SUB PRO, or **M30** to run on its own
   (**Macro ends with**, under Mazatrol). `NAME-M.PBD` / `NAME-M.PBM` is a Mazatrol program with one SUB PRO unit
   that calls it by name; load the EIA program into the control's programs as `NAME`, or put the SUB PRO unit

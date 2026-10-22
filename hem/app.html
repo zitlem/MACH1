@@ -235,9 +235,11 @@ function coneNote(c) {
 }
 // ridges left by the finish spiral, from the step, the angle and the corner
 function coneStepNote(c) {
-  const C = HEM.coneOf(c, { depth: Math.abs(num(c.depth, 0)), R: Math.abs(num(c.toolD, 0.75)) / 2, D: Math.abs(num(c.toolD, 0.75)), finStock: 0, levels: 1 });
-  const s = C.step * C.sec, h = C.rc > 0 && s / 2 < C.rc ? C.rc - Math.sqrt(C.rc * C.rc - s * s / 4) : C.step * C.sin;
-  return 'Leaves ridges about ' + f4(h) + ' high on the wall' + (C.rc > 0 ? '.' : ' with a flat end mill; a corner radius or a ball leaves far less.') + ' Turns: ' + Math.max(1, Math.ceil(C.H / C.step - 1e-9)) + '.';
+  const ft = c.finTool ? { R: Math.abs(num(c.finToolD, 0.5)) / 2 } : null;
+  const C = HEM.coneOf(c, { depth: Math.abs(num(c.depth, 0)), R: Math.abs(num(c.toolD, 0.75)) / 2, D: Math.abs(num(c.toolD, 0.75)), finStock: 0, levels: 1, ft }, true);
+  const s = C.step * C.sec, h = C.rc > 0 && s / 2 < C.rc ? C.rc - Math.sqrt(C.rc * C.rc - s * s / 4) : C.step * C.sin, turns = Math.max(1, Math.ceil(-C.zEnd / C.step - 1e-9));
+  return c.coneStepBy === 'ridge' ? 'Steps down ' + f4(C.step) + ' a turn on the ' + (C.rc > 0 ? 'corner radius ' + f4(C.rc) : 'flat corner') + ': ' + turns + ' turns.' + (C.rc > 0 ? '' : ' A corner radius allows a far bigger step for the same ridge.')
+    : 'Leaves ridges about ' + f4(h) + ' high on the wall' + (C.rc > 0 ? '.' : ' with a flat end mill; a corner radius or a ball leaves far less.') + ' Turns: ' + turns + '.';
 }
 const SECTIONS = [
   { h: 'Operation', items: [
@@ -274,6 +276,8 @@ const SECTIONS = [
     F('coneBy', 'Size it by', '', '', { kind: 'seg', opts: [['dia', 'Top and bottom Ø'], ['angle', 'Top Ø and angle']], show: isOp('cone') }),
     { row: [F('coneTopD', 'Diameter at the top', 'in', 'At Z0'), F('coneBotD', 'Diameter at the bottom', 'in', '', { hintFn: coneNote })], show: c => c.op === 'cone' && c.coneBy !== 'angle' },
     { row: [F('coneTopD', 'Diameter at the top', 'in', 'At Z0'), F('coneAngle', 'Included angle', '°', '', { hintFn: coneNote })], show: c => c.op === 'cone' && c.coneBy === 'angle' },
+    F('coneHoleD', 'Existing hole Ø', 'in', 'Already bored or drilled the full depth: the roughing starts from it, with no helix bore. 0 = from solid.', { show: c => c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish' }),
+    F('coneThrough', 'Through (open at the bottom)', '', '', { kind: 'chk', show: c => c.op === 'cone' && c.coneSide !== 'outside' }),
     F('finStock', 'Finish allowance', 'in', '', { show: isOp('cone'), hintFn: c => c.passes === 'finish' ? 'What roughing left on the wall (square to it): the finish spiral takes it off.' : 'Roughing leaves this on the wall, square to it' + (c.passes === 'rough' ? ', for a finish later. 0 roughs to size.' : '; the finish spiral takes it off.') }),
     { row: [F('cx', 'Center X', 'in'), F('cy', 'Center Y', 'in')], show: c => c.op === 'profile' || c.op === 'pocket' || c.op === 'cone', hint: 'From work zero (X0 Y0).' },
     { row: [F('x1', 'Start X', 'in'), F('y1', 'Start Y', 'in')], show: isOp('slot') },
@@ -307,6 +311,9 @@ const SECTIONS = [
     { row: [F('toolD', 'Diameter', 'in'), F('flutes', 'Flutes', '')] },
     { row: [F('loc', 'Flute length', 'in'), F('stick', 'Stick-out', 'in')], hint: 'Stick-out: holder face to tool tip. Keep it short: deflection grows with its cube.' },
     F('coneCR', 'Corner radius', 'in', '0 for a flat end mill, half the diameter for a ball. The finish runs on the corner.', { show: isOp('cone') }),
+    F('finTool', 'Finish with another tool', '', '', { kind: 'chk', show: c => c.op === 'cone' && c.finish }),
+    { row: [F('finToolD', 'Finish tool Ø', 'in'), F('finFlutes', 'Flutes', '')], show: c => c.op === 'cone' && c.finish && c.finTool },
+    { row: [F('finToolCR', 'Its corner radius', 'in', 'A bull nose leaves the finest wall'), F('finToolNo', 'Its T / H', '')], show: c => c.op === 'cone' && c.finish && c.finTool, hint: 'The roughing tool is the one above. The finish speeds and feeds are worked out for this one; the program changes tools between.' },
     F('toolNo', 'Tool number (T / H)', ''),
     { feedsList: true },
   ] },
@@ -338,7 +345,9 @@ const SECTIONS = [
     { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.op !== 'cone' && (c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside')) },
     F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall for the finish pass', { show: c => c.op === 'cone' && c.passes !== 'rough' }),
     F('coneRoughStep', 'Roughing step down per turn', 'in', '', { show: c => c.op === 'cone' && c.passes !== 'finish', hintFn: c => 'Blank = a quarter of the tool (' + f4(0.25 * Math.abs(num(c.toolD, 0.75))) + '). Each roughing pass spirals down the cone this far a turn, cutting a band the stepover wide.' }),
-    F('coneStep', 'Finish step down per turn', 'in', '', { show: c => c.op === 'cone' && c.finish, hintFn: coneStepNote }),
+    F('coneStepBy', 'Finish spiral by', '', '', { kind: 'seg', opts: [['step', 'Step down a turn'], ['ridge', 'Ridge height']], show: c => c.op === 'cone' && c.finish }),
+    F('coneStep', 'Finish step down per turn', 'in', '', { show: c => c.op === 'cone' && c.finish && c.coneStepBy !== 'ridge', hintFn: coneStepNote }),
+    F('coneRidge', 'Ridge height', 'in', '', { show: c => c.op === 'cone' && c.finish && c.coneStepBy === 'ridge', hintFn: coneStepNote }),
     F('spring', 'Spring pass (repeat the finish pass)', '', '', { kind: 'chk', show: c => c.finish && c.op !== 'cone' }),
     F('link', 'Between loops', '', 'Stay down: feed across in the clear at depth. Lift: small lift and rapid.', { kind: 'seg', opts: [['depth', 'Stay at depth'], ['lift', 'Lift']], show: c => c.passes !== 'finish' && c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch') }),
     F('lift', 'Lift', 'in', '', { show: c => c.passes !== 'finish' && c.link === 'lift' && (c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch')) }),
@@ -357,7 +366,8 @@ const SECTIONS = [
     { row: [F('cool', 'Coolant', '', 'M8, M7, blank = none', { kind: 'text' }), F('dec', 'Decimals', '')] },
     F('rapid', 'Rapid rate', 'ipm', 'For the cycle time only'),
     F('toolChange', 'Tool change T M6', '', '', { kind: 'chk' }),
-    F('home', 'G91 G28 Z0 at the end', '', '', { kind: 'chk' }),
+    F('home', 'G91 G28 Z0 at the end', '', '', { kind: 'chk', show: c => !c.homeG30 }),
+    F('homeG30', 'Tool change position (G30) at the start and end', '', 'G53 Z0, G91 G30 Z0, Y0, X0: as on a horizontal. Also before a tool change.', { kind: 'chk' }),
     F('lineNums', 'Line numbers', '', '', { kind: 'chk' }),
     F('fileName', 'File name', '', '', { kind: 'text', hintFn: c => 'Blank = ' + HEM.fileBase(Object.assign({}, c, { fileName: '' })) + '.nc' }),
   ] },
@@ -369,6 +379,7 @@ const SECTIONS = [
     { row: [F('mazName', 'Program name', '', '', { kind: 'text' }), F('mazInitZ', 'Initial Z', 'in')] },
     { note: () => 'MANL PRG units. The tool must be in the machine\'s TOOL DATA with the same type, NOM-Ø and suffix.' },
     { note: () => 'A cone can also be written as a macro (the Macro tab): one short EIA program with its numbers at the top, and a Mazatrol SUB PRO that runs it.', show: isOp('cone') },
+    { row: [F('finMazNom', 'Finish tool NOM-Ø', 'in', 'Blank = its diameter'), F('finMazSuf', 'Its suffix', '', '', { kind: 'text' })], show: c => c.op === 'cone' && c.finish && c.finTool },
     F('macroEnd', 'Macro ends with', '', '', { kind: 'seg', opts: [['M99', 'M99 (from the SUB PRO)'], ['M30', 'M30 (on its own)']], show: isOp('cone') }),
   ] },
 ];
@@ -447,7 +458,7 @@ function renderForm() {
   }).join('')}</section>`).join('');
   renderShapes();
 }
-const LAYOUT_KEYS = new Set(['finCorner', 'blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+const LAYOUT_KEYS = new Set(['finTool', 'coneStepBy', 'homeG30', 'finCorner', 'blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
 function set(k, v) {
   const was = cfg[k];
   cfg[k] = v;
@@ -1139,8 +1150,8 @@ function drawSection(cur) {
   out.push(poly(mat, 'fill="var(--part)" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"'));
   out.push(`<line x1="${X(0)}" y1="${Y(zTop)}" x2="${X(0)}" y2="${Y(zBot)}" stroke="var(--red)" stroke-width="1" stroke-dasharray="8 4 2 4"/><text x="${X(0) + 4}" y="${Y(0) - 4}" font-size="11" fill="var(--red)">Z0</text>`);
   // a tool with its corner radius, its centre r from the axis and its tip at z, up to the top of the drawing
-  const tool = (r, z, attr) => {
-    const rc = C.rc, Rt = K.R, pts = [[r - Rt, zTop]];
+  const tool = (r, z, attr, Rt = K.R, rc = C.rc) => {
+    const pts = [[r - Rt, zTop]];
     for (let i = 0; i <= 8; i++) { const a = Math.PI * (1 + i / 16); pts.push([r - Rt + rc + rc * Math.cos(a), z + rc + rc * Math.sin(a)]); }
     for (let i = 0; i <= 8; i++) { const a = Math.PI * (1.5 + i / 16); pts.push([r + Rt - rc + rc * Math.cos(a), z + rc + rc * Math.sin(a)]); }
     pts.push([r + Rt, zTop]);
@@ -1149,7 +1160,8 @@ function drawSection(cur) {
   // each roughing pass: the surface it leaves, from Z0 down to where it stops; the last is the finish allowance
   (g.conePasses || []).forEach((q, i, all) => out.push(`<line x1="${X(q.x0)}" y1="${Y(0)}" x2="${X(q.x1)}" y2="${Y(q.z1)}" stroke="var(--rough)" stroke-width="${i === all.length - 1 ? 1.8 : 1}" opacity="${i === all.length - 1 ? 1 : .55}"/>`));
   if (g.coneCore) out.push(`<line x1="${X(g.coneCore)}" y1="${Y(0)}" x2="${X(g.coneCore)}" y2="${Y(-C.H)}" stroke="var(--entry)" stroke-width="1.2" stroke-dasharray="4 3"/>`);
-  if (g.coneFin) { out.push(tool(g.coneFin.p0, g.coneFin.t0, 'stroke="var(--finish)" stroke-width="1.6"')); out.push(tool(g.coneFin.pE, g.coneFin.tE, 'stroke="var(--finish)" stroke-width="1.6"')); }
+  if (g.coneFin) { const F2 = g.coneFin; out.push(tool(F2.p0, F2.t0, 'stroke="var(--finish)" stroke-width="1.6"', F2.R, F2.rc)); out.push(tool(F2.pE, F2.tE, 'stroke="var(--finish)" stroke-width="1.6"', F2.R, F2.rc)); }
+  if (g.coneHole) out.push(`<line x1="${X(g.coneHole)}" y1="${Y(0)}" x2="${X(g.coneHole)}" y2="${Y(-C.H)}" stroke="var(--stock)" stroke-width="1.2" stroke-dasharray="6 4"/>`);
   if (cur && !isNaN(cur.x) && cur.z < zTop) out.push(tool(Math.hypot(cur.x - cx, cur.y - cy), cur.z, 'stroke="var(--red)" stroke-width="2"'));
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = out.join('');
@@ -1590,7 +1602,7 @@ function renderOut() {
     const name = M.sub.SmoothM.name, view = R.cfg.mazCtl === 'SmoothM' ? 'SmoothM' : 'MatrixM';
     $('dls').innerHTML = btn('dlMac', 'Download ' + name + '.EIA', true) + btn('cpMac', 'Copy') + btn('dlSubD', 'SUB PRO .PBD', view === 'MatrixM') + btn('dlSubM', 'SUB PRO .PBM', view === 'SmoothM');
     const text = M.text, n = text.trim().split('\n').length, gLines = getG().split('\n').length;
-    out.innerHTML = `<p class="note" style="margin:0 0 8px">${esc(name)}.EIA: the whole cone in ${n} lines (the G-code tab spells it out in ${gLines}). The numbers at the top drive it: change the diameters, depth, tool, step or feeds at the machine and the cut follows; the plot here does not. It ends with ${R.cfg.macroEnd === 'M30' ? 'M30, to run on its own' : 'M99, to run from the Mazatrol SUB PRO'} (set under Mazatrol: Macro ends with). Load it into the control's programs as <b>${esc(name)}</b>; the SUB PRO program (${esc(M.sub[view].fileName)}) calls it by that name.</p>`
+    out.innerHTML = `<p class="note" style="margin:0 0 8px">${R.cfg.macroEnd !== 'M30' ? 'Run from the SUB PRO it sets no work offset of its own: the Mazatrol WPC is in force. ' : ''}${esc(name)}.EIA: the whole cone in ${n} lines (the G-code tab spells it out in ${gLines}). The numbers at the top drive it: change the diameters, depth, tool, step or feeds at the machine and the cut follows; the plot here does not. It ends with ${R.cfg.macroEnd === 'M30' ? 'M30, to run on its own' : 'M99, to run from the Mazatrol SUB PRO'} (set under Mazatrol: Macro ends with). Load it into the control's programs as <b>${esc(name)}</b>; the SUB PRO program (${esc(M.sub[view].fileName)}) calls it by that name.</p>`
       + `<pre class="code">${esc(text)}</pre><p class="note" style="margin:10px 0 6px">${esc(M.sub[view].fileName)}: the Mazatrol program that runs it. Or add the SUB PRO unit to your own part program.</p><pre class="code">${esc(M.sub[view].listing())}</pre>`;
     $('dlMac').onclick = () => dl(name + '.EIA', text.replace(/\n/g, '\r\n'), 'text/plain');
     $('cpMac').onclick = () => navigator.clipboard && navigator.clipboard.writeText(text).then(() => { $('cpMac').textContent = 'Copied'; setTimeout(() => $('cpMac') && ($('cpMac').textContent = 'Copy'), 1200); });
