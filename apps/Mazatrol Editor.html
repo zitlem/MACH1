@@ -8825,11 +8825,62 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     const where = s.folderPath ? 'folder ' + s.folderPath : `${s.t.memory ? 'machine memory ' : ''}${s.t.name} (tab ${docs.indexOf(s) + 1})`;
     return `${where} · ${TOOL_TYPE_LABEL[s.t.type]} · ${n} tools`;
   }
+  // the Mazatrol programs a program's SUB PRO units call (and the ones they call), each once in the order they
+  // first run, found as the plot finds them; names not found, and EIA programs (no Mazatrol tools)
+  const subName = r => String.fromCharCode(...r.slice(36, 68)).replace(/\0[\s\S]*$/, '').trim();
+  function calledPrograms(d) {
+    const res = subResolver(d), progs = [], missing = [], eia = [], seen = new Set([d.p.name.replace(/\.[^.]*$/, '').toUpperCase()]);
+    const walk = (p, depth) => {
+      for (const u of Maz.structure(p)) {
+        if (u.code !== 5) continue;
+        const name = subName(p.recs[u.i]);
+        if (!name || seen.has(name.toUpperCase())) continue;
+        seen.add(name.toUpperCase());
+        const f = depth < 8 ? res(name) : null;
+        if (f && f.p) { progs.push({ name, p: f.p }); walk(f.p, depth + 1); } else if (f) eia.push(name); else missing.push(name);
+      }
+    };
+    walk(d.p, 0);
+    return { progs, missing, eia };
+  }
+  // the tools of a program and of the programs it calls: one row per tool, with where it is used (this program's
+  // unit numbers, then NAME:units for each called program); rows only in called programs have no line here
+  function allTools(d) {
+    const called = calledPrograms(d), byKey = new Map();
+    for (const pt of Maz.programTools(d.p, d.units, ctx(d))) byKey.set(pt.key, Object.assign({}, pt, { where: pt.units.map(String) }));
+    for (const c of called.progs) for (const pt of Maz.programTools(c.p, d.units)) {
+      const at = c.name + ':' + pt.units.join(','), e = byKey.get(pt.key);
+      if (e) e.where.push(at); else byKey.set(pt.key, Object.assign({}, pt, { lines: [], where: [at] }));
+    }
+    return { tools: [...byKey.values()], called };
+  }
   function toolCheck(d) {
-    const src = toolSource(d), mts = src ? Maz.machineTools(src.t) : null;
-    const rows = Maz.programTools(d.p, d.units, ctx(d)).map(pt => ({ pt, res: mts ? Maz.checkTool(pt, mts) : null }));
+    const src = toolSource(d), mts = src ? Maz.machineTools(src.t) : null, all = allTools(d);
+    const rows = all.tools.map(pt => ({ pt, res: mts ? Maz.checkTool(pt, mts) : null }));
     const n = st => rows.filter(r => r.res && r.res.status === st).length;
-    return { src, rows, ok: n('ok'), suffix: n('suffix'), missing: n('missing') };
+    return { src, rows, ok: n('ok'), suffix: n('suffix'), missing: n('missing'), called: all.called };
+  }
+  // what the SUB PRO units call, for the tool list and the setup sheet
+  function calledNote(c) {
+    const n = c.progs.length, out = [];
+    if (n) out.push('with the ' + n + ' program' + (n > 1 ? 's' : '') + ' its SUB PRO units call (' + c.progs.map(x => x.name).join(', ') + ')');
+    if (c.missing.length) out.push('not found: ' + c.missing.join(', ') + ' (open ' + (c.missing.length > 1 ? 'them' : 'it') + ', or its folder, to add ' + (c.missing.length > 1 ? 'their' : 'its') + ' tools)');
+    if (c.eia.length) out.push('EIA, tools not listed: ' + c.eia.join(', '));
+    return out.join('; ');
+  }
+  // the units that set where the work is (INDEX, WPC, OFFSET, WPCSHIFT) as the screen prints them, per program
+  function workOffsets(d, c) {
+    const out = [], one = (name, p) => {
+      const ls = Maz.lines(p), rows = [];
+      for (const u of Maz.structure(p, ls)) {
+        const t = Maz.printLine(ls[u.i], { units: d.units }).ch.join('').replace(/\s+$/, '');
+        if (/^\s*\d+\s+(INDEX|WPC|OFFSET|WPCSHIFT)\b/.test(t)) rows.push(t.trim());
+      }
+      out.push({ name, rows });
+    };
+    one(d.p.name.replace(/\.[^.]*$/, ''), d.p);
+    for (const x of c.progs) one(x.name, x.p);
+    return out;
   }
   const nmText = (d, nm) => (d.units === 'metric' ? Maz.fixed(nm / 1e6, 3) : Maz.fixed(nm / 25.4e6, 4));
   const STATUS = { ok: ['✓', 'found'], suffix: ['≠', 'other suffix'], missing: ['✗', 'missing'] };
@@ -8850,14 +8901,14 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     el.toolSrc.innerHTML = '<option value="none">no tool data</option>' +
       srcs.map(s => `<option value="${s.machine ? 'm' + folder.machines.indexOf(s.machine) : docs.indexOf(s)}"${s === src ? ' selected' : ''}>${esc(sourceLabel(s))}</option>`).join('');
     if (!src) el.toolSrc.value = 'none';
-    const c = toolCheck(d);
-    el.toolsInfo.innerHTML = `<b>${c.rows.length}</b> tools` + (c.src
+    const c = toolCheck(d), cn = calledNote(c.called);
+    el.toolsInfo.innerHTML = `<b>${c.rows.length}</b> tools` + (cn ? ' ' + esc(cn) : '') + (c.src
       ? ` · <b>${c.ok}</b> found · <b>${c.suffix}</b> other suffix · <b>${c.missing}</b> missing`
       : srcs.length ? ' · choose the tool data to check against' : ' · open a machine\'s m8ysram or a TOOLDATA file to check them');
     // every machine of the open folder that is the same kind: does it have all the tools?
     const others = folder ? folder.machines.filter(m => m.t.type === C(d).type) : [];
     if (others.length > 1 || (others.length === 1 && (!src || src.machine !== others[0]))) {
-      const pts = Maz.programTools(d.p, d.units);
+      const pts = c.rows.map(r => r.pt);
       el.toolsInfo.innerHTML += '<div class="mlist">' + others.map(m => {
         const res = pts.map(pt => Maz.checkTool(pt, m.mts).status);
         const c = { n: res.length, missing: res.filter(x => x === 'missing').length, suffix: res.filter(x => x === 'suffix').length };
@@ -8867,8 +8918,8 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     const head = '<tr><th></th><th>Tool</th><th>NOM</th><th>Sfx</th><th>Units</th><th>Machine</th><th>Pocket</th><th class="num">Length</th><th class="num">Dia/Nose</th></tr>';
     el.toolsList.innerHTML = '<table class="tt"><thead>' + head + '</thead><tbody>' + c.rows.map(r => {
       const st = r.res ? r.res.status : '', m = machineCols(d, r);
-      return `<tr class="st-${st}" data-line="${r.pt.lines[0]}" title="${esc(st ? STATUS[st][1] : '')}"><td class="st">${st ? STATUS[st][0] : ''}</td>` +
-        `<td>${esc(r.pt.name)}</td><td>${esc(r.pt.nomText)}</td><td>${esc(r.pt.sfx)}</td><td>${esc(r.pt.units.join(' '))}</td>` +
+      return `<tr class="st-${st}"${r.pt.lines.length ? ` data-line="${r.pt.lines[0]}"` : ''} title="${esc((st ? STATUS[st][1] : '') + (r.pt.lines.length ? '' : (st ? ' · ' : '') + 'only in a called program'))}"><td class="st">${st ? STATUS[st][0] : ''}</td>` +
+        `<td>${esc(r.pt.name)}</td><td>${esc(r.pt.nomText)}</td><td>${esc(r.pt.sfx)}</td><td>${esc(r.pt.where.join(' '))}</td>` +
         `<td>${esc(m[0])}</td><td>${esc(m[1])}</td><td class="num">${esc(m[2])}</td><td class="num">${esc(m[3])}</td></tr>`;
     }).join('') + '</tbody></table>';
   }
@@ -8878,17 +8929,30 @@ html[data-theme="light"] .guide { --addr: #ffe14d; --sel: #13305a; }
     const cm = Maz.comment(d.p);
     if (cm) out.push('COMMENT  ' + cm);
     out.push(c.src ? 'Tools checked against ' + sourceLabel(c.src) + '.' : 'No tool data open: the tools are listed without a check.');
+    const cn = calledNote(c.called);
+    if (cn) out.push('Tools of this program ' + cn + '.');
     out.push('');
-    const cols = [['Tool', 16], ['NOM', 10], ['Sfx', 4], ['Units', 14], ['Machine', 16], ['Pocket', 8], ['Length', 10], ['Dia/Nose', 10], ['Status', 12]];
+    const wU = Math.max(14, ...c.rows.map(r => r.pt.where.join(' ').length));
+    const cols = [['Tool', 16], ['NOM', 10], ['Sfx', 4], ['Units', wU], ['Machine', 16], ['Pocket', 8], ['Length', 10], ['Dia/Nose', 10], ['Status', 12]];
     const line = vals => vals.map((v, k) => String(v).padEnd(cols[k][1])).join(' ').replace(/\s+$/, '');
     out.push(line(cols.map(x => x[0])));
     out.push(line(cols.map(x => '-'.repeat(x[1]))));
     for (const r of c.rows) {
       const m = machineCols(d, r);
-      out.push(line([r.pt.name, r.pt.nomText, r.pt.sfx, r.pt.units.join(' '), m[0], m[1], m[2], m[3], r.res ? STATUS[r.res.status][1] : '']));
+      out.push(line([r.pt.name, r.pt.nomText, r.pt.sfx, r.pt.where.join(' '), m[0], m[1], m[2], m[3], r.res ? STATUS[r.res.status][1] : '']));
     }
     out.push('');
     out.push(`${c.rows.length} tools` + (c.src ? `: ${c.ok} found, ${c.suffix} with another suffix, ${c.missing} missing` : ''));
+    // where the work is: each program's INDEX, WPC, OFFSET and WPCSHIFT units
+    const wo = workOffsets(d, c.called);
+    if (wo.some(x => x.rows.length)) {
+      out.push('', 'WORK OFFSETS');
+      const wN = Math.max(...wo.map(x => x.name.length)) + 2;
+      for (const x of wo) {
+        if (!x.rows.length) { if (wo.length > 1) out.push(x.name.padEnd(wN) + (x === wo[0] ? '(none here: the programs it calls set them)' : '(none)')); continue; }
+        x.rows.forEach((t, k) => out.push((k ? '' : x.name).padEnd(wN) + t));
+      }
+    }
     return out.join('\n') + '\n';
   }
   function printSheet() {

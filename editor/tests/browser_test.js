@@ -607,6 +607,13 @@ const check = (name, cond, detail) => {
     const sub = await ev(`({moves: MazEditor.scene().moves, notes: document.getElementById('plotNotes').textContent, info: document.getElementById('plotInfo').textContent})`);
     check('SUB PRO units plot the programs they call once those are open', before === 0 && sub.moves > 8000 && /≈ \d+:\d\d:\d\d|≈ \d+:\d\d/.test(sub.info), [before, sub]);
     check('units after an END unit are noted as not run', /PRG-I-2-OP1: UNo 21–22 come after the END unit/.test(sub.notes), sub.notes);
+    // the tool list and setup sheet of a program of SUB PRO units: the called programs' tools, and every program's work offsets
+    const tc = await ev(`(() => { const c = MazEditor.toolCheck(MazEditor.doc()); return { n: c.rows.length, called: c.called.progs.map(x => x.name), where: c.rows.map(r => r.pt.where.join(' ')) }; })()`);
+    check('the tool list takes in the programs SUB PRO units call', tc.n > 5 && tc.called.join() === 'PRG-I-2-OP1,PRG-I-2-OP2,PRG-I-2-OP3' && tc.where.some(w => /PRG-I-2-OP1:\d/.test(w)) && tc.where.some(w => /PRG-I-2-OP3:\d/.test(w)), tc);
+    const sh = await ev(`MazEditor.setupSheet(MazEditor.doc())`);
+    const wo = sh.slice(sh.indexOf('WORK OFFSETS'));
+    check('the setup sheet lists every program\'s work offsets', /with the 3 programs its SUB PRO units call/.test(sh) && /^PRG-I-2-MAIN +\(none here/m.test(wo)
+      && ['OP1', 'OP2', 'OP3'].every(n => new RegExp('^PRG-I-2-' + n + ' +\\d+ (INDEX|WPC)').test(wo.split('\n').find(l => l.startsWith('PRG-I-2-' + n)) || '')) && (wo.match(/WPC-/g) || []).length === 3, sh);
     await shot('subpro.png');
     // the machining time window: units (subprograms under their SUB PRO unit) and tools, hover shows it on the plot
     await ev(`MazEditor.softKey('time')`);
