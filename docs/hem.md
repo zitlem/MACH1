@@ -167,10 +167,20 @@ would not falls back to the automatic start, and the app says so. Pockets still 
 loops and finish pass start by the point. **Automatic** turns it off.
 
 **Stagger the starts (hide the lead-in marks)**: every loop, on every level, and the finish (and spring) pass lead in
-at another spot round the part, 137.5° (the golden angle) on from the last, so the marks never line up; the first
-starts at the start point when one is chosen. Between loops the tool lifts to the retract height and comes down
-at the next start in the clear. **Finish overlap**: the finish pass runs this far past its own start before it
-leads off, blending the start mark away.
+somewhere else, so the marks never line up; the first starts at the start point when one is chosen. **Where each
+start goes**:
+- **Step by an angle**: this far round the part from the last (137.5°, the golden angle, spreads them evenly and never
+  repeats; 90° puts them a quarter turn apart).
+- **Shift along**: this far along the wall from where the last one started (0.05, say), so the starts creep along the
+  part. It moves the start point; the stepover is the Stepover.
+- **Random**: a random spot each time, the same draw every time (change **Random draw** for another).
+
+**To the next start**: lift to the **Clearance plane** (the default: over clamps and vise jaws) or the **Rapid
+plane** (it clears the top of the part, Z0, not clamps above it) and come down at the next start in the clear, or
+**Stay down**: ride round the loop just cut, at depth over cleared ground, to its point nearest the next start, lead
+off there and feed across to the next lead-in. Where it cannot (a new level, another shape, roughing to finishing,
+pockets) it lifts to the clearance plane. **Finish overlap**: the finish pass runs this far past its own start
+before it leads off, blending the start mark away.
 
 ## Heights
 

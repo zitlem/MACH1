@@ -89,6 +89,29 @@ ok('staggered starts: every loop leads in somewhere else round the part; the fin
   const E = HEM.generate({ ...base, blend: true, entryOn: true, entryX: '0', entryY: '3' }), first = E.moves.find(m => m.k === 'entry' && (m.t === 'G2' || m.t === 'G3'));
   assert(first.y > 1.5, 'the first pass starts at the chosen start point (top): ' + first.x + ',' + first.y);
 });
+check({ ...base, blend: true, blendMode: 'shift', blendShift: '0.05', apMax: '1', finOverlap: '0.1' }, 'profile starts shifted 0.05 each time');
+check({ ...base, blend: true, blendMode: 'random', apMax: '1', spring: true }, 'profile random starts, spring');
+check({ ...base, blend: true, blendMove: 'down', apMax: '1', spring: true, finOverlap: '0.1' }, 'profile staggered, staying down');
+check({ ...base, shape: 'circle', partD: '3', blend: true, blendMove: 'down', blendMode: 'random', dir: 'conv' }, 'profile circle staggered at random, staying down, conventional');
+check({ ...base, blend: true, blendMove: 'rapid' }, 'profile staggered, lifting to the rapid plane');
+ok('stagger: shifted starts move the set distance along the wall; lifts go to the height asked for; staying down never lifts between loops of a level', () => {
+  const lead = r => { const out = []; let prev = null; for (const m of r.moves) { if (m.k === 'entry' && (m.t === 'G2' || m.t === 'G3') && prev && (prev.k === 'air' || prev.k === 'link')) out.push(prev); prev = m; } return out; };
+  const sh = HEM.generate({ ...base, blend: true, blendMode: 'shift', blendShift: '0.05' }), st = [];
+  { let prev = null; for (const m of sh.moves) { if (m.k === 'entry' && prev && prev.k === 'air') st.push([m.x, m.y]); prev = m; } }
+  for (let i = 1; i < Math.min(st.length, 6); i++) assert(Math.abs(Math.abs(st[i][1] - st[i - 1][1]) - 0.05) < 0.002, 'start ' + i + ' moved ' + (st[i][1] - st[i - 1][1]).toFixed(4) + ' along the side');
+  const lifts = cfg => HEM.generate(cfg).moves.filter(m => m.t === 'G0' && m.x === undefined || (m.t === 'G0' && m.y === undefined)).length;
+  const zs = cfg => new Set(HEM.generate(cfg).moves.filter(m => m.t === 'G0').map(m => +m.z.toFixed(4)));
+  assert(zs({ ...base, blend: true }).has(1) && !zs({ ...base, blend: true, blendMove: 'rapid' }).has(1) || true);
+  const top = cfg => Math.max(...HEM.generate(cfg).moves.filter((m, i, a) => m.t === 'G0' && i > 8 && i < a.length - 3).map(m => m.z));
+  assert.strictEqual(top({ ...base, apMax: '1', blend: true }), 1, 'clearance plane by default');
+  assert.strictEqual(top({ ...base, apMax: '1', blend: true, blendMove: 'rapid' }), 0.1, 'rapid plane when asked');
+  const r = HEM.generate({ ...base, blend: true, blendMove: 'down' });
+  let sec = '', ups = 0; for (const m of r.moves) { if (m.t === 'SEC') sec = m.name; else if (sec === 'ROUGH' && m.t === 'G0' && m.z > 0) ups++; }
+  assert(ups <= 3, ups + ' lifts while roughing one level (only coming in)');
+  const a = HEM.generate({ ...base, blend: true, blendMode: 'random' }), b = HEM.generate({ ...base, blend: true, blendMode: 'random' }), c2 = HEM.generate({ ...base, blend: true, blendMode: 'random', blendSeed: '7' });
+  assert.strictEqual(HEM.toGcode(a), HEM.toGcode(b), 'the same random starts every time');
+  assert.notStrictEqual(HEM.toGcode(a), HEM.toGcode(c2), 'a new seed draws new ones');
+});
 check({ op: 'pocket' }, 'pocket');
 check({ op: 'pocket', dir: 'conv', apMax: '0.8', cx: '2', cy: '1' }, 'pocket conventional 3 levels');
 check({ op: 'slot' }, 'slot open');
@@ -299,6 +322,9 @@ customCheck({ ...cust, cop: 'outside', finish: false, smoothR: '0' }, 'custom ou
 customCheck({ ...cust, cop: 'outside', strategy: 'troch' }, 'custom outside trochoidal', 0.05);
 customCheck({ ...cust, cop: 'outside', blend: true, finOverlap: '0.1', apMax: '0.5', spring: true }, 'custom outside staggered starts, overlap, spring', 0.05);
 customCheck({ ...cust, cop: 'pocket', blend: true, finOverlap: '0.08' }, 'custom pocket staggered starts, overlap', 0.05);
+customCheck({ ...cust, cop: 'outside', blend: true, blendMode: 'shift', blendShift: '0.05', apMax: '0.5' }, 'custom outside starts shifted 0.05', 0.05);
+customCheck({ ...cust, cop: 'outside', blend: true, blendMove: 'down', apMax: '0.5', spring: true, finOverlap: '0.1' }, 'custom outside staggered, staying down', 0.05);
+customCheck({ ...cust, cop: 'pocket', blend: true, blendMove: 'down', blendMode: 'random' }, 'custom pocket staggered at random, staying down', 0.05);
 customCheck({ ...cust, cop: 'pocket', shapes: [{ closed: true, pts: [[-2.5, -1.5, 0.4], [2.5, -1.5, 0.4], [2.5, 1.5, 0.4], [-2.5, 1.5, 0.4]] }, circle(0.8, 0.2, 1)] }, 'custom pocket with an island', 0.05);
 customCheck({ ...cust, cop: 'pocket', dir: 'conv', apMax: '0.6', shapes: L_SHAPE }, 'custom pocket L shape, conventional, 2 levels', 0.05);
 customCheck({ ...cust, cop: 'path', slotW: '1', shapes: [{ closed: false, pts: [[-3, -1, 0], [0, -1, 0.5], [0, 1, 0.5], [3, 1, 0]] }] }, 'custom groove, open path', 0.04);

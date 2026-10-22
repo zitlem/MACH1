@@ -69,7 +69,11 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
   await seg('op', 'profile'); await waitDone(); await sleep(300);
   check('stagger and overlap shown for a profile', await ev(`!!document.querySelector('#form input[data-k="blend"]') && !!document.querySelector('#form input[data-k="finOverlap"]')`));
   await ev(`document.querySelector('#form input[data-k="blend"]').click()`); await waitDone(); await sleep(300);
-  check('stagger explains itself', /137\.5°/.test(await ev(`document.getElementById('form').textContent`)));
+  check('stagger offers step, shift and random, and where to go between', await ev(`['blendMode','blendMove'].every(k => !!document.querySelector('#form [data-k="' + k + '"]')) && !!document.querySelector('#form input[data-k="blendStep"]')`));
+  await seg('blendMode', 'shift'); await waitDone(); await sleep(200);
+  check('shift shows its distance', await ev(`!!document.querySelector('#form input[data-k="blendShift"]') && !document.querySelector('#form input[data-k="blendStep"]')`));
+  await seg('blendMove', 'down'); await waitDone(); await sleep(300);
+  check('stay down explains itself', /ride round the loop just cut/.test(await ev(`document.getElementById('form').textContent`)));
   await shot('profile-stagger.png');
   check('no page errors', errors.length === 0, errors);
   console.log(passes + ' passed, ' + fails + ' failed'); ws.close(); chrome.kill(); process.exit(fails ? 1 : 0);

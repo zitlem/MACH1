@@ -12537,6 +12537,11 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     // round the part, the golden angle on from the last, so the lead-in marks do not line up (the first at the start
     // point when one is chosen); finOverlap: the finish pass runs this far past its start before it leads off
     blend: false, finOverlap: '0',
+    // blendMode: step (blendStep degrees on round the centre each time), shift (each loop starts blendShift along
+    // the wall from where the last one started) or random (blendSeed picks the draw); blendMove: between
+    // staggered starts lift to the clearance plane (clear) or the rapid plane (rapid), or stay down (down): ride the
+    // loop just cut, at depth, to the next start (lifting where that cannot be done)
+    blendMode: 'step', blendStep: '137.5', blendShift: '0.05', blendSeed: '1', blendMove: 'clear',
     ae: '0.06', finish: true, finStock: '0.012', spring: false, dir: 'climb', leadR: '0.25',
     link: 'depth', lift: '0.02', rampPct: '50', airFeed: '50',
     // trochoidal loops: the back half of each loop runs through ground already cut, at this % of the roughing feed
@@ -12658,14 +12663,72 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     return B;
   }
 
-  // where loop k of a staggered job should lead in: the chosen start (E) for the first, then the golden angle
-  // (137.5°) on each time round the centre, as a point far off in that direction (a loop starts at its point, or
-  // its side, nearest it)
-  const GOLD = Math.PI * (3 - Math.sqrt(5));
-  function stagPoint(E, ctr, k) {
-    if (E && k === 0) return E;
-    const a = (E ? Math.atan2(E[1] - ctr[1], E[0] - ctr[0]) : 0) + k * GOLD;
-    return [ctr[0] + 1e4 * Math.cos(a), ctr[1] + 1e4 * Math.sin(a)];
+  // where each loop of a staggered job leads in, in turn: the chosen start (E) for the first, then round the centre
+  // by the step angle each time, or at random (a seeded draw, so the program comes out the same every time),
+  // as a point far off in that direction (a loop starts at its point, or its side, nearest it)
+  function staggerer(c, E, ctr) {
+    let k = 0, sd = (Math.abs(Math.round(num(c.blendSeed, 1))) || 1) >>> 0;
+    const rnd = () => { sd = (sd + 0x6D2B79F5) >>> 0; let t = sd; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const a0 = E ? Math.atan2(E[1] - ctr[1], E[0] - ctr[0]) : 0, step = num(c.blendStep, 137.5) * Math.PI / 180;
+    return () => {
+      const i = k++;
+      if (E && i === 0) return E;
+      const a = c.blendMode === 'random' ? a0 + rnd() * TAU : a0 + i * step;
+      return [ctr[0] + 1e4 * Math.cos(a), ctr[1] + 1e4 * Math.sin(a)];
+    };
+  }
+  // on a closed polyline: the point nearest q, then d further along it
+  function alongFrom(pts, q, d) {
+    const n = pts.length; let best = null;
+    for (let i = 0; i < n; i++) {
+      const a = pts[i], b = pts[(i + 1) % n], vx = b[0] - a[0], vy = b[1] - a[1], l2 = vx * vx + vy * vy;
+      const t = l2 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * vx + (q[1] - a[1]) * vy) / l2)) : 0, p = [a[0] + t * vx, a[1] + t * vy], dd = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (!best || dd < best.dd) best = { i, p, dd };
+    }
+    let at = best.p, i = best.i, left = Math.abs(d);
+    for (let guard = 0; guard < 2 * n + 2 && left > 1e-12; guard++) {
+      const b = pts[(i + 1) % n], L = Math.hypot(b[0] - at[0], b[1] - at[1]);
+      if (L >= left) return [at[0] + (b[0] - at[0]) * left / L, at[1] + (b[1] - at[1]) * left / L];
+      left -= L; at = b; i = (i + 1) % n;
+    }
+    return at;
+  }
+  // the run of lines and arcs from p0 up to piece i's point pt (as startNear finds them)
+  function primsTo(prims, i, pt) {
+    const out = prims.slice(0, i), pr = prims[i];
+    if (pr) out.push(Object.assign({}, pr, { x: pt[0], y: pt[1] }));
+    return out;
+  }
+  // Staying down between staggered loops: the lead off a loop is held back (pend: the loop's pieces from its start S,
+  // the lead centre C and end E, Lr, its turn, Z and feed). leaveLoop then either rides the loop, at depth, to its
+  // point nearest the next start, leads off there and feeds across to that start (when it is near and ok() passes
+  // the way across), or leads off where the loop began (with the finish overlap on a finish loop).
+  function leaveLoop(B, pend, next, ok, ov) {
+    if (!pend) return false;
+    const { prims, S, Lr, side, z, f, k } = pend, ccw = side > 0;
+    const off = (Q, d, run) => { const C2 = [Q[0] - d[1] * side * Lr, Q[1] + d[0] * side * Lr], E2 = [C2[0] + d[0] * Lr, C2[1] + d[1] * Lr]; return { C2, E2, run }; };
+    if (next) {
+      const st = startNear(prims, S, next), o = off(st.S, st.d);
+      const way = []; for (let t = 0; t <= 20; t++) way.push([o.E2[0] + (next[0] - o.E2[0]) * t / 20, o.E2[1] + (next[1] - o.E2[1]) * t / 20]);
+      if (Math.hypot(next[0] - o.E2[0], next[1] - o.E2[1]) < 3 * Lr + 0.05 && way.every(ok)) {
+        B.run(primsTo(prims, st.i, st.S), z, f, 'link');
+        B.arc(ccw, o.E2[0], o.E2[1], o.C2[0], o.C2[1], z, f, k === 'finish' ? 'finish' : 'entry');
+        B.g1(next[0], next[1], z, f, 'link');
+        return true;
+      }
+    }
+    if (k === 'finish' && ov > 1e-6) {
+      const h = primsHead(prims, S, ov), o = off(h.end, h.d);
+      B.run(h.prims, z, f, k);
+      B.arc(ccw, o.E2[0], o.E2[1], o.C2[0], o.C2[1], z, f, 'finish');
+    } else B.arc(ccw, pend.E[0], pend.E[1], pend.C[0], pend.C[1], z, f, k === 'finish' ? 'finish' : 'entry');
+    return false;
+  }
+  // between cuts to (x, y), lifting to zl (or the retract height)
+  function hopZ(B, K, x, y, zl) {
+    B.g0(null, null, Math.max(zl == null ? K.retractZ : zl, B.pos().z));
+    B.g0(x, y);
+    B.g0(null, null, K.rapidZ);
   }
   // the first len along a run of lines and arcs from p0: the pieces, where it ends and the direction there
   function primsHead(prims, p0, len) {
@@ -12734,7 +12797,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
       if (!best || d < best.d - 1e-12) best = { i, pt, d, a };
       from = b;
     });
-    const i = best.i, pr = prims[i], S = best.pt, tail = { ...pr }, head = { ...pr, x: S[0], y: S[1] };
+    const i = best.i, pr = prims[i], S = best.pt, tail = { ...pr }, head = { ...pr, x: S[0], y: S[1] }, iAt = i;
     const same = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]) < 1e-9;
     const out = [];
     if (!same(S, [pr.x, pr.y])) out.push(tail);                       // S on to the end of its piece
@@ -12743,7 +12806,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     let d;
     if (pr.t === 'L') { const l = Math.hypot(pr.x - best.a[0], pr.y - best.a[1]) || 1; d = [(pr.x - best.a[0]) / l, (pr.y - best.a[1]) / l]; }
     else { const r = Math.hypot(S[0] - pr.cx, S[1] - pr.cy) || 1, ux = (S[0] - pr.cx) / r, uy = (S[1] - pr.cy) / r; d = pr.ccw ? [-uy, ux] : [uy, -ux]; }
-    return { S, d, prims: out };
+    return { S, d, prims: out, i: iAt };
   }
   // distance from a rounded rectangle's edge (positive outside)
   function rrDist(p, cx, cy, A, Bh, r) {
@@ -12830,50 +12893,67 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
       if (clear(at.L)) return at;
       moved++; return std;
     };
-    // the finish pass (k 'finish') may run on past its start by the overlap, then leads off from there
-    const ov = Math.abs(num(c.finOverlap, 0));
-    const emit = (P, z, f, k, twice) => {
+    // the finish pass (k 'finish') may run on past its start by the overlap, then leads off from there; staying
+    // down between staggered starts, the lead off waits (pend) until the next start is known
+    const ov = Math.abs(num(c.finOverlap, 0)), down = c.blend && c.blendMove === 'down', liftZ = c.blend ? (c.blendMove === 'rapid' ? K.rapidZ : K.safeZ) : null;
+    let pend = null;
+    const emit = (P, z, f, k, twice, ring) => {
       B.arc(true, P.S[0], P.S[1], P.C[0], P.C[1], z, f, k === 'finish' ? 'finish' : 'entry');
       B.run(P.prims, z, f, k); if (twice) B.run(P.prims, z, f, k);
-      if (k === 'finish' && ov > 1e-6) {
-        const h = primsHead(P.prims, P.S, ov), C2 = [h.end[0] - h.d[1] * Lr, h.end[1] + h.d[0] * Lr];
-        B.run(h.prims, z, f, k);
-        B.arc(true, C2[0] + h.d[0] * Lr, C2[1] + h.d[1] * Lr, C2[0], C2[1], z, f, 'finish');
-      } else B.arc(true, P.E[0], P.E[1], P.C[0], P.C[1], z, f, k === 'finish' ? 'finish' : 'entry');
+      pend = { prims: P.prims, S: P.S, C: P.C, E: P.E, Lr, side: 1, z, f, k, ring };
+      if (!down) { leaveLoop(B, pend, null, null, ov); pend = null; }
+    };
+    // on to the next loop's lead start L at depth z: ride there (staying down), or lead off, lift and come down
+    const toNext = (L, z, ring) => {
+      const p = pend; pend = null;
+      if (p && leaveLoop(B, p, L, q => rrDist(q, cx, cy, p.ring.A, p.ring.B, p.ring.r) >= -1e-9, ov)) return;
+      hopZ(B, K, L[0], L[1], liftZ); B.g1(null, null, z, air, 'air');
     };
     // the lead-in starts in the clear: outside the stock for the first loop, outside the loop before for the rest;
     // staggered, each loop of each level starts somewhere else
     const clearFor = j => j === 0 ? L => rrDist(L, cx, cy, A0, B0, r0) >= -1e-9 : L => rrDist(L, cx, cy, rings[j - 1].A, rings[j - 1].B, rings[j - 1].r) >= -1e-9;
     const plans = rings.map((g, j) => plan(g.A, g.B, g.r, clearFor(j)));
-    let stagK = 0;
-    const stag = () => stagPoint(E, [cx, cy], stagK++);
+    // staggered: by angle or at random round the centre, or each loop shifted along from where the last started
+    const stagA = staggerer(c, E, [cx, cy]), shift = c.blendMode === 'shift' ? Math.abs(num(c.blendShift, 0.05)) : null;
+    let lastS = null;
+    const stagFor = (A, Bh, rho) => {
+      if (shift === null) return stagA();
+      if (!lastS) return E || [cx + 1e4, cy];
+      const loop = rrLoop(cx, cy, A, Bh, rho), st = startNear(loop, [cx + A, cy], lastS);
+      return primsHead(st.prims, st.S, shift).end;
+    };
+    const planS = (A, Bh, rho, clear) => { const P = plan(A, Bh, rho, clear, stagFor(A, Bh, rho)); lastS = P.S; return P; };
     if (rings.length && c.rough) {
       B.sec('ROUGH', K.rough.rpm);
       zs.forEach((z, li) => {
         B.note('LEVEL ' + (li + 1) + ' OF ' + zs.length + ' Z' + fx(z));
-        (c.blend ? rings.map((g, j) => plan(g.A, g.B, g.r, clearFor(j), stag())) : plans).forEach((P, j) => {
+        (c.blend ? rings.map((g, j) => planS(g.A, g.B, g.r, clearFor(j))) : plans).forEach((P, j) => {
           if (j === 0) {
-            if (!started) { start(B, K, P.L[0], P.L[1]); started = true; } else hop(B, K, P.L[0], P.L[1]);
-            B.g1(null, null, z, air, 'air');
-          } else if (c.blend) { hop(B, K, P.L[0], P.L[1]); B.g1(null, null, z, air, 'air'); }   // the next start is elsewhere: over the top
+            if (!started) { start(B, K, P.L[0], P.L[1]); started = true; B.g1(null, null, z, air, 'air'); }
+            else { if (pend) { leaveLoop(B, pend, null, null, ov); pend = null; } hopZ(B, K, P.L[0], P.L[1], liftZ); B.g1(null, null, z, air, 'air'); }
+          } else if (c.blend) toNext(P.L, z, rings[j - 1]);     // the next start is elsewhere
           else if (c.link === 'lift') { B.g0(null, null, z + lift); B.g0(P.L[0], P.L[1]); B.g1(null, null, z, air, 'air'); }
           else B.g1(P.L[0], P.L[1], z, fr, 'link');
-          emit(P, z, fr, 'rough');
+          emit(P, z, fr, 'rough', false, rings[j]);
         });
       });
     }
+    if (pend) { leaveLoop(B, pend, null, null, ov); pend = null; }
     if (c.finish) {
       const Af = hx + R, Bf = hy + R, rf = rc + R, z = -K.depth;
-      const P = plan(Af, Bf, rf, L => rrDist(L, cx, cy, hx + R + a, hy + R + a, rc + R + a) >= -1e-9 || !c.rough, c.blend ? stag() : undefined);
+      const okF = L => rrDist(L, cx, cy, hx + R + a, hy + R + a, rc + R + a) >= -1e-9 || !c.rough;
+      const P = c.blend ? planS(Af, Bf, rf, okF) : plan(Af, Bf, rf, okF);
       B.sec('FINISH', K.fin.rpm);
-      if (!started) { start(B, K, P.L[0], P.L[1]); started = true; } else hop(B, K, P.L[0], P.L[1]);
+      if (!started) { start(B, K, P.L[0], P.L[1]); started = true; } else hopZ(B, K, P.L[0], P.L[1], liftZ);
       B.g1(null, null, z, air, 'air');
-      emit(P, z, K.fin.feed, 'finish', c.spring && !c.blend);
+      const fring = { A: Af, B: Bf, r: rf };
+      emit(P, z, K.fin.feed, 'finish', c.spring && !c.blend, fring);
       if (c.spring && c.blend) {                         // the spring pass from another spot, coming in over cut ground
-        const P2 = plan(Af, Bf, rf, () => true, stag());
-        hop(B, K, P2.L[0], P2.L[1]); B.g1(null, null, z, air, 'air');
-        emit(P2, z, K.fin.feed, 'finish', false);
+        const P2 = planS(Af, Bf, rf, () => true);
+        toNext(P2.L, z, fring);
+        emit(P2, z, K.fin.feed, 'finish', false, fring);
       }
+      if (pend) { leaveLoop(B, pend, null, null, ov); pend = null; }
     }
     if (E && moved) W.push(moved + ' pass' + (moved > 1 ? 'es start' : ' starts') + ' at the middle of the right side instead: at the chosen entry the lead-in would begin on stock.');
     if (started) B.g0(null, null, K.safeZ);
@@ -13162,8 +13242,10 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     if (c.blend) {                                       // staggered starts round the middle of the shapes
       const bb = [Infinity, Infinity, -Infinity, -Infinity];
       shapes.forEach(sh => sh.pts.forEach(q => { bb[0] = Math.min(bb[0], q[0]); bb[1] = Math.min(bb[1], q[1]); bb[2] = Math.max(bb[2], q[0]); bb[3] = Math.max(bb[3], q[1]); }));
-      let k = 0; const ctr = [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2];
-      x.stag = () => stagPoint(c.entry, ctr, k++);
+      const sa = staggerer(c, c.entry, [(bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2]), sh = c.blendMode === 'shift' ? Math.abs(num(c.blendShift, 0.05)) : null;
+      x.exact = sh !== null;
+      x.stag = pts => sh === null ? sa() : x.lastS ? alongFrom(pts, x.lastS, sh) : c.entry || pts[0];
+      x.down = c.blendMove === 'down'; x.liftZ = c.blendMove === 'rapid' ? K.rapidZ : K.safeZ;
     }
     const cop = CUSTOM_OPS[c.cop] ? c.cop : 'outside';
     if (!shapes.length && (c.shapes || []).some(sh => sh.cut === false)) { W.push('Every shape is marked CAD only: tick Machine on the ones to cut.'); return; }
@@ -13189,13 +13271,16 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
   // ok(L, arcPts) says whether a lead fits there. With near (where the tool is), the loop starts as close to it
   // as a lead fits, so one loop runs into the next without lifting; otherwise on the longest side. Larger lead
   // radii first, down to LrMin.
-  function planLoop(H, pts, side, LrWant, LrMin, ok, near) {
+  function planLoop(H, pts, side, LrWant, LrMin, ok, near, exact) {
     const n = pts.length, sides = [];
     for (let i = 0; i < n; i++) { const len = H.dist(pts[i], pts[(i + 1) % n]); if (len >= 1e-6) sides.push({ i, len }); }
     const radii = []; for (let r = LrWant; r > LrMin * 1.001; r /= 2) radii.push(r); radii.push(LrMin);
     const make = (sd, Lr) => {
       const p = pts[sd.i], q = pts[(sd.i + 1) % n];
-      const d = [(q[0] - p[0]) / sd.len, (q[1] - p[1]) / sd.len], mid = sd.len >= 2 * Lr, S = mid ? [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2] : p;
+      const d = [(q[0] - p[0]) / sd.len, (q[1] - p[1]) / sd.len], mid = sd.len >= 2 * Lr;
+      // exact: on this side at the point nearest near (room for the lead), else its middle
+      let S = mid ? [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2] : p;
+      if (exact && near && mid) { const t = Math.max(Lr, Math.min(sd.len - Lr, (near[0] - p[0]) * d[0] + (near[1] - p[1]) * d[1])); S = [p[0] + d[0] * t, p[1] + d[1] * t]; }
       const nl = [-d[1] * side, d[0] * side], Cc = [S[0] + nl[0] * Lr, S[1] + nl[1] * Lr];
       return { sd, mid, S, Cc, L: [Cc[0] - d[0] * Lr, Cc[1] - d[1] * Lr], E: [Cc[0] + d[0] * Lr, Cc[1] + d[1] * Lr], Lr };
     };
@@ -13207,53 +13292,65 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     let best = null;
     for (const Lr of radii) {
       let cands = sides.map(sd => make(sd, Lr));
-      if (near) cands.sort((u, v) => H.dist(u.L, near) - H.dist(v.L, near));
+      if (near) cands.sort(exact ? (u, v) => H.dist(u.S, near) - H.dist(v.S, near) : (u, v) => H.dist(u.L, near) - H.dist(v.L, near));
       else cands.sort((u, v) => v.sd.len - u.sd.len);
       const hit = cands.slice(0, near ? 60 : 16).find(fits);
       if (!hit) continue;
       if (!near) { best = hit; break; }
       // nearest start wins; a larger lead only if it is about as near
-      if (!best || H.dist(hit.L, near) < H.dist(best.L, near) - 0.5 * Lr) best = hit;
+      if (!best || (exact ? H.dist(hit.S, near) < H.dist(best.S, near) - 0.5 * Lr : H.dist(hit.L, near) < H.dist(best.L, near) - 0.5 * Lr)) best = hit;
     }
     if (!best) return null;
     const ring = [best.S]; for (let k = 1; k <= n; k++) ring.push(pts[(best.sd.i + k) % n]); if (best.mid) ring.push(best.S);
     return { L: best.L, S: best.S, E: best.E, Cc: best.Cc, Lr: best.Lr, ccw: side > 0, ring };
   }
-  function emitLoop(x, P, z, f, k, twice) {
-    const { B, H, tol } = x, ov = k === 'finish' ? Math.abs(num(x.c.finOverlap, 0)) : 0;
+  // a loop: lead on, round (twice for a spring pass), lead off (with the finish overlap); staying down between
+  // staggered starts, the lead off waits in x.pend for the next start (flushed by leaveAt or comeDown)
+  function emitLoop(x, P, z, f, k, twice, hold) {
+    const { B, H, tol } = x;
+    if (x.pend) leaveAt(x, null);
     B.arc(P.ccw, P.S[0], P.S[1], P.Cc[0], P.Cc[1], z, f, k === 'finish' ? 'finish' : 'entry');
     const prims = H.fitPath(H.removeDup(P.ring), tol);
     B.run(prims, z, f, k); if (twice) B.run(prims, z, f, k);
-    if (ov > 1e-6) {                                     // on past the start by the overlap, then off from there
-      const h = primsHead(prims, P.S, ov), sd = P.ccw ? 1 : -1, C2 = [h.end[0] - h.d[1] * sd * P.Lr, h.end[1] + h.d[0] * sd * P.Lr];
-      B.run(h.prims, z, f, k);
-      B.arc(P.ccw, C2[0] + h.d[0] * P.Lr, C2[1] + h.d[1] * P.Lr, C2[0], C2[1], z, f, 'finish');
-    } else B.arc(P.ccw, P.E[0], P.E[1], P.Cc[0], P.Cc[1], z, f, k === 'finish' ? 'finish' : 'entry');
+    x.pend = { prims, S: P.S, C: P.Cc, E: P.E, Lr: P.Lr, side: P.ccw ? 1 : -1, z, f, k };
+    if (!(x.down && hold)) leaveAt(x, null);
+  }
+  // from a held-back lead off on to the lead start L (riding the last loop when ok passes the way across): true
+  // when the tool is at L at depth
+  function leaveAt(x, L, ok) {
+    const p = x.pend; x.pend = null;
+    return leaveLoop(x.B, p, L, ok || (() => false), p && p.k === 'finish' ? Math.abs(num(x.c.finOverlap, 0)) : 0);
   }
   const segOk = (a, b, ok) => { const n = Math.max(2, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.01)); for (let i = 0; i <= n; i++) if (!ok([a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n])) return false; return true; };
   // come down at p: from where the tool is, lift to the rapid plane, rapid over, feed down in the clear
   function comeDown(x, p, z) {
-    const { B, K } = x, P = B.pos();
+    const { B, K } = x;
+    if (x.pend) leaveAt(x, null);
+    const P = B.pos();
     if (isNaN(P.x)) start(B, K, p[0], p[1]);
+    else if (x.stag) hopZ(B, K, p[0], p[1], x.liftZ);
     else hop(B, K, p[0], p[1]);
     B.g1(null, null, z, x.air, 'air');
   }
   // finish loops: loops in climb order already (material on the right); conventional reverses them
   function finishLoops(x, loops, okLead) {
     const { c, K, B, W, sg } = x, z = -K.depth;
+    if (x.pend) leaveAt(x, null);
     if (!loops.length) return;
     B.sec('FINISH', K.fin.rpm);
     const LrMin = Math.max(0.005, x.a * 1.1);
     for (const lp of loops) {
       const pts = sg > 0 ? lp : lp.slice().reverse();
-      const here = B.pos(), near = x.stag ? x.stag() : c.entry || (isNaN(here.x) ? null : [here.x, here.y]);
-      const P = planLoop(x.H, pts, sg, Math.max(LrMin, Math.abs(num(c.leadR, 0.25))), LrMin, okLead, near);
+      const here = B.pos(), near = c.entry || (isNaN(here.x) ? null : [here.x, here.y]);
+      const P = planLoop(x.H, pts, sg, Math.max(LrMin, Math.abs(num(c.leadR, 0.25))), LrMin, okLead, x.stag ? x.stag(pts) : near, x.exact);
       if (!P) { W.push('No room for a lead arc on one finish loop; it was left out. Check that shape.'); continue; }
+      x.lastS = P.S;
       comeDown(x, P.L, z);
-      emitLoop(x, P, z, x.ff, 'finish', c.spring && !x.stag);
-      if (c.spring && x.stag) {                          // the spring pass from another spot
-        const P2 = planLoop(x.H, pts, sg, Math.max(LrMin, Math.abs(num(c.leadR, 0.25))), LrMin, okLead, x.stag()) || P;
-        comeDown(x, P2.L, z);
+      emitLoop(x, P, z, x.ff, 'finish', c.spring && !x.stag, c.spring && x.stag);
+      if (c.spring && x.stag) {                          // the spring pass from another spot: ride the finish loop there, or lift
+        const P2 = planLoop(x.H, pts, sg, Math.max(LrMin, Math.abs(num(c.leadR, 0.25))), LrMin, okLead, x.stag(pts), x.exact) || P;
+        x.lastS = P2.S;
+        if (!(x.pend && leaveAt(x, P2.L, q => okLead(q, [])))) comeDown(x, P2.L, z);
         emitLoop(x, P2, z, x.ff, 'finish', false);
       }
     }
@@ -13349,16 +13446,19 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
           const { it, e } = best;
           if (it.closed) {
             const okLead = (Lp, arc) => (inAir(Lp) || dPart(Lp) >= it.o + step - 1e-4) && arc.every(p => dPart(p) >= it.o - 1e-4);
-            const P = planLoop(H, it.pts, sg, LrWant, LrMin, okLead, x.stag ? x.stag() : c.entry || cp);
+            const P = planLoop(H, it.pts, sg, LrWant, LrMin, okLead, x.stag ? x.stag(it.pts) : c.entry || cp, x.exact);
             if (!P) { lost++; done.add(it); continue; }
+            x.lastS = P.S;
             const okL = q => inAir(q) || (dPart(q) >= Math.min(it.o + step - 1e-4, it.o + 0.5 * step) && dPart(q) >= R + a);
-            if (cp && H.dist(cp, P.L) < 1.5 && segOk(cp, P.L, okL)) {
+            if (x.pend && leaveAt(x, P.L, okL)) { /* rode the last loop to here */ }
+            else if (cp && H.dist(cp, P.L) < 1.5 && segOk(cp, P.L, okL)) {
               if (c.link === 'lift') { const lift = Math.abs(num(c.lift, 0.02)); B.g0(null, null, z + lift); B.g0(P.L[0], P.L[1]); B.g1(null, null, z, x.air, 'air'); }
               else B.g1(P.L[0], P.L[1], z, fr, 'link');
             } else comeDown(x, P.L, z);
-            emitLoop(x, P, z, fr, 'rough');
+            emitLoop(x, P, z, fr, 'rough', false, true);
             it.back = false;
           } else {
+            if (x.pend) leaveAt(x, null);
             const pts = e.back ? it.pts.slice().reverse() : it.pts;
             if (best.how === 'straight') B.g1(pts[0][0], pts[0][1], z, fr, 'link');
             else if (best.how === 'gap') B.run(H.fitPath(H.removeDup(best.gap), x.tol), z, fr, 'link');
@@ -13371,6 +13471,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
       });
       if (lost) W.push(lost / zs.length + ' roughing loop' + (lost / zs.length > 1 ? 's were' : ' was') + ' left out: no room for a lead arc. Try a smaller lead radius or stepover.');
     }
+    if (x.pend) leaveAt(x, null);
     if (c.finish) finishLoops(x, H.loops(H.offset(partC, R)).filter(l => !l.hole).map(l => l.pts.slice().reverse()),
       (Lp, arc) => dPart(Lp) >= R + a - 1e-4 && arc.every(p => dPart(p) >= R - 1e-4));
     B.g0(null, null, K.safeZ);
@@ -13666,7 +13767,8 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
             const safeIn = H.offset(op.safe, 1e-4), okSafe = p => H.inside(p, safeIn), ring = ringIn[op.k];
             const okLead = (Lp, arc) => okSafe(Lp) && arc.every(p => H.inside(p, ring));
             const pts = sg > 0 ? op.pts : op.pts.slice().reverse();
-            const P = planLoop(H, pts, sg, LrWant, LrMin, okLead, x.stag ? x.stag() : c.entry || pc);
+            const P = planLoop(H, pts, sg, LrWant, LrMin, okLead, x.stag ? x.stag(pts) : c.entry || pc, x.exact);
+            if (P) x.lastS = P.S;
             if (P) {
               if (pc && segOk(pc, P.L, okSafe)) B.g1(P.L[0], P.L[1], z, fr, 'link');
               else comeDown(x, P.L, z);
@@ -14428,7 +14530,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
   //  - exact: JSON, UTF-8, base32 in (CFG ...) lines after a (HEM SETTINGS DATA V2 <bytes> BYTES CHECK <fnv-1a>) line.
   // Open reads the exact copy; if an editor or control has damaged it (upper-cased text, cut lines), it falls
   // back to the readable one. Settings saved as (SETTINGS DATA V1 ...) before are read too.
-  const ENUMS = { op: ['profile', 'pocket', 'slot', 'cone', 'custom'], coneSide: ['inside', 'outside'], coneBy: ['dia', 'angle'], macroEnd: ['M99', 'M30'], shape: ['rect', 'circle'], stockType: ['rect', 'even'], cop: ['outside', 'pocket', 'path'],
+  const ENUMS = { blendMode: ['step', 'shift', 'random'], blendMove: ['clear', 'rapid', 'down'], op: ['profile', 'pocket', 'slot', 'cone', 'custom'], coneSide: ['inside', 'outside'], coneBy: ['dia', 'angle'], macroEnd: ['M99', 'M30'], shape: ['rect', 'circle'], stockType: ['rect', 'even'], cop: ['outside', 'pocket', 'path'],
     strategy: ['offset', 'troch'], slotEntry: ['open', 'helix'], dir: ['climb', 'conv'], link: ['depth', 'lift'], passes: ['both', 'rough', 'finish'],
     mat: Object.keys(MATERIALS).concat(['custom']), dxfUnits: ['auto', 'in', 'mm'], mazCtl: ['MatrixM', 'SmoothM'], coating: Object.keys(COATINGS), retract: ['rapid', 'clear'], openSide: ['left', 'right'], openDir: ['oneway', 'zigzag'], pieceDir: ['zigzag', 'oneway'], pocketStrategy: ['auto', 'offset', 'troch'] };
   const cmt = v => String(v).replace(/[()]/g, '').replace(/[^\x20-\x7E]/g, '?');
@@ -14555,6 +14657,8 @@ const MAT_OPTS = Object.entries(HEM.MATERIALS).map(([k, m]) => [k, m.name]);
 const COAT_OPTS = Object.entries(HEM.COATINGS).map(([k, m]) => [k, m.name]);
 // the material and coating numbers for the current tool, shown in grey in blank fields
 const autoNum = k => { const a = HEM.matNumbers(cfg, Math.abs(num(cfg.toolD, 0.75)) || 0.75); return { sfmR: a.sfmR, fzR: a.fzR, sfmF: a.sfmF, fzF: a.fzF, unitHp: a.hp }[k]; };
+// operations that can stagger their starts
+const stagOps = c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'));
 // the cone's angle and the other diameter, from what is typed
 function coneNote(c) {
   const C = HEM.coneOf(c, { depth: Math.abs(num(c.depth, 0)), R: Math.abs(num(c.toolD, 0.75)) / 2, D: Math.abs(num(c.toolD, 0.75)), finStock: 0, levels: 1 });
@@ -14650,7 +14754,11 @@ const SECTIONS = [
     { row: [F('entryX', 'Start near X', 'in'), F('entryY', 'Start near Y', 'in')], show: c => c.entryOn && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))), hint: 'Each pass (and the finish pass) leads in at its point nearest here, where there is room for the lead arc in the clear. Pockets still open up in the middle first.' },
     { pick: true, show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) },
     F('blend', 'Stagger the starts (hide the lead-in marks)', '', '', { kind: 'chk', show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) }),
-    { note: c => 'Every loop, on every level, and the finish' + (c.spring ? ' and spring passes lead' : ' pass leads') + ' in at another spot round the part, 137.5° on from the last, so the marks never line up.' + (c.entryOn ? ' The first starts at the start point above.' : ''), show: c => c.blend && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))) },
+    F('blendMode', 'Where each start goes', '', '', { kind: 'seg', opts: [['step', 'Step by an angle'], ['shift', 'Shift along'], ['random', 'Random']], show: c => c.blend && stagOps(c), hintFn: c => ({ step: 'Each loop leads in this far round the part from the last.', shift: 'Each loop leads in this far along the wall from where the last one started, so the starts creep along the part.', random: 'Each loop leads in at a random spot round the part; the same draw every time you open these settings.' })[c.blendMode] + (c.entryOn ? ' The first starts at the start point above.' : '') }),
+    F('blendStep', 'Step round the part', '°', '137.5 (the golden angle) spreads the starts evenly and never repeats; 90 puts them a quarter turn apart.', { show: c => c.blend && stagOps(c) && c.blendMode === 'step' }),
+    F('blendShift', 'Shift along the wall', 'in', 'Each start this far on from the one before, the way the tool cuts.', { show: c => c.blend && stagOps(c) && c.blendMode === 'shift' }),
+    F('blendSeed', 'Random draw', '', 'Change the number for another set of random starts.', { show: c => c.blend && stagOps(c) && c.blendMode === 'random' }),
+    F('blendMove', 'To the next start', '', '', { kind: 'seg', opts: [['clear', 'Clearance plane'], ['rapid', 'Rapid plane'], ['down', 'Stay down']], show: c => c.blend && stagOps(c), hintFn: c => ({ clear: 'Lift to the clearance plane (Z' + f4(num(c.safeZ, 1)) + '), over clamps and vise jaws, and come down at the next start in the clear.', rapid: 'Lift to the rapid plane (Z' + f4(Math.min(num(c.rapidZ, 0.1), num(c.safeZ, 1))) + '): clears the top of the part (Z0), not clamps standing above it.', down: 'Stay at depth: ride round the loop just cut (cleared ground) to the next start, lead off and on there. Where it cannot (a new level, another shape, the finish), it lifts to the clearance plane. Profiles and outside shapes; pockets lift.' })[c.blendMove] }),
     F('finOverlap', 'Finish overlap', 'in', 'The finish pass runs this far past its start before it leads off, blending the start mark away. 0 = none.', { show: c => c.finish && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))) }),
     F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
     { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.op === 'cone' ? 'Left on the wall by roughing, square to it' : c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside') },
@@ -14763,7 +14871,7 @@ function renderForm() {
   }).join('')}</section>`).join('');
   renderShapes();
 }
-const LAYOUT_KEYS = new Set(['blend', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+const LAYOUT_KEYS = new Set(['blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
 function set(k, v) {
   const was = cfg[k];
   cfg[k] = v;
