@@ -268,6 +268,7 @@ const SECTIONS = [
     F('coneBy', 'Size it by', '', '', { kind: 'seg', opts: [['dia', 'Top and bottom Ø'], ['angle', 'Top Ø and angle']], show: isOp('cone') }),
     { row: [F('coneTopD', 'Diameter at the top', 'in', 'At Z0'), F('coneBotD', 'Diameter at the bottom', 'in', '', { hintFn: coneNote })], show: c => c.op === 'cone' && c.coneBy !== 'angle' },
     { row: [F('coneTopD', 'Diameter at the top', 'in', 'At Z0'), F('coneAngle', 'Included angle', '°', '', { hintFn: coneNote })], show: c => c.op === 'cone' && c.coneBy === 'angle' },
+    F('finStock', 'Finish allowance', 'in', '', { show: isOp('cone'), hintFn: c => c.passes === 'finish' ? 'What roughing left on the wall (square to it): the finish spiral takes it off.' : 'Roughing leaves this on the wall, square to it' + (c.passes === 'rough' ? ', for a finish later. 0 roughs to size.' : '; the finish spiral takes it off.') }),
     { row: [F('cx', 'Center X', 'in'), F('cy', 'Center Y', 'in')], show: c => c.op === 'profile' || c.op === 'pocket' || c.op === 'cone', hint: 'From work zero (X0 Y0).' },
     { row: [F('x1', 'Start X', 'in'), F('y1', 'Start Y', 'in')], show: isOp('slot') },
     { row: [F('x2', 'End X', 'in'), F('y2', 'End Y', 'in')], show: isOp('slot') },
@@ -322,7 +323,8 @@ const SECTIONS = [
     F('blendMove', 'To the next start', '', '', { kind: 'seg', opts: [['clear', 'Clearance plane'], ['rapid', 'Rapid plane'], ['down', 'Stay down']], show: c => c.blend && stagOps(c), hintFn: c => ({ clear: 'Lift to the clearance plane (Z' + f4(num(c.safeZ, 1)) + '), over clamps and vise jaws, and come down at the next start in the clear.', rapid: 'Lift to the rapid plane (Z' + f4(Math.min(num(c.rapidZ, 0.1), num(c.safeZ, 1))) + '): clears the top of the part (Z0), not clamps standing above it.', down: 'Stay at depth: ride round the loop just cut (cleared ground) to the next start, lead off and on there. Where it cannot (a new level, another shape, the finish), it lifts to the clearance plane. Profiles and outside shapes; pockets lift.' })[c.blendMove] }),
     F('finOverlap', 'Finish overlap', 'in', 'The finish pass runs this far past its start before it leads off, blending the start mark away. 0 = none.', { show: c => c.finish && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))) }),
     F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
-    { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.op === 'cone' ? 'Left on the wall by roughing, square to it' : c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside') },
+    { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.op !== 'cone' && (c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside')) },
+    F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall for the finish pass', { show: c => c.op === 'cone' && c.passes !== 'rough' }),
     F('coneRoughStep', 'Roughing step down per turn', 'in', '', { show: c => c.op === 'cone' && c.passes !== 'finish', hintFn: c => 'Blank = a quarter of the tool (' + f4(0.25 * Math.abs(num(c.toolD, 0.75))) + '). Each roughing pass spirals down the cone this far a turn, cutting a band the stepover wide.' }),
     F('coneStep', 'Finish step down per turn', 'in', '', { show: c => c.op === 'cone' && c.finish, hintFn: coneStepNote }),
     F('spring', 'Spring pass (repeat the finish pass)', '', '', { kind: 'chk', show: c => c.finish && c.op !== 'cone' }),
@@ -447,7 +449,15 @@ function set(k, v) {
   if (k === 'op' || k === 'cop') renderTools();
   schedule();
 }
-function findItem(k) { for (const s of SECTIONS) for (const it of s.items) { if (it.k === k) return it; if (it.row) for (const r of it.row) if (r.k === k) return r; } return null; }
+// the field for setting k (the one on show, when two fields share a setting)
+function findItem(k) {
+  let first = null;
+  for (const s of SECTIONS) for (const it of s.items) {
+    const shown = (!s.show || s.show(cfg)) && (!it.show || it.show(cfg));
+    for (const f of it.row ? it.row : [it]) if (f.k === k) { if (shown && (!f.show || f.show(cfg))) return f; first = first || f; }
+  }
+  return first;
+}
 $('form').addEventListener('input', e => { const t = e.target; if (t.closest('#shapes')) return; const k = t.dataset.k; if (!k) return; set(k, t.type === 'checkbox' ? t.checked : t.value); });
 $('form').addEventListener('change', e => { const t = e.target; if (t.closest('#shapes')) return; if (t.tagName === 'SELECT' && t.dataset.k) set(t.dataset.k, t.value); });
 $('form').addEventListener('click', e => {

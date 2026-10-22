@@ -20,7 +20,8 @@ It is one offline file; open it in Chrome or Edge. Inch.
   - Roughing follows the cone. Inside: a helix bore at the centre (helix diameter and ramp angle), then passes
     from the inside out; outside: passes from the stock in. Every pass is a helix down the cone, the stepover apart
     across, the last one the finish stock (square to the wall) off it, going down the **Roughing step down per
-    turn** each turn (blank: a quarter of the tool). A pass stops where it would only cut air (inside, where the cone
+    turn** each turn (blank: a quarter of the tool). **Finish allowance** (with the cone's sizes) is what roughing
+    leaves on the wall, square to it; with **Rough only** it is still left, for a finish later (0 roughs to size). A pass stops where it would only cut air (inside, where the cone
     has narrowed to the bore; outside, where it has left the stock); one that reaches the floor ends with a flat
     turn on it.
   - The finish is one spiral down the wall on the tool's corner, the finish step down per turn apart, then a flat

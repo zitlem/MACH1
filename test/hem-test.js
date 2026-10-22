@@ -123,7 +123,7 @@ check({ op: 'slot', slotEntry: 'helix', apMax: '1', x1: '0', y1: '0', x2: '3', y
 // and everything but the finish ridges cleared. The macro, run through the same interpreter, makes the same moves.
 function coneCheck(cfg, label) {
   const r = HEM.generate(cfg), K = r.K, C = HEM.coneOf(r.cfg, K), tol = 2e-4, cx = +(cfg.cx || 0), cy = +(cfg.cy || 0);
-  ok(label + ': no warnings', () => assert.deepStrictEqual(r.warn.filter(w => !/Stick-out/.test(w) && !(r.cfg.passes === 'rough' && /^Rough only leaves/.test(w))), []));
+  ok(label + ': no warnings', () => assert.deepStrictEqual(r.warn.filter(w => !/Stick-out/.test(w) && !(r.cfg.passes === 'rough' && /^Rough only/.test(w))), []));
   const text = HEM.toGcode(r, HEM.settingsLines(r.cfg)), run = G.run('T.nc', text, {});
   // cutter positions (radius from the axis, tip Z), with the section they are in
   const at = [];

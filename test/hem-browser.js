@@ -27,6 +27,7 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
   await ev('localStorage.clear()'); await send('Page.reload'); await sleep(1500);
   check('loads', await ev('!!window.HEM && !!window.MACH1'));
   await seg('op', 'cone'); await waitDone(); await sleep(400);
+  check('finish allowance with the cone, and still there for rough only', await ev(`!!document.querySelector('#form input[data-k="finStock"]')`) && await (async () => { await seg('passes', 'rough'); await waitDone(); await sleep(200); const v = await ev(`!!document.querySelector('#form input[data-k="finStock"]') && /for a finish later/.test(document.querySelector('[data-hint="finStock"]').textContent)`); await seg('passes', 'both'); await waitDone(); await sleep(200); return v; })());
   check('cone fields shown', await ev(`!!document.querySelector('#form input[data-k="coneTopD"]') && !!document.querySelector('#form input[data-k="coneCR"]') && !!document.querySelector('#form input[data-k="coneStep"]')`));
   check('section shown', await ev(`!document.getElementById('sectWrap').hidden && document.querySelectorAll('#sect line').length > 6`));
   check('angle hint', (await ev(`document.querySelector('[data-hint="coneBotD"]').textContent`)).includes('° a side'));
