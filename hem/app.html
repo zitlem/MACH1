@@ -60,6 +60,8 @@ main{display:flex;flex-direction:column;gap:20px;min-width:0}
 .drawbar .lbl{font-size:13px;color:var(--mute)}
 .drawbar select{border:1px solid var(--line2);border-radius:6px;padding:3px 6px;background:#fff;font-size:13px}
 #plot{width:100%;height:480px;display:block;background:#fbfcfc;border:1px solid var(--line);border-radius:8px;touch-action:none;user-select:none}
+#sect{width:100%;height:240px;display:block;background:#fbfcfc;border:1px solid var(--line);border-radius:8px;margin-top:6px}
+.secth{font-size:13px;color:var(--mute);margin:14px 0 0}
 #plot.pan{cursor:grab}#plot.draw{cursor:crosshair}#plot.edit{cursor:default}
 .scrub{display:flex;align-items:center;gap:10px;margin-top:10px}
 .scrub input{flex:1;accent-color:var(--red)}
@@ -168,6 +170,7 @@ table.dims th:first-child,table.dims td:first-child{text-align:left}
           <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Step through the toolpath">
         </div>
         <div class="readout" id="readout"></div>
+        <div id="sectWrap" hidden><div class="secth" id="sectTitle"></div><svg id="sect" role="img" aria-label="Section through the cone"></svg></div>
         <div class="legend" id="legend"></div>
         <ul class="info" id="info"></ul>
       </div>
@@ -214,10 +217,23 @@ const MAT_OPTS = Object.entries(HEM.MATERIALS).map(([k, m]) => [k, m.name]);
 const COAT_OPTS = Object.entries(HEM.COATINGS).map(([k, m]) => [k, m.name]);
 // the material and coating numbers for the current tool, shown in grey in blank fields
 const autoNum = k => { const a = HEM.matNumbers(cfg, Math.abs(num(cfg.toolD, 0.75)) || 0.75); return { sfmR: a.sfmR, fzR: a.fzR, sfmF: a.sfmF, fzF: a.fzF, unitHp: a.hp }[k]; };
+// the cone's angle and the other diameter, from what is typed
+function coneNote(c) {
+  const C = HEM.coneOf(c, { depth: Math.abs(num(c.depth, 0)), R: Math.abs(num(c.toolD, 0.75)) / 2, D: Math.abs(num(c.toolD, 0.75)), finStock: 0, levels: 1 });
+  if (!(C.H > 0) || !(C.rT > 0)) return 'At the depth.';
+  if (C.ta < -1e-9) return c.coneSide === 'outside' ? 'An outside cone gets bigger toward the bottom.' : 'An inside cone gets smaller toward the bottom.';
+  return c.coneBy === 'angle' ? 'Ø' + f4(2 * C.rB) + ' at the depth, ' + f4(C.half) + '° a side.' : 'At the depth: ' + f4(C.half) + '° a side, ' + f4(2 * C.half) + '° included.';
+}
+// ridges left by the finish spiral, from the step, the angle and the corner
+function coneStepNote(c) {
+  const C = HEM.coneOf(c, { depth: Math.abs(num(c.depth, 0)), R: Math.abs(num(c.toolD, 0.75)) / 2, D: Math.abs(num(c.toolD, 0.75)), finStock: 0, levels: 1 });
+  const s = C.step * C.sec, h = C.rc > 0 && s / 2 < C.rc ? C.rc - Math.sqrt(C.rc * C.rc - s * s / 4) : C.step * C.sin;
+  return 'Leaves ridges about ' + f4(h) + ' high on the wall' + (C.rc > 0 ? '.' : ' with a flat end mill; a corner radius or a ball leaves far less.') + ' Turns: ' + Math.max(1, Math.ceil(C.H / C.step - 1e-9)) + '.';
+}
 const SECTIONS = [
   { h: 'Operation', items: [
-    F('op', '', '', '', { kind: 'seg', opts: [['profile', 'Profile'], ['pocket', 'Round pocket'], ['slot', 'Slot'], ['custom', 'Your shape']] }),
-    { note: c => ({ profile: 'Outside of a rectangle or circle.', pocket: 'Circular pocket: helix in, spiral out.', slot: 'Trochoidal slot between two points.', custom: 'Draw on the preview, type points, paste them or import a DXF.' })[c.op] },
+    F('op', '', '', '', { kind: 'seg', opts: [['profile', 'Profile'], ['pocket', 'Round pocket'], ['slot', 'Slot'], ['cone', 'Cone'], ['custom', 'Your shape']] }),
+    { note: c => ({ profile: 'Outside of a rectangle or circle.', pocket: 'Circular pocket: helix in, spiral out.', slot: 'Trochoidal slot between two points.', cone: 'Tapered hole or boss: roughed in levels, finished in one spiral down the wall.', custom: 'Draw on the preview, type points, paste them or import a DXF.' })[c.op] },
   ] },
   { h: 'Your shape', show: isOp('custom'), items: [
     F('cop', '', '', '', { kind: 'seg', opts: [['outside', 'Outside profile'], ['open', 'Open profile'], ['pocket', 'Pocket'], ['path', 'Groove along path']] }),
@@ -245,7 +261,11 @@ const SECTIONS = [
     F('cornerR', 'Corner radius', 'in', '0 for sharp corners', { show: c => c.op === 'profile' && c.shape !== 'circle' }),
     F('partD', 'Diameter', 'in', '', { show: c => c.op === 'profile' && c.shape === 'circle' }),
     F('pocketD', 'Pocket diameter', 'in', '', { show: isOp('pocket') }),
-    { row: [F('cx', 'Center X', 'in'), F('cy', 'Center Y', 'in')], show: c => c.op === 'profile' || c.op === 'pocket', hint: 'From work zero (X0 Y0).' },
+    F('coneSide', '', '', '', { kind: 'seg', opts: [['inside', 'Inside (tapered hole)'], ['outside', 'Outside (tapered boss)']], show: isOp('cone') }),
+    F('coneBy', 'Size it by', '', '', { kind: 'seg', opts: [['dia', 'Top and bottom Ø'], ['angle', 'Top Ø and angle']], show: isOp('cone') }),
+    { row: [F('coneTopD', 'Diameter at the top', 'in', 'At Z0'), F('coneBotD', 'Diameter at the bottom', 'in', '', { hintFn: coneNote })], show: c => c.op === 'cone' && c.coneBy !== 'angle' },
+    { row: [F('coneTopD', 'Diameter at the top', 'in', 'At Z0'), F('coneAngle', 'Included angle', '°', '', { hintFn: coneNote })], show: c => c.op === 'cone' && c.coneBy === 'angle' },
+    { row: [F('cx', 'Center X', 'in'), F('cy', 'Center Y', 'in')], show: c => c.op === 'profile' || c.op === 'pocket' || c.op === 'cone', hint: 'From work zero (X0 Y0).' },
     { row: [F('x1', 'Start X', 'in'), F('y1', 'Start Y', 'in')], show: isOp('slot') },
     { row: [F('x2', 'End X', 'in'), F('y2', 'End Y', 'in')], show: isOp('slot') },
     F('slotW', 'Slot width', 'in', 'Start and end are the centres of the slot\'s round ends. 1.3–2× the tool is ideal.', { show: isOp('slot') }),
@@ -253,10 +273,10 @@ const SECTIONS = [
   ] },
   { h: 'Work zero (X0 Y0)', items: [{ origin: true, draw: true }] },
   { h: 'Depth', items: [
-    { row: [F('depth', 'Depth', 'in', 'Z0 is the top of the part'), F('apMax', 'Max depth per level', 'in', '0 = full depth in one level')] },
+    { row: [F('depth', 'Depth', 'in', 'Z0 is the top of the part'), F('apMax', 'Max depth per level', 'in', '', { hintFn: c => c.op === 'cone' ? 'A cone also gets levels shallow enough that the steps left on its wall stay under a quarter of the tool across.' : '0 = full depth in one level' })] },
   ] },
-  { h: 'Stock', show: c => c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside'), items: [
-    F('stockType', '', '', '', { kind: 'seg', opts: [['even', 'Passes around the part'], ['rect', 'Clear a rectangular block']], hintFn: c => c.stockType === 'rect' ? 'Clears the whole block, corners and all, down to the part.' : 'Loops follow the part all the way round, from the stock per side in to the wall. Nothing else is cleared.' }),
+  { h: 'Stock', show: c => c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside'), items: [
+    F('stockType', '', '', '', { show: c => c.op !== 'cone', kind: 'seg', opts: [['even', 'Passes around the part'], ['rect', 'Clear a rectangular block']], hintFn: c => c.stockType === 'rect' ? 'Clears the whole block, corners and all, down to the part.' : 'Loops follow the part all the way round, from the stock per side in to the wall. Nothing else is cleared.' }),
     { row: [F('stockX', 'Stock X', 'in'), F('stockY', 'Stock Y', 'in')], show: c => c.op === 'profile' && c.stockType === 'rect', hint: 'Centred on the part.' },
     F('stockM', 'Stock per side', 'in', '', { show: c => c.op === 'custom' && c.stockType === 'rect', hintFn: c => {
       // the block this makes: the shapes' extents plus the stock on every side
@@ -265,11 +285,12 @@ const SECTIONS = [
       const m = Math.abs(num(c.stockM, 0));
       return isFinite(b[0]) ? 'Block ' + f4(b[2] - b[0] + 2 * m) + ' × ' + f4(b[3] - b[1] + 2 * m) + ': the shape\'s extents plus this on every side.' : 'Added to the shape\'s extents on every side.';
     } }),
-    F('stockW', 'Stock per side', 'in', '', { show: c => c.stockType !== 'rect', hintFn: c => { const n = Math.max(0, Math.ceil((Math.abs(num(c.stockW, 0)) - (c.passes === 'rough' ? 0 : Math.abs(num(c.finStock, 0)))) / Math.max(0.001, Math.abs(num(c.ae, 0.06))) - 1e-6)); return n + ' pass' + (n === 1 ? '' : 'es') + ' around the part at the stepover' + (c.passes !== 'rough' ? ', then the finish pass' : '') + '.'; } }),
+    F('stockW', 'Stock per side', 'in', '', { show: c => c.stockType !== 'rect' || c.op === 'cone', hintFn: c => { if (c.op === 'cone') return 'Round stock, this much bigger than the cone\'s base all round, the full depth.'; const n = Math.max(0, Math.ceil((Math.abs(num(c.stockW, 0)) - (c.passes === 'rough' ? 0 : Math.abs(num(c.finStock, 0)))) / Math.max(0.001, Math.abs(num(c.ae, 0.06))) - 1e-6)); return n + ' pass' + (n === 1 ? '' : 'es') + ' around the part at the stepover' + (c.passes !== 'rough' ? ', then the finish pass' : '') + '.'; } }),
   ] },
   { h: 'Tool', items: [
     { row: [F('toolD', 'Diameter', 'in'), F('flutes', 'Flutes', '')] },
     { row: [F('loc', 'Flute length', 'in'), F('stick', 'Stick-out', 'in')], hint: 'Stick-out: holder face to tool tip. Keep it short: deflection grows with its cube.' },
+    F('coneCR', 'Corner radius', 'in', '0 for a flat end mill, half the diameter for a ball. The finish runs on the corner.', { show: isOp('cone') }),
     F('toolNo', 'Tool number (T / H)', ''),
     { feedsList: true },
   ] },
@@ -284,18 +305,19 @@ const SECTIONS = [
     { row: [F('rpmF', 'Finish RPM override', ''), F('feedF', 'Finish feed override', 'ipm')], show: c => c.finish },
   ] },
   { h: 'Toolpath', items: [
-    F('ae', 'Stepover (ae)', 'in', '', { hintFn: c => { const D = num(c.toolD, .75), a = num(c.ae); return D > 0 ? Math.round(a / D * 1000) / 10 + '% of the tool. HEM: 5–15%. ' + (c.op === 'slot' || (c.op === 'custom' && (c.cop !== 'outside' || c.strategy === 'troch')) ? 'Also the advance per trochoidal loop.' : c.op === 'pocket' ? 'Growth per spiral turn.' : 'Loops are spaced evenly, never more than this.') : ''; } }),
+    F('ae', 'Stepover (ae)', 'in', '', { hintFn: c => { const D = num(c.toolD, .75), a = num(c.ae); return D > 0 ? Math.round(a / D * 1000) / 10 + '% of the tool. HEM: 5–15%. ' + (c.op === 'slot' || (c.op === 'custom' && (c.cop !== 'outside' || c.strategy === 'troch')) ? 'Also the advance per trochoidal loop.' : c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside') ? 'Growth per spiral turn.' : 'Loops are spaced evenly, never more than this.') : ''; } }),
     F('dir', 'Direction', '', '', { kind: 'seg', opts: [['climb', 'Climb'], ['conv', 'Conventional']] }),
     F('entryOn', 'Choose where passes start', '', '', { kind: 'chk', show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) }),
     { row: [F('entryX', 'Start near X', 'in'), F('entryY', 'Start near Y', 'in')], show: c => c.entryOn && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))), hint: 'Each pass (and the finish pass) leads in at its point nearest here, where there is room for the lead arc in the clear. Pockets still open up in the middle first.' },
     { pick: true, show: c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket')) },
     F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
-    { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') },
-    F('spring', 'Spring pass (repeat the finish pass)', '', '', { kind: 'chk', show: c => c.finish }),
+    { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.op === 'cone' ? 'Left on the wall by roughing, square to it' : c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside') || (c.op === 'cone' && c.coneSide === 'outside') },
+    F('coneStep', 'Finish step down per turn', 'in', '', { show: c => c.op === 'cone' && c.finish, hintFn: coneStepNote }),
+    F('spring', 'Spring pass (repeat the finish pass)', '', '', { kind: 'chk', show: c => c.finish && c.op !== 'cone' }),
     F('link', 'Between loops', '', 'Stay down: feed across in the clear at depth. Lift: small lift and rapid.', { kind: 'seg', opts: [['depth', 'Stay at depth'], ['lift', 'Lift']], show: c => c.passes !== 'finish' && c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch') }),
     F('lift', 'Lift', 'in', '', { show: c => c.passes !== 'finish' && c.link === 'lift' && (c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch')) }),
-    F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: isOp('pocket'), hintFn: c => 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
-    { row: [F('ramp', 'Helix ramp angle', '°'), F('rampPct', 'Helix feed', '% of rough')], show: c => c.op === 'pocket' || c.slotEntry === 'helix' || c.op === 'custom' },
+    F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: c => c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish'), hintFn: c => 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
+    { row: [F('ramp', 'Helix ramp angle', '°'), F('rampPct', 'Helix feed', '% of rough')], show: c => c.op === 'pocket' || c.slotEntry === 'helix' || c.op === 'custom' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish') },
     F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk' }),
     { note: () => 'Checked along the whole roughing toolpath by simulating the cut: where more of the cutter is in the material than the stepover gives (corners, narrow gaps, trochoid fronts), the feed drops to keep the chip the same.' },
     F('retPct', 'Trochoid loop return feed', '% of rough', 'The back half of each trochoidal loop runs over ground just cut', { show: c => c.op === 'slot' || (c.op === 'custom' && (c.cop === 'path' || c.cop === 'pocket' || (c.cop === 'outside' && c.strategy === 'troch'))) }),
@@ -320,6 +342,8 @@ const SECTIONS = [
     { row: [F('mazSuf', 'Suffix', '', 'A–Z or blank', { kind: 'text' }), F('mazMat', 'Material', '', 'As in the machine\'s list', { kind: 'text' })] },
     { row: [F('mazName', 'Program name', '', '', { kind: 'text' }), F('mazInitZ', 'Initial Z', 'in')] },
     { note: () => 'MANL PRG units. The tool must be in the machine\'s TOOL DATA with the same type, NOM-Ø and suffix.' },
+    { note: () => 'A cone can also be written as a macro (the Macro tab): one short EIA program with its numbers at the top, and a Mazatrol SUB PRO that runs it.', show: isOp('cone') },
+    F('macroEnd', 'Macro ends with', '', '', { kind: 'seg', opts: [['M99', 'M99 (from the SUB PRO)'], ['M30', 'M30 (on its own)']], show: isOp('cone') }),
   ] },
 ];
 
@@ -396,11 +420,13 @@ function renderForm() {
   }).join('')}</section>`).join('');
   renderShapes();
 }
-const LAYOUT_KEYS = new Set(['coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+const LAYOUT_KEYS = new Set(['coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
 function set(k, v) {
   const was = cfg[k];
   cfg[k] = v;
   if (k === 'passes') cfg.finish = v !== 'rough';
+  // a cone switched to the other side with its diameters the wrong way round for it: swap them
+  if (k === 'coneSide' && cfg.coneBy !== 'angle' && (v === 'outside') === (num(cfg.coneTopD) > num(cfg.coneBotD))) [cfg.coneTopD, cfg.coneBotD] = [cfg.coneBotD, cfg.coneTopD];
   if (k === 'mat' || k === 'coating' || k === 'toolD') document.querySelectorAll('[data-auto]').forEach(el => { el.placeholder = String(autoNum(el.dataset.auto)); });
   save();
   if (LAYOUT_KEYS.has(k)) renderForm();
@@ -697,7 +723,7 @@ document.addEventListener('keydown', e => {
 });
 
 // ---------------------------------------------------------------- generate and show
-let R = null, MZ = {}, G = null, timer = 0;
+let R = null, MZ = {}, G = null, MAC = null, timer = 0;
 function schedule() { clearTimeout(timer); timer = setTimeout(update, custom() ? 150 : 80); }
 // The toolpath is worked out in a worker (made from this page's own library code), so the page never locks up; only
 // the newest answer is used. Where a browser will not make one, it is worked out here as before.
@@ -723,7 +749,7 @@ function send(id) {
 const failed = msg => ({ cfg, K: HEM.calc(cfg), moves: [], warn: ['Could not make a toolpath: ' + msg], geo: { info: [] }, stats: { feedLen: 0, rapidLen: 0, minutes: 0, box: [Infinity, Infinity, -Infinity, -Infinity] } });
 function applyResult(r) {
   R = r; $('busy').hidden = true;
-  MZ = {}; G = null;
+  MZ = {}; G = null; MAC = null;
   ui.step = null; stop();
   if (ui.fitNext || !custom()) { fitView(); ui.fitNext = false; }
   renderTiles(); renderWarn(); renderBadge(); drawPlot(); renderOut();
@@ -735,7 +761,7 @@ function update() {
   if (ui.drawOnly) {
     // just the drawing: no toolpath (quick), the preview fits the shapes
     R = { cfg, K: HEM.calc(cfg), moves: [], warn: [], geo: { info: [] }, stats: { feedLen: 0, rapidLen: 0, minutes: 0, box: [Infinity, Infinity, -Infinity, -Infinity] } };
-    MZ = {}; G = null; ui.step = null; stop();
+    MZ = {}; G = null; MAC = null; ui.step = null; stop();
     if (ui.fitNext) { fitView(); ui.fitNext = false; }
     $('info').innerHTML = ''; drawPlot(); renderOut(); return;
   }
@@ -754,6 +780,12 @@ function renderBadge() {
   for (const id of ['badge1', 'badge2']) { const b = $(id); b.className = 'badge ' + cls; b.innerHTML = html; b.title = title; }
 }
 const getG = () => G || (G = HEM.toGcode(R, HEM.settingsLines(R.cfg)));
+// the cone as a macro and the Mazatrol SUB PRO programs that run it
+function getMac() {
+  if (MAC) return MAC;
+  try { MAC = { text: HEM.toMacro(R), sub: {} }; for (const ctl of ['MatrixM', 'SmoothM']) MAC.sub[ctl] = HEM.toMazatrolSub(R, MACH1, ctl); } catch (e) { MAC = { error: e.message, sub: {} }; }
+  return MAC;
+}
 function getMZ(ctl) {
   if (MZ[ctl]) return MZ[ctl];
   try { MZ[ctl] = HEM.toMazatrol(Object.assign({}, R, { cfg: Object.assign({}, R.cfg, { mazCtl: ctl }) }), MACH1); } catch (e) { MZ[ctl] = { error: e.message, warn: [e.message] }; }
@@ -865,6 +897,7 @@ function drawPlot() {
   parts.push(shapeSvg(geo.stock, X, Y, s, geo.part && geo.part.t === 'lines' ? 'fill="rgba(154,166,174,.18)" stroke="var(--stock)" stroke-dasharray="6 4" stroke-width="1.2"' : 'fill="none" stroke="var(--stock)" stroke-dasharray="6 4" stroke-width="1.2"'));
   const pocketish = geo.part && (geo.part.hole || geo.part.t === 'slot' || geo.part.pocket);
   parts.push(shapeSvg(geo.part, X, Y, s, pocketish ? 'fill="#fff" stroke="var(--ink)" stroke-width="1.5"' : 'fill="var(--part)" stroke="var(--ink)" stroke-width="1.5"'));
+  if (geo.part2) parts.push(shapeSvg(geo.part2, X, Y, s, 'fill="none" stroke="var(--ink)" stroke-dasharray="5 4" stroke-width="1.2"'));
   parts.push(`<g stroke="var(--red)" stroke-width="1.5"><line x1="${X(0) - 10}" y1="${Y(0)}" x2="${X(0) + 10}" y2="${Y(0)}"/><line x1="${X(0)}" y1="${Y(0) - 10}" x2="${X(0)}" y2="${Y(0) + 10}"/></g><text x="${X(0) + 6}" y="${Y(0) + 16}" font-size="11" fill="var(--red)">X0 Y0</text>`);
   for (const k of ['air', 'rapid', 'link', 'entry', 'rough', 'finish']) if (d[k]) parts.push(`<path d="${d[k]}" fill="none" stroke="${COLORS[k]}" stroke-width="${k === 'rough' || k === 'finish' ? 1.3 : 1}" ${k === 'rapid' ? 'stroke-dasharray="5 4"' : k === 'air' ? 'stroke-dasharray="2 3"' : ''} stroke-linejoin="round" opacity="${custom() ? 0.8 : 1}"/>`);
   // your shapes: outline, points, the one being drawn
@@ -937,10 +970,43 @@ function drawPlot() {
   if (ui.step != null && cur && !isNaN(cur.x)) parts.push(`<circle cx="${X(cur.x)}" cy="${Y(cur.y)}" r="${R.K.R * s}" fill="rgba(194,54,43,.15)" stroke="var(--red)" stroke-width="1.5"/><circle cx="${X(cur.x)}" cy="${Y(cur.y)}" r="2" fill="var(--red)"/>`);
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = parts.join('');
+  drawSection(ui.step != null ? cur : null);
   const sc = $('scrub'); sc.max = moves.length; sc.value = last;
   const mm = ui.tool === 'measure' && ui.mA && (ui.mB || hover) ? CAD.measure(ui.mA, ui.mB || hover) : null;
   const an = ui.tool !== 'measure' && ui.tool !== 'edit' && hover && anchorPt(), rel = an ? CAD.measure([+an[0], +an[1]], hover) : null;
   $('readout').textContent = (rel ? 'From last point: length ' + f4(rel.d) + '  angle ' + f4(rel.angle) + '°   ' : '') + (mm ? 'Distance ' + f4(mm.d) + '  angle ' + f4(mm.angle) + '°  ΔX ' + f4(mm.dx) + '  ΔY ' + f4(mm.dy) + '   ' : '') + (hover && custom() ? 'Cursor X' + f4(hover[0]) + ' Y' + f4(hover[1]) + '   ' : '') + (ui.step == null ? (custom() ? '' : 'Drag the slider or press Play to step through the moves.') : describe(cur, last));
+}
+// A cut through a cone's centre: the material, the tool at each roughing level (at the far end of its passes), the
+// finish tool where its spiral starts and ends, and the tool where the slider is
+function drawSection(cur) {
+  const wrap = $('sectWrap'), C = R && R.geo && R.geo.cone;
+  wrap.hidden = !C || cfg.op !== 'cone' || R.warn.some(w => /^Enter /.test(w));
+  if (wrap.hidden) return;
+  const svg = $('sect'), W = svg.clientWidth || 800, H = svg.clientHeight || 240, K = R.K, g = R.geo, cx = num(R.cfg.cx), cy = num(R.cfg.cy);
+  const rS = g.stock ? g.stock.r : 0, rMax = Math.max(C.rT, C.rB, rS) + 1.4 * K.D, zTop = Math.max(0.3 * C.H, 0.25), zBot = -C.H - Math.max(0.15 * C.H, 0.1);
+  const pad = 12, sc = Math.min((W - 2 * pad) / (2 * rMax), (H - 2 * pad) / (zTop - zBot));
+  const X = r => +(W / 2 + r * sc).toFixed(2), Y = z => +(H / 2 - (z - (zTop + zBot) / 2) * sc).toFixed(2);
+  const poly = (pts, attr) => `<path d="M${pts.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}Z" ${attr}/>`;
+  const out = [];
+  const mat = C.inside ? [[-rMax, 0], [-C.rT, 0], [-C.rB, -C.H], [C.rB, -C.H], [C.rT, 0], [rMax, 0], [rMax, zBot], [-rMax, zBot]]
+    : [[-C.rT, 0], [C.rT, 0], [C.rB, -C.H], [rMax, -C.H], [rMax, zBot], [-rMax, zBot], [-rMax, -C.H], [-C.rB, -C.H]];
+  if (!C.inside && rS > 0) out.push(poly([[-rS, 0], [rS, 0], [rS, -C.H], [-rS, -C.H]], 'fill="none" stroke="var(--stock)" stroke-dasharray="6 4" stroke-width="1.2"'));
+  out.push(poly(mat, 'fill="var(--part)" stroke="var(--ink)" stroke-width="1.5" stroke-linejoin="round"'));
+  out.push(`<line x1="${X(0)}" y1="${Y(zTop)}" x2="${X(0)}" y2="${Y(zBot)}" stroke="var(--red)" stroke-width="1" stroke-dasharray="8 4 2 4"/><text x="${X(0) + 4}" y="${Y(0) - 4}" font-size="11" fill="var(--red)">Z0</text>`);
+  // a tool with its corner radius, its centre r from the axis and its tip at z, up to the top of the drawing
+  const tool = (r, z, attr) => {
+    const rc = C.rc, Rt = K.R, pts = [[r - Rt, zTop]];
+    for (let i = 0; i <= 8; i++) { const a = Math.PI * (1 + i / 16); pts.push([r - Rt + rc + rc * Math.cos(a), z + rc + rc * Math.sin(a)]); }
+    for (let i = 0; i <= 8; i++) { const a = Math.PI * (1.5 + i / 16); pts.push([r + Rt - rc + rc * Math.cos(a), z + rc + rc * Math.sin(a)]); }
+    pts.push([r + Rt, zTop]);
+    return `<path d="M${pts.map(p => X(p[0]) + ' ' + Y(p[1])).join('L')}" fill="none" ${attr}/>`;
+  };
+  (g.coneLevels || []).forEach(q => out.push(tool(q.r, q.z, 'stroke="var(--rough)" stroke-width="1.2" opacity=".75"')));
+  if (g.coneFin) { out.push(tool(g.coneFin.p0, g.coneFin.t0, 'stroke="var(--finish)" stroke-width="1.6"')); out.push(tool(g.coneFin.pE, g.coneFin.tE, 'stroke="var(--finish)" stroke-width="1.6"')); }
+  if (cur && !isNaN(cur.x) && cur.z < zTop) out.push(tool(Math.hypot(cur.x - cx, cur.y - cy), cur.z, 'stroke="var(--red)" stroke-width="2"'));
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = out.join('');
+  $('sectTitle').textContent = 'Section through the centre: the tool at each roughing level' + (g.coneLevels && g.coneLevels.length ? ' (blue)' : '') + (g.coneFin ? ', the finish tool at the top and bottom of its spiral (green)' : '') + (cur ? ', the tool at the slider (red)' : '') + '.';
 }
 // A click (or a typed point) on the preview with a drawing tool. p: the point (snapped or typed); raw: the unsnapped
 // point (the point an arc passes through); onFirst: on the shape's first point (closes it).
@@ -1338,7 +1404,8 @@ function renderDims() {
 }
 function renderOut() {
   if (ui.drawOnly) ui.tab = 'dims';
-  $('tabs').innerHTML = (ui.drawOnly ? [['dims', 'Dimensions']] : [['g', 'G-code'], ['maz', 'Mazatrol'], ['data', 'Cutting data'], ['dims', 'Dimensions']]).map(([k, l]) => `<button type="button" data-t="${k}" class="${ui.tab === k ? 'on' : ''}">${l}</button>`).join('');
+  if (ui.tab === 'mac' && R.cfg.op !== 'cone') ui.tab = 'g';
+  $('tabs').innerHTML = (ui.drawOnly ? [['dims', 'Dimensions']] : [['g', 'G-code'], ['maz', 'Mazatrol']].concat(R.cfg.op === 'cone' ? [['mac', 'Macro']] : [], [['data', 'Cutting data'], ['dims', 'Dimensions']])).map(([k, l]) => `<button type="button" data-t="${k}" class="${ui.tab === k ? 'on' : ''}">${l}</button>`).join('');
   const base = HEM.fileBase(R.cfg), out = $('out'), btn = (id, l, p) => `<button class="btn${p ? ' primary' : ''}" id="${id}">${esc(l)}</button>`;
   const empty = !R.moves.some(m => m.t === 'G1' || m.t === 'G2' || m.t === 'G3');
   if (ui.tab === 'dims') { renderDims(); return; }
@@ -1349,6 +1416,18 @@ function renderOut() {
     out.innerHTML = `<pre class="code">${esc(g.length > 400000 ? g.slice(0, 400000) + '\n… (' + g.split('\n').length + ' lines; the download has them all)' : g)}</pre><p class="note" style="margin-top:8px">${g.split('\n').length} lines. Every setting (and your shapes) is saved in comments after M30, in plain words and as exact data: <b>Open .nc…</b> or drop the file on this page to get them all back.</p>`;
     $('dlG').onclick = () => dl(base + '.nc', g, 'text/plain');
     $('cpG').onclick = () => navigator.clipboard && navigator.clipboard.writeText(g).then(() => { $('cpG').textContent = 'Copied'; setTimeout(() => $('cpG') && ($('cpG').textContent = 'Copy'), 1200); });
+  } else if (ui.tab === 'mac') {
+    const M = getMac();
+    if (empty || !M.text) { $('dls').innerHTML = ''; out.innerHTML = '<p class="note">' + (M.error ? esc(M.error) : 'Nothing to cut yet: fix the warnings above.') + '</p>'; return; }
+    const name = M.sub.SmoothM.name, view = R.cfg.mazCtl === 'SmoothM' ? 'SmoothM' : 'MatrixM';
+    $('dls').innerHTML = btn('dlMac', 'Download ' + name + '.EIA', true) + btn('cpMac', 'Copy') + btn('dlSubD', 'SUB PRO .PBD', view === 'MatrixM') + btn('dlSubM', 'SUB PRO .PBM', view === 'SmoothM');
+    const text = M.text, n = text.trim().split('\n').length, gLines = getG().split('\n').length;
+    out.innerHTML = `<p class="note" style="margin:0 0 8px">${esc(name)}.EIA: the whole cone in ${n} lines (the G-code tab spells it out in ${gLines}). The numbers at the top drive it: change the diameters, depth, tool, step or feeds at the machine and the cut follows; the plot here does not. It ends with ${R.cfg.macroEnd === 'M30' ? 'M30, to run on its own' : 'M99, to run from the Mazatrol SUB PRO'} (set under Mazatrol: Macro ends with). Load it into the control's programs as <b>${esc(name)}</b>; the SUB PRO program (${esc(M.sub[view].fileName)}) calls it by that name.</p>`
+      + `<pre class="code">${esc(text)}</pre><p class="note" style="margin:10px 0 6px">${esc(M.sub[view].fileName)}: the Mazatrol program that runs it. Or add the SUB PRO unit to your own part program.</p><pre class="code">${esc(M.sub[view].listing())}</pre>`;
+    $('dlMac').onclick = () => dl(name + '.EIA', text.replace(/\n/g, '\r\n'), 'text/plain');
+    $('cpMac').onclick = () => navigator.clipboard && navigator.clipboard.writeText(text).then(() => { $('cpMac').textContent = 'Copied'; setTimeout(() => $('cpMac') && ($('cpMac').textContent = 'Copy'), 1200); });
+    $('dlSubD').onclick = () => { const m = M.sub.MatrixM; dl(m.fileName, m.bytes(), 'application/octet-stream'); };
+    $('dlSubM').onclick = () => { const m = M.sub.SmoothM; dl(m.fileName, m.bytes(), 'application/octet-stream'); };
   } else if (ui.tab === 'maz') {
     if (empty) { $('dls').innerHTML = ''; out.innerHTML = '<p class="note">Nothing to cut yet.</p>'; return; }
     const view = R.cfg.mazCtl === 'SmoothM' ? 'SmoothM' : 'MatrixM', M = getMZ(view);

@@ -76,6 +76,112 @@ check({ op: 'pocket', dir: 'conv', apMax: '0.8', cx: '2', cy: '1' }, 'pocket con
 check({ op: 'slot' }, 'slot open');
 check({ op: 'slot', slotEntry: 'helix', apMax: '1', x1: '0', y1: '0', x2: '3', y2: '2', dir: 'conv' }, 'slot helix, angled, conventional');
 
+// ---------------------------------------------------------------- cones
+// Every cutter position from the G-code against the cone (the tool's flat end, corner radius and side, in the
+// half plane through the axis): never past the wall, roughing leaving the finish stock, the finish touching it,
+// and everything but the finish ridges cleared. The macro, run through the same interpreter, makes the same moves.
+function coneCheck(cfg, label) {
+  const r = HEM.generate(cfg), K = r.K, C = HEM.coneOf(r.cfg, K), tol = 2e-4, cx = +(cfg.cx || 0), cy = +(cfg.cy || 0);
+  ok(label + ': no warnings', () => assert.deepStrictEqual(r.warn.filter(w => !/Stick-out/.test(w) && !(r.cfg.passes === 'rough' && /^Rough only leaves/.test(w))), []));
+  const text = HEM.toGcode(r, HEM.settingsLines(r.cfg)), run = G.run('T.nc', text, {});
+  // cutter positions (radius from the axis, tip Z), with the section they are in
+  const at = [];
+  { let sec = 'ROUGH', i = 0; const secs = []; text.split('\n').forEach(l => { if (/===== FINISH PASS/.test(l)) sec = 'FINISH'; secs.push(sec); });
+    for (const m of run.moves) { if (m.kind === 'rapid') continue; const s = secs[m.line] || 'ROUGH'; for (const p of m.pts) if (p[2] <= 1e-9) at.push({ r: Math.hypot(p[0] - cx, p[1] - cy), z: p[2], s }); i++; } }
+  // distance from the cutter at (r, z) to the cone wall, square to the wall (negative: past it)
+  const clear = q => {
+    let d = Infinity;
+    for (let k = 0; k <= 16; k++) {
+      const a = k / 16 * Math.PI / 2, hz = q.z + C.rc - C.rc * Math.cos(a), off = (K.R - C.rc) + C.rc * Math.sin(a);
+      if (hz > 0 || hz < -C.H - 1e-9) continue;
+      d = Math.min(d, (C.inside ? C.wall(hz) - (q.r + off) : (q.r - off) - C.wall(hz)) * C.cos);
+    }
+    for (let hz = q.z + C.rc; hz <= 0; hz += 0.02) d = Math.min(d, (C.inside ? C.wall(hz) - (q.r + K.R) : (q.r - K.R) - C.wall(hz)) * C.cos);
+    return d;
+  };
+  ok(label + ': reaches the depth, never below it', () => { const z = Math.min(...at.map(q => q.z)); assert(Math.abs(z + C.H) < 1e-4, 'deepest ' + z); });
+  ok(label + ': never past the wall; roughing leaves the finish stock; the finish touches', () => {
+    let rough = Infinity, fin = Infinity;
+    for (const q of at) { const d = clear(q); if (q.s === 'FINISH') fin = Math.min(fin, d); else rough = Math.min(rough, d); }
+    if (r.cfg.rough) assert(rough > C.a - tol, 'roughing comes ' + rough.toFixed(5) + ' from the wall, finish stock ' + C.a);
+    if (r.cfg.finish) { assert(fin > -tol, 'finish past the wall by ' + (-fin).toFixed(5)); assert(fin < 1e-3, 'finish should touch: ' + fin.toFixed(5)); }
+  });
+  if (r.cfg.passes === 'both' && !QUICK) ok(label + ': all the material is cut but the finish ridges', () => {
+    // every point of the half section that is material to take away, and more than a ridge from the wall
+    const sm = C.step * C.sec, ridge = C.rc > 0 && sm / 2 < C.rc ? C.rc - Math.sqrt(C.rc * C.rc - sm * sm / 4) : C.step * C.sin;
+    const rS = C.inside ? 0 : C.rB + Math.abs(+cfg.stockW || 0.5), cut = (pr, pz) => at.some(q => {
+      const dz = pz - q.z; if (dz < -1e-9) return false;
+      const w = dz >= C.rc ? K.R : (K.R - C.rc) + Math.sqrt(Math.max(0, C.rc * C.rc - (C.rc - dz) * (C.rc - dz)));
+      return Math.abs(pr - q.r) <= w + 1e-6;
+    });
+    const left = [];
+    for (let iz = 1; iz < 20; iz++) {
+      const z = -C.H * iz / 20, w = C.wall(z);
+      for (let ir = 0; ir <= 24; ir++) {
+        const pr = C.inside ? w * ir / 24 : w + (rS - w) * ir / 24;
+        if (Math.abs(pr - w) * C.cos < ridge + 5e-4) continue;
+        if (z < -C.H + C.rc + 2e-3 && (C.inside || Math.abs(pr - w) < C.rc + 2e-3)) continue;   // the fillet at the floor; inside, the floor is left as roughed
+        if (!cut(pr, z)) left.push([+pr.toFixed(3), +z.toFixed(3)]);
+      }
+    }
+    assert.deepStrictEqual(left.slice(0, 5), [], left.length + ' points left: ' + JSON.stringify(left.slice(0, 5)));
+  });
+  ok(label + ': settings read back', () => assert.deepStrictEqual(HEM.readSettings(text), Object.fromEntries(Object.keys(HEM.DEFAULTS).map(k => [k, r.cfg[k]]))));
+  for (const ctl of ['MatrixM', 'SmoothM']) ok(label + ': Mazatrol ' + ctl, () => {
+    const M = HEM.toMazatrol(Object.assign({}, r, { cfg: Object.assign({}, r.cfg, { mazCtl: ctl }) }), MACH1);
+    assert.deepStrictEqual(M.warn.filter(w => !/2,000 records/.test(w)), []);
+    const back = MACH1.open(M.bytes(), M.fileName, 'inch');
+    assert.strictEqual(back.listing(), M.listing());
+    for (const u of back.structure()) assert(u.seqs.length <= MACH1.core.CONTROLS[ctl].seqLimit);
+    assert.strictEqual((M.listing().match(/^\s+\d+ [23] /gm) || []).length, (text.match(/^G[23] /gm) || []).length);
+    const S = HEM.toMazatrolSub(r, MACH1, ctl), sb = MACH1.open(S.bytes(), S.fileName, 'inch');
+    assert.deepStrictEqual(S.warn, []);
+    assert(new RegExp('SUB PRO\\s+' + S.name + '\\b').test(sb.listing()), sb.listing());
+  });
+  ok(label + ': the macro makes the same moves', () => {
+    const mac = HEM.toMacro(r), seq = t => { const out = []; let last = null; for (const m of G.run('T.nc', t, {}).moves) { const p = m.pts[m.pts.length - 1]; if (last && Math.hypot(p[0] - last[0], p[1] - last[1], p[2] - last[2]) < 1e-7) continue; out.push(m); last = p; } return out; };
+    assert(mac, 'no macro');
+    const a = seq(text), b = seq(mac);
+    assert.strictEqual(b.length, a.length, 'moves ' + b.length + ' vs ' + a.length);
+    for (let i = 0; i < a.length; i++) {
+      assert.strictEqual(b[i].kind, a[i].kind, 'move ' + i);
+      const pa = a[i].pts, pb = b[i].pts, e = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1], u[2] - v[2]);
+      assert(e(pa[pa.length - 1], pb[pb.length - 1]) < 2e-4, 'move ' + i + ' ends ' + e(pa[pa.length - 1], pb[pb.length - 1]));
+      if (pa.length === pb.length) assert(e(pa[pa.length >> 1], pb[pb.length >> 1]) < 2e-4, 'move ' + i + ' middle');
+    }
+    assert(/\nM99\n%\n$/.test(mac) === (r.cfg.macroEnd !== 'M30'));
+  });
+  return r;
+}
+const IN = { op: 'cone', coneSide: 'inside', coneTopD: '2', coneBotD: '1', depth: '1', toolD: '0.5', stick: '1.5' };
+const OUT = { op: 'cone', coneSide: 'outside', coneTopD: '1', coneBotD: '2', depth: '1', toolD: '0.5', stick: '1.5', stockW: '0.25' };
+coneCheck(IN, 'inside cone, flat end mill');
+coneCheck({ ...IN, coneCR: '0.06', dir: 'conv', cx: '1', cy: '-0.5' }, 'inside cone, corner radius, conventional, off centre');
+coneCheck({ ...IN, coneCR: '0.25', apMax: '0.2', macroEnd: 'M30' }, 'inside cone, ball, levels from max depth, M30');
+coneCheck({ ...IN, coneBy: 'angle', coneTopD: '3', coneAngle: '90' }, 'inside cone by angle, 90° included');
+coneCheck({ ...IN, passes: 'finish' }, 'inside cone, finish only');
+coneCheck({ ...IN, passes: 'rough', finStock: '0.012' }, 'inside cone, rough only');
+coneCheck(OUT, 'outside cone, flat end mill');
+coneCheck({ ...OUT, coneCR: '0.25', dir: 'conv', retract: 'clear' }, 'outside cone, ball, conventional, lift to clearance');
+coneCheck({ ...OUT, coneCR: '0.03', coneBy: 'angle', coneAngle: '30', depth: '1.5' }, 'outside cone by angle, 30° included, deeper');
+coneCheck({ ...OUT, passes: 'finish' }, 'outside cone, finish only');
+ok('cone: wrong way round, too small, comes to a point', () => {
+  assert(HEM.generate({ ...IN, coneTopD: '1', coneBotD: '2' }).warn.some(w => /undercut/.test(w)));
+  assert(HEM.generate({ ...OUT, coneTopD: '2', coneBotD: '1' }).warn.some(w => /gets bigger toward the bottom/.test(w)));
+  assert(HEM.generate({ ...IN, coneBotD: '0.4' }).warn.some(w => /too small to rough/.test(w)));
+  assert(HEM.generate({ ...IN, coneBy: 'angle', coneAngle: '120' }).warn.some(w => /comes to a point/.test(w)));
+  assert.strictEqual(HEM.toMacro(HEM.generate({ ...IN, coneTopD: '1', coneBotD: '2' })), null);
+});
+ok('cone: a ball says what it leaves on the floor; a flat end mill leaves it flat', () => {
+  assert(HEM.generate({ ...IN, coneCR: '0.25' }).geo.info.some(w => /peak about 0.08\d+ high in the middle/.test(w)));
+  assert(!HEM.generate(IN).geo.info.some(w => /The floor is left/.test(w)));
+});
+ok('cone: roughing levels keep the steps on the wall under a quarter of the tool', () => {
+  const r = HEM.generate({ ...IN, coneTopD: '4', coneBotD: '1', depth: '1.5' });
+  assert(r.geo.cone.ta * r.K.ap <= 0.25 * r.K.D + 1e-9, 'step ' + r.geo.cone.ta * r.K.ap);
+  assert.strictEqual(r.K.levels, r.geo.coneLevels.length);
+});
+
 // speeds and feeds from the conversation: 3/4 5-flute in A36, 500 SFM, 0.0045 chip, 0.06 stepover
 ok('A36 numbers (typed: 500 SFM, 0.0045 chip)', () => {
   const K = HEM.calc({ ...HEM.DEFAULTS, sfmR: '500', fzR: '0.0045' });

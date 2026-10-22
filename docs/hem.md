@@ -14,6 +14,20 @@ It is one offline file; open it in Chrome or Edge. Inch.
   that grows by the stepover each turn (half circles about two centres, so it stays in arcs).
 - **Trochoidal slot**: loops advancing along the slot from start to end, cutting on the front half and
   returning on the back half. Open-ended (start off the part) or started with a helix.
+- **Cone**: **inside** (a tapered hole, smaller toward the bottom) or **outside** (a tapered boss on a floor,
+  bigger toward the bottom, from round stock the stock per side bigger than its base). Size it by the diameters
+  at Z0 and at the depth, or by the top diameter and the included angle; the hint gives the angle a side.
+  - Roughing goes in levels: Max depth per level, made shallower when needed so the steps left on the wall stay
+    under a quarter of the tool across. Each level is cut to the wall at its bottom plus the finish stock (taken
+    square to the wall). Inside: a helix at the centre and a spiral out, as the circular pocket. Outside: passes
+    around the cone from the stock in, each with a lead arc on and off.
+  - The finish is one spiral down the wall on the tool's corner, the finish step down per turn apart, then a flat
+    turn on the floor. **Corner radius** is the tool's: 0 for a flat end mill, half the diameter for a ball.
+    The hint gives the ridges it leaves: a flat end mill leaves about the step × the sine of the angle, a corner
+    radius far less. With a corner radius the floor is left as roughed, and the status line says how high its
+    ridges (and the peak at an inside cone's centre) come out; a flat end mill leaves it flat.
+  - A **section through the centre** under the top view shows the cone, the tool at each roughing level, the
+    finish tool at the top and bottom of its spiral, and the tool where the slider is.
 
 - **Your shape**: draw on the preview, type or paste points (X, Y and a fillet radius per corner), or import
   an ASCII DXF (lines, arcs, circles, polylines, splines, ellipses, blocks). Then cut it as:
@@ -190,6 +204,16 @@ over 4× D, the power is over 80% of the spindle, or the stepover is too heavy f
   with `G0 G90 X Y S M3`, `G0 G17 Z` and `G1 G94 Z F` (with the coolant M code). Finishing starts a new unit at
   its own speed, and a full unit retracts and carries on over the same point. The tool (type, NOM-Ø, suffix)
   must be in the machine's TOOL DATA.
+- **Macro (cones)**: the **Macro** tab writes the cone as one EIA/ISO program, `NAME.EIA`, of about 250 lines
+  whatever its size. Its numbers sit at the top in common variables `#100`–`#128` (centre, diameters, depth, tool
+  diameter and corner radius, finish stock, step down, stepover, levels, helix, stock, lead, feeds, speeds,
+  heights), and WHILE loops work out the same moves as the G-code tab on the control: change a number at the
+  machine and the cut follows. It uses `#100`–`#173`, alarms (`#3000`) if the bottom is the wrong way round or too
+  small for the tool, and ends with **M99** to run from a Mazatrol SUB PRO, or **M30** to run on its own
+  (**Macro ends with**, under Mazatrol). `NAME-M.PBD` / `NAME-M.PBM` is a Mazatrol program with one SUB PRO unit
+  that calls it by name; load the EIA program into the control's programs as `NAME`, or put the SUB PRO unit
+  in your own part program. Climb or conventional is fixed when it is written. The plot shows the numbers as
+  they were written, not as edited at the machine.
 
 ## Library
 
@@ -220,7 +244,10 @@ pockets never slot.
 `test/hem-test.js` reads every toolpath back through `lib/gcode.js` and checks the cutter never comes closer
 to the part than its radius (or past the pocket or slot wall), reaches full depth, and that the Mazatrol program
 saves, reopens and lists the same arcs as the G-code. For drawn shapes it also checks that every bit of stock
-the tool can reach is cleared at full depth.
+the tool can reach is cleared at full depth. For cones it checks the tool's end, corner and side against the
+cone wall (roughing leaves the finish stock, the finish touches the wall and never passes it), that everything
+but the finish ridges is cut, and that the macro, run through the same interpreter, makes the same moves as the
+G-code. `node test/hem-browser.js` drives the built page in headless Chrome.
 
 The source is `hem/app.html`; `python3 build.py` inlines Clipper, the MACH1 bundle, `lib/hem-geo.js` and `lib/hem.js`
 into the app.
