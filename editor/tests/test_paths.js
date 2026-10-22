@@ -390,9 +390,29 @@ ok('SLOT: the stock top is at Z0 at the highest, so an SRV-Z larger than DEPTH a
   const R = kp('MAZATROL/Smooth/MCH-C1/MC_Machine Programs/'), f = fs.existsSync(R) ? fs.readdirSync(R).find(x => /^PRG-D-OP1\./i.test(x)) : null;
   if (!f) return;
   const p = Maz.parse(new Uint8Array(fs.readFileSync(R + f)), f), ls = Maz.lines(p), us = Maz.structure(p, ls);
-  const ui = us.findIndex(u => Maz.number(p.recs[u.i]) === 35), r = Paths.program(p, 'inch', ls);
+  const ui = us.findIndex(u => Maz.number(p.recs[u.i]) === 35), r = Paths.program(p, 'inch', ls, null, { ownZero: true });
   const zs = new Set(r.moves.filter(m => m.unit === ui && m.kind === 'feed' && m.pts.length === 2 && m.pts[0][0] === m.pts[1][0] && m.pts[0][1] === m.pts[1][1]).map(m => +m.pts[1][2].toFixed(2)));
   assert.ok(zs.size <= 4 && zs.size >= 3 && ![...zs].some(z => z > 0), [...zs].join(' '));
+});
+ok('SUB PRO: each called program is drawn at its WPC, moved to the first WPC of the run (PRG-I-2-MAIN: three parts one above the other)', () => {
+  const f = n => kp('prg-i/PRG-I-2-' + n + '.PBD');
+  if (!fs.existsSync(f('MAIN'))) return;
+  const open = n => Maz.parse(new Uint8Array(fs.readFileSync(f(n))), 'PRG-I-2-' + n + '.PBD'), subs = {};
+  for (const n of ['OP1', 'OP2', 'OP3']) subs['PRG-I-2-' + n] = open(n);
+  const resolve = name => (subs[name.toUpperCase()] ? { p: subs[name.toUpperCase()] } : null), main = open('MAIN');
+  const run = own => Paths.program(main, 'inch', null, null, { resolve, ownZero: own });
+  const a = run(false), b = run(true);
+  assert.strictEqual(a.moves.length, b.moves.length);
+  // each WPC's zero on the machine, from its WPC unit (X 36, Y 40, Z 48)
+  const wpc = n => { const p = subs['PRG-I-2-' + n], u = Maz.structure(p).find(x => x.code === 2), r = Buffer.from(p.recs[u.i]); return [36, 40, 48].map(o => r.readInt32LE(o) * 1e-5); };
+  const w1 = wpc('OP1');
+  for (const n of ['OP1', 'OP2', 'OP3']) {
+    const want = wpc(n).map((v, k) => v - w1[k]), k = a.moves.findIndex(m => m.sub && m.sub.name.startsWith('PRG-I-2-' + n) && m.kind === 'feed');
+    assert.ok(k >= 0, n);
+    const d = [0, 1, 2].map(j => a.moves[k].pts[0][j] - b.moves[k].pts[0][j]);
+    assert.ok(d.every((v, j) => Math.abs(v - want[j]) < 1e-6), n + ' moved ' + d.map(v => v.toFixed(4)) + ', its WPC is ' + want.map(v => v.toFixed(4)) + ' from the first');
+  }
+  assert.ok(Math.abs(w1[1] - wpc('OP3')[1]) > 10, 'the parts are a long way apart in Y');
 });
 ok('MANL PRG: the blocks are timed at their own S (rpm) and F (per revolution), as the control times them (PRG-D-OP1 UNo 25: 113 s)', () => {
   const R = kp('MAZATROL/Smooth/MCH-C1/MC_Machine Programs/'), f = fs.existsSync(R) ? fs.readdirSync(R).find(x => /^PRG-D-OP1\./i.test(x)) : null;

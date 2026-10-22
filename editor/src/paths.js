@@ -225,12 +225,22 @@
     // turning: where the turret waits between units (above the stock, in front of it)
     const home = turn ? [(stock && stock.od > 0 ? stock.od / 2 : SAFE) + 2 * CLR, 0, -Math.max(stock ? stock.face : 0, 0) - 2 * CLR] : null;
 
-    // pos: where the tool is in the unit's own coordinates; posT: on the machine (after an OFFSET unit's shift)
+    // pos: where the tool is in the unit's own coordinates; posT: as drawn (after an OFFSET unit's shift, and moved
+    // from its WPC to the first WPC of the run when both are on the same index angle, so parts set up side by side,
+    // in this program or in the programs its SUB PRO units call, are drawn where they sit on the machine).
+    // frame (shared with the called programs): ref, the first WPC; cur, the WPC in force; index, the INDEX angle
     let pos = null, posT = null, off = { x: 0, y: 0, z: 0, rot: 0 };
+    const frame = opts.frame || { ref: null, cur: null, index: 0, own: !!opts.ownZero };     // ownZero: each WPC about its own zero
+    const sameAngle = (a, b) => Math.abs(((a - b) % 360 + 540) % 360 - 180) < 1e-6;
     const T = q => {
-      if (turn || (!off.x && !off.y && !off.z && !off.rot)) return q;
-      const cr = Math.cos(off.rot), sr = Math.sin(off.rot);
-      return [q[0] * cr - q[1] * sr + off.x, q[0] * sr + q[1] * cr + off.y, q[2] + off.z];
+      if (turn) return q;
+      if (off.x || off.y || off.z || off.rot) { const cr = Math.cos(off.rot), sr = Math.sin(off.rot); q = [q[0] * cr - q[1] * sr + off.x, q[0] * sr + q[1] * cr + off.y, q[2] + off.z]; }
+      const w = frame.cur, r = frame.ref;
+      if (frame.own || !w || !r || w === r || !sameAngle(w.b, r.b)) return q;
+      // on the machine: the WPC's zero plus the point turned by its th; then back into the first WPC's axes
+      const cw = Math.cos(w.th), sw = Math.sin(w.th), mx = w.x + q[0] * cw - q[1] * sw - r.x, my = w.y + q[0] * sw + q[1] * cw - r.y;
+      const cr = Math.cos(-r.th), sr = Math.sin(-r.th);
+      return [mx * cr - my * sr, mx * sr + my * cr, q[2] + w.z - r.z];
     };
     const cur = { unit: 0, unitRec: 0, rec: 0, feed: 0, feedMode: 'min', spindle: 0, css: false, toolRec: -1 };
     const push = (kind, pts) => out.moves.push({ kind, pts, rec: cur.rec, unit: cur.unit, feed: cur.feed, feedMode: cur.feedMode, spindle: cur.spindle, css: cur.css, maxRpm, toolRec: cur.toolRec });
@@ -319,7 +329,14 @@
         for (const i of seqs) step(i, tag);
         return;
       }
-      if (!turn && code === 2) off = { x: 0, y: 0, z: 0, rot: 0 };     // a new work offset starts unshifted
+      if (!turn && code === 0xc) frame.index = i32(r0, 40) * 1e-4;   // INDEX: the table angle for the WPC units after it
+      if (!turn && code === 2) {                       // WPC: a new work offset starts unshifted
+        off = { x: 0, y: 0, z: 0, rot: 0 };
+        const b = i32(r0, 56) ? i32(r0, 56) * 1e-4 : frame.index;
+        frame.cur = { x: L(r0, 36), y: L(r0, 40), th: i32(r0, 44) * 1e-4 * DEG, z: L(r0, 48), b };
+        if (!frame.ref) frame.ref = frame.cur;
+        else if (!sameAngle(b, frame.ref.b)) note('WPC at ' + +b.toFixed(3) + '° (' + tag + '): another face from the first WPC (' + +frame.ref.b.toFixed(3) + '°), drawn about its own zero.');
+      }
       try {
         if (code === 6) manual(ctx);
         else if (!turn && code >= 0x20 && code <= 0x2b) pointUnit(ctx);
@@ -425,7 +442,7 @@
       if (!found) { note(tag + ' ' + name + ': open that program too (or open its folder) to plot it here.'); return; }
       let sp;
       if (found.p) {
-        try { sp = program(found.p, units, null, view, { resolve: opts.resolve, toolDia: opts.toolDia, fixed: opts.fixed, depth: depth + 1 }); } catch (e) { note(tag + ' ' + name + ': ' + e.message); return; }
+        try { sp = program(found.p, units, null, view, { resolve: opts.resolve, toolDia: opts.toolDia, fixed: opts.fixed, depth: depth + 1, frame }); } catch (e) { note(tag + ' ' + name + ': ' + e.message); return; }
         sp.notes.filter(n => !/^Cutter paths are worked out/.test(n)).forEach(n => note(name + ': ' + n));
         out.subs.push({ p: found.p, unit: ui, rec: u.i });
         for (const s2 of sp.subs) out.subs.push({ p: s2.p, unit: ui, rec: u.i });
