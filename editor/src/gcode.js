@@ -25,8 +25,11 @@
     });
     return { name, lines, labels, subs };
   }
+  // comments in ( ), anything after ; and a program name in < > (the way a Mazak Smooth names an EIA program on
+  // its first line) are not code
   function stripComments(l) {
     let out = '', depth = 0;
+    l = l.replace(/^\s*<[^>]*>/, '');
     for (const ch of l) {
       if (ch === '(') depth++;
       else if (ch === ')') { if (depth) depth--; }
