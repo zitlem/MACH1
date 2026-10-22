@@ -387,6 +387,15 @@ const check = (name, cond, detail) => {
     check('clicking a tool goes to its line', selr === want, selr + ' vs ' + want);
     const sheet = await ev(`MazEditor.setupSheet(MazEditor.doc())`);
     check('setup sheet lists tools with their check', /^SETUP SHEET   PRG-A\.MAZ/.test(sheet) && /E-MILL +0\.75 +A .*T69 +69 +7\.6786/.test(sheet) && /10 tools: 7 found, 0 with another suffix, 3 missing/.test(sheet), sheet.slice(0, 600));
+    // choose the columns: they go to the table, the sheet and the CSV (remembered); at least one stays
+    const tick = async (k, on) => ev(`(() => { const b = document.querySelector('#toolsInfo [data-tcol="${k}"]'); if (b.checked !== ${on}) { b.checked = ${on}; b.dispatchEvent(new Event('change', { bubbles: true })); } })()`);
+    for (const k of ['units', 'pocket', 'dia']) await tick(k, false);
+    const cols = await ev(`({ head: Array.from(document.querySelectorAll('#toolsList thead th')).map(t => t.textContent), sheet: MazEditor.setupSheet(MazEditor.doc()), csv: MazEditor.toolsCsv(MazEditor.doc()) })`);
+    check('chosen columns: table, sheet and CSV', cols.head.join('|') === '|Tool|NOM|Sfx|Machine|Length' && /^Tool +NOM +Sfx +Machine +Length +Status$/m.test(cols.sheet) && !/Pocket|Dia\/Nose|Units/.test(cols.sheet) && /^Status,Tool,NOM,Sfx,Machine,Length\r\n/.test(cols.csv), [cols.head, cols.sheet.split('\n').slice(3, 6), cols.csv.slice(0, 120)]);
+    for (const k of ['st', 'name', 'nom', 'sfx', 'mach', 'len']) await tick(k, false);
+    check('at least one column stays', (await ev(`document.querySelectorAll('#toolsList thead th').length`)) === 1);
+    for (const k of ['st', 'name', 'nom', 'sfx', 'units', 'mach', 'pocket', 'len', 'dia']) await tick(k, true);
+    check('all columns back', (await ev(`document.querySelectorAll('#toolsList thead th').length`)) === 9);
     await shot('tools.png');
     // compare: the shop copy against the machine's copy (opened second, so it is the current program)
     await open('samplemazak/cnc/MILL SMOOHG/PRG-B.PBM', 'inch');

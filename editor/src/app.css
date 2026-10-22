@@ -139,6 +139,11 @@ html[data-theme="light"] .unitlist .ul-i.cur { background: #1c4f9c; color: #fff;
 .tsrc select { background: var(--bar2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; margin-left: 6px; max-width: 260px; font: inherit; }
 .toolsum { padding: 6px 12px; color: var(--muted); border-bottom: 1px solid var(--line); font-size: 13px; }
 .toolsum b { color: var(--text); }
+.tcols { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 6px; font-size: 12px; }
+.tcols label { display: inline-flex; gap: 3px; align-items: center; cursor: pointer; color: var(--text); }
+.tcols .tbtns { display: inline-flex; gap: 6px; margin-left: auto; }
+.tcols button { background: var(--bar2); color: var(--text); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; font: inherit; cursor: pointer; }
+.tcols button:hover { border-color: var(--muted); }
 .toolsList { flex: 1; overflow: auto; }
 .tt { width: 100%; border-collapse: collapse; font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: 12.5px; }
 .tt th { position: sticky; top: 0; background: #0b0f13; color: var(--muted); font-weight: normal; text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }

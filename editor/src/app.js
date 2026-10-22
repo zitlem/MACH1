@@ -2087,6 +2087,23 @@
       ts.map(m => nmText(d, m.length)).join(', '),
       ts.map(m => (r.pt.kind === 'tap' ? '' : nmText(d, m.dia))).join(', ')];
   }
+  // the tool list's columns: which are shown, printed and saved (remembered)
+  const TOOL_COLS = [['st', 'Status'], ['name', 'Tool'], ['nom', 'NOM'], ['sfx', 'Sfx'], ['units', 'Units'], ['mach', 'Machine'], ['pocket', 'Pocket'], ['len', 'Length'], ['dia', 'Dia/Nose']];
+  const toolCols = () => { const on = store.get('mazed-toolcols', null); const ks = TOOL_COLS.map(c => c[0]).filter(k => !on || on.includes(k)); return ks.length ? ks : ['name']; };
+  // a row's values by column
+  function toolVals(d, r) {
+    const m = machineCols(d, r);
+    return { st: r.res ? STATUS[r.res.status][1] : '', name: r.pt.name, nom: r.pt.nomText, sfx: r.pt.sfx, units: r.pt.where.join(' '), mach: m[0], pocket: m[1], len: m[2], dia: m[3] };
+  }
+  function toolsCsv(d) {
+    const c = toolCheck(d), ks = toolCols(), q = v => (/[",\n]/.test(v) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v));
+    return [ks.map(k => TOOL_COLS.find(x => x[0] === k)[1])].concat(c.rows.map(r => { const v = toolVals(d, r); return ks.map(k => v[k]); })).map(row => row.map(q).join(',')).join('\r\n') + '\r\n';
+  }
+  function saveToolsCsv() {
+    const d = doc();
+    if (!d || isTool(d)) return;
+    download(toolsCsv(d), d.p.name.replace(/\.[^.]*$/, '') + '-tools.csv', 'text/csv');
+  }
   function renderTools() {
     const d = doc();
     el.toolsSide.hidden = !toolsOn || !isProg(d);
@@ -2109,12 +2126,15 @@
         return `<button type="button" class="mach${src && src.machine === m ? ' on' : ''}" data-mach="${folder.machines.indexOf(m)}">${esc(m.name)} ${checkHtml(c)}</button>`;
       }).join('') + '</div>';
     }
-    const head = '<tr><th></th><th>Tool</th><th>NOM</th><th>Sfx</th><th>Units</th><th>Machine</th><th>Pocket</th><th class="num">Length</th><th class="num">Dia/Nose</th></tr>';
+    // the columns to show, print and save, and the buttons that do
+    const ks = toolCols(), num = k => k === 'len' || k === 'dia';
+    el.toolsInfo.innerHTML += '<div class="tcols">Columns: ' + TOOL_COLS.map(([k, l]) => `<label><input type="checkbox" data-tcol="${k}"${ks.includes(k) ? ' checked' : ''}>${esc(l)}</label>`).join('') +
+      '<span class="tbtns"><button type="button" data-tact="print" title="Print the setup sheet with these columns">Print</button><button type="button" data-tact="txt">Save .txt</button><button type="button" data-tact="csv">Save .csv</button></span></div>';
+    const head = '<tr>' + ks.map(k => k === 'st' ? '<th></th>' : `<th${num(k) ? ' class="num"' : ''}>${esc(TOOL_COLS.find(x => x[0] === k)[1])}</th>`).join('') + '</tr>';
     el.toolsList.innerHTML = '<table class="tt"><thead>' + head + '</thead><tbody>' + c.rows.map(r => {
-      const st = r.res ? r.res.status : '', m = machineCols(d, r);
-      return `<tr class="st-${st}"${r.pt.lines.length ? ` data-line="${r.pt.lines[0]}"` : ''} title="${esc((st ? STATUS[st][1] : '') + (r.pt.lines.length ? '' : (st ? ' · ' : '') + 'only in a called program'))}"><td class="st">${st ? STATUS[st][0] : ''}</td>` +
-        `<td>${esc(r.pt.name)}</td><td>${esc(r.pt.nomText)}</td><td>${esc(r.pt.sfx)}</td><td>${esc(r.pt.where.join(' '))}</td>` +
-        `<td>${esc(m[0])}</td><td>${esc(m[1])}</td><td class="num">${esc(m[2])}</td><td class="num">${esc(m[3])}</td></tr>`;
+      const st = r.res ? r.res.status : '', v = toolVals(d, r);
+      return `<tr class="st-${st}"${r.pt.lines.length ? ` data-line="${r.pt.lines[0]}"` : ''} title="${esc((st ? STATUS[st][1] : '') + (r.pt.lines.length ? '' : (st ? ' · ' : '') + 'only in a called program'))}">` +
+        ks.map(k => k === 'st' ? `<td class="st">${st ? STATUS[st][0] : ''}</td>` : `<td${num(k) ? ' class="num"' : ''}>${esc(v[k])}</td>`).join('') + '</tr>';
     }).join('') + '</tbody></table>';
   }
   function setupSheet(d) {
@@ -2126,15 +2146,13 @@
     const cn = calledNote(c.called);
     if (cn) out.push('Tools of this program ' + cn + '.');
     out.push('');
-    const wU = Math.max(14, ...c.rows.map(r => r.pt.where.join(' ').length));
-    const cols = [['Tool', 16], ['NOM', 10], ['Sfx', 4], ['Units', wU], ['Machine', 16], ['Pocket', 8], ['Length', 10], ['Dia/Nose', 10], ['Status', 12]];
-    const line = vals => vals.map((v, k) => String(v).padEnd(cols[k][1])).join(' ').replace(/\s+$/, '');
+    // the chosen columns, each as wide as its widest entry (status last, as it always was)
+    const ks = toolCols().filter(k => k !== 'st').concat(toolCols().includes('st') ? ['st'] : []), vals = c.rows.map(r => toolVals(d, r));
+    const cols = ks.map(k => { const l = TOOL_COLS.find(x => x[0] === k)[1]; return [l, Math.max(l.length, k === 'units' ? 14 : 4, ...vals.map(v => String(v[k]).length)), k]; });
+    const line = row => row.map((v, k) => String(v).padEnd(cols[k][1])).join(' ').replace(/\s+$/, '');
     out.push(line(cols.map(x => x[0])));
     out.push(line(cols.map(x => '-'.repeat(x[1]))));
-    for (const r of c.rows) {
-      const m = machineCols(d, r);
-      out.push(line([r.pt.name, r.pt.nomText, r.pt.sfx, r.pt.where.join(' '), m[0], m[1], m[2], m[3], r.res ? STATUS[r.res.status][1] : '']));
-    }
+    for (const v of vals) out.push(line(cols.map(x => v[x[2]])));
     out.push('');
     out.push(`${c.rows.length} tools` + (c.src ? `: ${c.ok} found, ${c.suffix} with another suffix, ${c.missing} missing` : ''));
     // where the work is: each program's INDEX, WPC, OFFSET and WPCSHIFT units
@@ -4294,6 +4312,17 @@
     d.toolSrc = folderSources()[+b.dataset.mach];
     renderTools();
   });
+  el.toolsInfo.addEventListener('change', e => {
+    const k = e.target.dataset && e.target.dataset.tcol; if (!k) return;
+    const on = new Set(toolCols()); if (e.target.checked) on.add(k); else on.delete(k);
+    if (!on.size) { e.target.checked = true; return; }              // keep at least one
+    store.set('mazed-toolcols', TOOL_COLS.map(c => c[0]).filter(x => on.has(x)));
+    renderTools();
+  });
+  el.toolsInfo.addEventListener('click', e => {
+    const a = e.target.dataset && e.target.dataset.tact;
+    if (a === 'print') printSheet(); else if (a === 'txt') saveSheet(); else if (a === 'csv') saveToolsCsv();
+  });
   el.toolsList.addEventListener('click', e => {
     const tr = e.target.closest('tr[data-line]');
     if (tr) { select(+tr.dataset.line); el.input.focus(); }
@@ -4472,7 +4501,7 @@
   sessionRestore();
 
   // test hook
-  window.MazEditor = { machines: () => MACH, openMachines, sendTo, sendGo, receiveFrom, findMachines, docs, doc, openBytes, select, enterValue, commit, insertUnit, insertLine, deleteSelection, copySelection, paste, moveSelection, undo, saveAs, listing, newProgram, render, ctx, setToolType, toolCheck, setupSheet, side, loadFolder, openFromFolder, folder: () => folder,
+  window.MazEditor = { machines: () => MACH, openMachines, sendTo, sendGo, receiveFrom, findMachines, docs, doc, openBytes, select, enterValue, commit, insertUnit, insertLine, deleteSelection, copySelection, paste, moveSelection, undo, saveAs, listing, newProgram, render, ctx, setToolType, toolCheck, setupSheet, toolsCsv, side, loadFolder, openFromFolder, folder: () => folder,
     plotStats: () => lastStats, playAction, playTo, gotoLine, scene: () => (doc() ? doc().scene : null), save, duplicateSelection, cutSelection, contextAction,
     setEditing, editing: () => editing, cube: () => cubeHit, openDevelop, openTpc, openRef, openCalc, wpcFromHoles, wpcFromHolesY, fitHoles, boltCircle, parseAlarmHelp, openCheck, programCheck: () => programCheck(doc()), softKey: id => { const k = SK[id]; if (!k || (k.off && k.off())) return false; k.run(); renderSoftKeys(); return true; },
     skOn: id => !!(SK[id].on && SK[id].on()), skOff: id => !!(SK[id].off && SK[id].off()), pressSoftKey,

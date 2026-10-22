@@ -255,7 +255,11 @@ its parameters. Cycle times use a nominal rapid rate.
 
 - **Tools** lists the program's tools and looks each one up in a machine's tool data (an open `m8ysram` or
   TOOLDATA file, or the folder's machine) the way the control does: by type, nominal size and suffix (and part,
-  for turning tools). It shows the tool number, pocket, length and diameter, or that the tool is missing.
+  for turning tools). It shows the tool number, pocket, length and diameter, or that the tool is missing. A program
+  of SUB PRO units takes in the tools of the programs it calls (open, or in the folder), each with the programs and
+  units that use it. **Columns** picks what the list shows and what **Print**, **Save .txt** and **Save .csv** put on
+  the setup sheet (remembered in this browser). The setup sheet also lists every program's INDEX, WPC, OFFSET and
+  WPCSHIFT units.
 - **Compare** lists what changed between this program and another open one (for example the saved copy and the
   machine's copy), field by field.
 - **Folder** lists every program in the folder with its comment and tool check, and searches every line of every
