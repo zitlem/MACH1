@@ -44,6 +44,23 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
   await typeIn('coneCR', '0.125'); await waitDone(); await sleep(300);
   await ev(`(()=>{const s=document.getElementById('scrub'); s.value=Math.round(s.max*0.8); s.dispatchEvent(new Event('input',{bubbles:true}))})()`); await sleep(300);
   await shot('outside.png');
+  // turning the view: Front, 3D, a drag turns it, Top again
+  await ev(`document.querySelector('#camSeg [data-v="iso"]').click()`); await sleep(200);
+  const pathAt = () => ev(`(document.querySelector('#plot path[stroke="var(--finish)"]') || {}).getAttribute ? document.querySelector('#plot path[stroke="var(--finish)"]').getAttribute('d').slice(0, 60) : ''`);
+  const iso = await pathAt();
+  check('3D view draws the toolpath', iso.length > 10 && await ev(`document.getElementById('plotTitle').textContent`) === 'Toolpath, 3D: drag to turn');
+  await shot('outside-3d.png');
+  const box = await ev(`(()=>{const r=document.getElementById('plot').getBoundingClientRect();return [r.left+r.width/2, r.top+r.height/2]})()`);
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: box[0], y: box[1], button: 'left', buttons: 1, clickCount: 1 });
+  for (let i = 1; i <= 5; i++) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box[0] + i * 30, y: box[1] + i * 10, button: 'left', buttons: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: box[0] + 150, y: box[1] + 50, button: 'left', buttons: 0, clickCount: 1 }); await sleep(150);
+  check('a drag turns the view', (await pathAt()) !== iso);
+  await shot('outside-3d-turned.png');
+  await ev(`document.querySelector('#camSeg [data-v="front"]').click()`); await sleep(150);
+  check('front view', await ev(`document.getElementById('plotTitle').textContent`) === 'Toolpath, front view');
+  await shot('outside-front.png');
+  await ev(`document.querySelector('#camSeg [data-v="top"]').click()`); await sleep(150);
+  check('back to the top view', await ev(`!document.getElementById('plot').classList.contains('orbit')`));
   await ev(`document.querySelector('#tabs [data-t="g"]').click()`); await sleep(100);
   await seg('op', 'pocket'); await waitDone(); await sleep(300);
   check('section hidden for a pocket', await ev(`document.getElementById('sectWrap').hidden`));

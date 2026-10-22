@@ -93,6 +93,14 @@ The finish pass has a lead arc and an optional spring pass. Which passes a progr
 the preview, in the G-code header (`(TOOLPATH: ROUGH + FINISH)`), in the Mazatrol program comment and in the
 default file name (`-rough-finish`, `-rough`, `-finish`).
 
+## Views
+
+**Top**, **Front**, **Side** (from +X) and **3D** above the preview turn the toolpath to that angle. Outside the top
+view, drag to turn it to any angle, Shift-drag (or right-drag) to pan, scroll to zoom and double-click to fit. It
+draws every move with its Z (helixes and spirals as they climb and drop), the part at Z0 and at the depth (a cone as
+its top and bottom circles and lines down its wall), the stock, the X/Y/Z axes at work zero and the tool at the
+slider. Drawing and editing shapes is in the top view.
+
 ## Drawing exactly, dimensions and drawing only
 
 - **Typed points**: with a drawing tool (shapes, construction, Measure), type in the box above the preview and press
