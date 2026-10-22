@@ -76,6 +76,22 @@ const check = (n, c, d) => { if (c) passes++; else { fails++; console.log('FAIL'
   await seg('blendMove', 'down'); await waitDone(); await sleep(300);
   check('stay down explains itself', /ride round the loop just cut/.test(await ev(`document.getElementById('form').textContent`)));
   await shot('profile-stagger.png');
+  // keep-out areas and the finish corner on a profile
+  await ev(`document.querySelector('#form input[data-k="blend"]').checked && document.querySelector('#form input[data-k="blend"]').click()`); await waitDone(); await sleep(200);
+  await ev(`document.getElementById('avRect').click()`); await waitDone(); await sleep(300);
+  check('a keep-out rectangle is added and drawn', await ev(`document.querySelectorAll('#avoid [data-av]').length === 4 && !!document.querySelector('#plot rect[fill="url(#avHatch)"]')`));
+  check('the info says loops are cut in parts', /Keep-out: 1 area/.test(await ev(`document.getElementById('info').textContent`)), await ev(`document.getElementById('info').textContent`));
+  await ev(`document.getElementById('avDraw').click()`); await sleep(100);
+  const pb = await ev(`(()=>{const r=document.getElementById('plot').getBoundingClientRect();return [r.left, r.top, r.width, r.height]})()`);
+  const p0 = [pb[0] + pb[2] * 0.12, pb[1] + pb[3] * 0.4], p1 = [pb[0] + pb[2] * 0.2, pb[1] + pb[3] * 0.6];
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: p0[0], y: p0[1], button: 'left', buttons: 1, clickCount: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p1[0], y: p1[1], button: 'left', buttons: 1 });
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: p1[0], y: p1[1], button: 'left', buttons: 0, clickCount: 1 }); await waitDone(); await sleep(300);
+  check('a box dragged on the preview becomes a second area', await ev(`document.querySelectorAll('#avoid [data-av]').length === 8`));
+  await seg('finCorner', 'tl'); await waitDone(); await sleep(300);
+  check('finish corner chosen', /blend into the corner/.test(await ev(`document.querySelector('[data-hint="finCorner"]').textContent`)));
+  check('no warnings with the areas', !(await ev(`document.getElementById('warn').hidden`)) ? !/plunge|left out|ramp in/.test(await ev(`document.getElementById('warn').textContent`)) : true, await ev(`document.getElementById('warn').textContent`));
+  await shot('profile-keepout.png');
   check('no page errors', errors.length === 0, errors);
   console.log(passes + ' passed, ' + fails + ' failed'); ws.close(); chrome.kill(); process.exit(fails ? 1 : 0);
 })().catch(e => { console.log('ERROR', e.message); chrome.kill(); process.exit(1); });

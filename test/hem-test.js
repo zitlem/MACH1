@@ -51,6 +51,15 @@ function check(cfg, label) {
     let far = 0; for (const p of pts) far = Math.max(far, segDist(p, g.p1, g.p2));
     assert(far < g.w / 2 - K.R + tol, 'farthest ' + far.toFixed(5));
   });
+  // keep-out areas: below the clearance plane, every move (rapids too) keeps the tool's edge the clearance away
+  if (r.geo.avoid) ok(label + ': stays clear of the keep-out areas', () => {
+    const zd = q => Math.min(...r.geo.avoid.map(z => z.t === 'circle' ? Math.hypot(q[0] - z.x, q[1] - z.y) - z.r : (() => { const dx = Math.abs(q[0] - z.cx) - z.hx, dy = Math.abs(q[1] - z.cy) - z.hy; return Math.hypot(Math.max(dx, 0), Math.max(dy, 0)) + Math.min(Math.max(dx, dy), 0); })()));
+    const keep = K.R + Math.abs(+(r.cfg.keepClear || 0.1)), low = [];
+    // (not the first move: it starts from the reader's 0,0,0)
+    for (const m of run.moves.slice(1)) m.pts.forEach((p, i) => { const q = i ? m.pts[i - 1] : p, n = Math.max(1, Math.ceil(Math.hypot(p[0] - q[0], p[1] - q[1]) / 0.02)); for (let k = 0; k <= n; k++) { const t = k / n, w = [q[0] + (p[0] - q[0]) * t, q[1] + (p[1] - q[1]) * t, q[2] + (p[2] - q[2]) * t]; if (w[2] < K.safeZ - 1e-6) low.push(w); } });
+    let worst = Infinity, at = null; for (const w of low) { const d = zd(w); if (d < worst) { worst = d; at = w; } }
+    assert(worst > keep - 2e-4, 'the tool centre comes ' + worst.toFixed(4) + ' from an area (keep ' + keep + ') at ' + (at && at.map(v => v.toFixed(3))));
+  });
   ok(label + ': settings read back', () => { const s = HEM.readSettings(text); assert.deepStrictEqual(s, Object.fromEntries(Object.keys(HEM.DEFAULTS).map(k => [k, r.cfg[k]]))); });
   for (const ctl of ['MatrixM', 'SmoothM']) ok(label + ': Mazatrol ' + ctl, () => {
     const M = HEM.toMazatrol(Object.assign({}, r, { cfg: Object.assign({}, r.cfg, { mazCtl: ctl }) }), MACH1);
@@ -111,6 +120,31 @@ ok('stagger: shifted starts move the set distance along the wall; lifts go to th
   const a = HEM.generate({ ...base, blend: true, blendMode: 'random' }), b = HEM.generate({ ...base, blend: true, blendMode: 'random' }), c2 = HEM.generate({ ...base, blend: true, blendMode: 'random', blendSeed: '7' });
   assert.strictEqual(HEM.toGcode(a), HEM.toGcode(b), 'the same random starts every time');
   assert.notStrictEqual(HEM.toGcode(a), HEM.toGcode(c2), 'a new seed draws new ones');
+});
+check({ ...base, finCorner: 'tl' }, 'profile finish from the top left corner');
+check({ ...base, finCorner: 'br', cornerR: '0', dir: 'conv', spring: true }, 'profile finish from a sharp bottom right corner, conventional, spring');
+check({ ...base, avoid: [{ t: 'rect', x1: '-0.5', y1: '1.2', x2: '0.5', y2: '3' }] }, 'profile with a clamp on the top side');
+check({ ...base, avoid: [{ t: 'circle', x: '2.4', y: '-1.9', d: '0.8' }, { t: 'rect', x1: '-3', y1: '-0.4', x2: '-2.2', y2: '0.4' }], apMax: '1', dir: 'conv', keepClear: '0.15' }, 'profile with two keep-out areas, levels, conventional');
+check({ ...base, shape: 'circle', partD: '3', avoid: [{ t: 'rect', x1: '-0.4', y1: '-3', x2: '0.4', y2: '-1.4' }], spring: true }, 'circle profile with a clamp, spring');
+const OFF_END = [{ t: 'rect', x1: '-4.0625', y1: '-0.5625', x2: '-3.1875', y2: '0.5625' }];   // a clamp just off the stock's end
+check({ ...base, avoid: OFF_END }, 'profile with a clamp just off the end (the outer loops ramp in)');
+check({ ...base, avoid: OFF_END, apMax: '0.8', dir: 'conv' }, 'profile with a clamp just off the end, levels, conventional');
+ok('keep-out: where no cut ground is near, the loops ramp in at the helix ramp angle (never plunge)', () => {
+  const r = HEM.generate({ ...base, avoid: OFF_END });
+  assert(r.geo.info.some(w => /ramp in along their start/.test(w)), r.geo.info.join(' | '));
+  const ramp = Math.tan(2 * Math.PI / 180) * 1.01; let prev = null, steep = 0;
+  for (const m of r.moves) { if (m.t === 'G1' && prev && m.z < prev.z - 1e-9 && m.k === 'entry') { const run = Math.hypot(m.x - prev.x, m.y - prev.y); if ((prev.z - m.z) > ramp * run + 1e-6) steep++; } if (m.x !== undefined) prev = m; }
+  assert.strictEqual(steep, 0, steep + ' entry moves go down steeper than the ramp angle');
+});
+ok('finish from a corner: it leads in on that corner and runs on back through it', () => {
+  for (const [k, sx, sy] of [['tl', -1, 1], ['br', 1, -1]]) {
+    const r = HEM.generate({ ...base, finCorner: k }), fin = []; let sec = '';
+    for (const m of r.moves) { if (m.t === 'SEC') sec = m.name; else if (sec === 'FINISH' && m.x !== undefined) fin.push(m); }
+    const on = fin.find(m => m.k === 'finish');
+    assert(on && on.x * sx > 2 && on.y * sy > 1.5, k + ': the finish starts at ' + (on && [on.x, on.y]));
+    const len = r.stats.feedLen, plain = HEM.generate(base).stats.feedLen;
+    assert(len > plain + 0.4, 'it overlaps the corner: ' + (len - plain).toFixed(3) + ' more');
+  }
 });
 check({ op: 'pocket' }, 'pocket');
 check({ op: 'pocket', dir: 'conv', apMax: '0.8', cx: '2', cy: '1' }, 'pocket conventional 3 levels');

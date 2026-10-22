@@ -183,6 +183,21 @@ off there and feed across to the next lead-in. Where it cannot (a new level, ano
 pockets) it lifts to the clearance plane. **Finish overlap**: the finish pass runs this far past its own start
 before it leads off, blending the start mark away.
 
+## Start the finish at a corner, keep-out areas (profiles)
+
+**Start the finish at** a corner (Profile, rectangle): the finish leads in on that corner's arc, runs round and on
+back through the whole corner (and a little more, or the Finish overlap if that is longer) before leading off, so
+its start and end blend into the corner instead of leaving a line on a flat side.
+
+**Keep out (clamps)**: rectangles and circles the tool must not go into (clamps, a vise jaw, a bolt), typed in or
+dragged out on the preview (**Draw a box on the preview**), with a **Clearance** between them and the tool's edge.
+They are drawn hatched red. A loop that would come nearer is cut in parts that stop short of the areas, the way an
+open profile is: below the clearance plane nothing goes into them. Each part of a roughing loop comes down in the
+slot the loop before it cut, at its point nearest the part's start (the first loop, outside the stock), and feeds
+across; where there is no cut ground near enough it ramps in along its start, back and forth at the helix ramp
+angle. Between parts the tool lifts to the clearance plane. The finish pass is cut in parts too, each with lead arcs
+in the clear. The stock under and beside the areas, and the wall behind them, are left.
+
 ## Heights
 
 - **Clearance plane**: above clamps and fixtures. The tool comes in and leaves here, and each Mazatrol unit starts

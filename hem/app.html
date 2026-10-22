@@ -218,6 +218,12 @@ const MAT_OPTS = Object.entries(HEM.MATERIALS).map(([k, m]) => [k, m.name]);
 const COAT_OPTS = Object.entries(HEM.COATINGS).map(([k, m]) => [k, m.name]);
 // the material and coating numbers for the current tool, shown in grey in blank fields
 const autoNum = k => { const a = HEM.matNumbers(cfg, Math.abs(num(cfg.toolD, 0.75)) || 0.75); return { sfmR: a.sfmR, fzR: a.fzR, sfmF: a.sfmF, fzF: a.fzF, unitHp: a.hp }[k]; };
+// keep-out areas: one row each, typed; added as a rectangle or a circle, or dragged out on the preview
+function avoidHtml() {
+  const L = cfg.avoid || [], inp = (i, k, l) => `<label class="f"><span>${l}</span><input type="text" inputmode="decimal" data-av="${i}:${k}" value="${esc(L[i][k] == null ? '' : L[i][k])}" autocomplete="off"></label>`;
+  return '<div id="avoid">' + L.map((z, i) => `<div class="row" style="align-items:end">${z.t === 'circle' ? inp(i, 'x', 'Circle X') + inp(i, 'y', 'Y') + inp(i, 'd', 'Ø') : inp(i, 'x1', 'Box X1') + inp(i, 'y1', 'Y1') + inp(i, 'x2', 'X2') + inp(i, 'y2', 'Y2')}<button type="button" class="btn sm" data-avdel="${i}" title="Delete this area">✕</button></div>`).join('') +
+    `<div class="btns"><button type="button" class="btn sm" id="avRect">Add rectangle</button><button type="button" class="btn sm" id="avCirc">Add circle</button><button type="button" class="btn sm${ui.pickAvoid ? ' on' : ''}" id="avDraw">${ui.pickAvoid ? 'Drag a box on the preview…' : 'Draw a box on the preview'}</button></div></div>`;
+}
 // operations that can stagger their starts
 const stagOps = c => c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'));
 // the cone's angle and the other diameter, from what is typed
@@ -292,6 +298,11 @@ const SECTIONS = [
     } }),
     F('stockW', 'Stock per side', 'in', '', { show: c => c.stockType !== 'rect' || c.op === 'cone', hintFn: c => { if (c.op === 'cone') return 'Round stock, this much bigger than the cone\'s base all round, the full depth.'; const n = Math.max(0, Math.ceil((Math.abs(num(c.stockW, 0)) - (c.passes === 'rough' ? 0 : Math.abs(num(c.finStock, 0)))) / Math.max(0.001, Math.abs(num(c.ae, 0.06))) - 1e-6)); return n + ' pass' + (n === 1 ? '' : 'es') + ' around the part at the stepover' + (c.passes !== 'rough' ? ', then the finish pass' : '') + '.'; } }),
   ] },
+  { h: 'Keep out (clamps)', show: isOp('profile'), items: [
+    { note: () => 'Areas the tool must not go into: clamps, a vise jaw, a bolt. Loops that would pass through one are cut in parts that stop short of it; the tool lifts to the clearance plane between them, and the stock (and wall) behind it is left.' },
+    { avoidList: true },
+    F('keepClear', 'Clearance', 'in', 'Between the tool\'s edge and each area', { show: c => (c.avoid || []).length > 0 }),
+  ] },
   { h: 'Tool', items: [
     { row: [F('toolD', 'Diameter', 'in'), F('flutes', 'Flutes', '')] },
     { row: [F('loc', 'Flute length', 'in'), F('stick', 'Stick-out', 'in')], hint: 'Stick-out: holder face to tool tip. Keep it short: deflection grows with its cube.' },
@@ -321,6 +332,7 @@ const SECTIONS = [
     F('blendShift', 'Shift along the wall', 'in', 'Each start this far on from the one before, the way the tool cuts.', { show: c => c.blend && stagOps(c) && c.blendMode === 'shift' }),
     F('blendSeed', 'Random draw', '', 'Change the number for another set of random starts.', { show: c => c.blend && stagOps(c) && c.blendMode === 'random' }),
     F('blendMove', 'To the next start', '', '', { kind: 'seg', opts: [['clear', 'Clearance plane'], ['rapid', 'Rapid plane'], ['down', 'Stay down']], show: c => c.blend && stagOps(c), hintFn: c => ({ clear: 'Lift to the clearance plane (Z' + f4(num(c.safeZ, 1)) + '), over clamps and vise jaws, and come down at the next start in the clear.', rapid: 'Lift to the rapid plane (Z' + f4(Math.min(num(c.rapidZ, 0.1), num(c.safeZ, 1))) + '): clears the top of the part (Z0), not clamps standing above it.', down: 'Stay at depth: ride round the loop just cut (cleared ground) to the next start, lead off and on there. Where it cannot (a new level, another shape, the finish), it lifts to the clearance plane. Profiles and outside shapes; pockets lift.' })[c.blendMove] }),
+    F('finCorner', 'Start the finish at', '', '', { kind: 'seg', opts: [['', 'As the passes'], ['tl', 'Top left'], ['tr', 'Top right'], ['bl', 'Bottom left'], ['br', 'Bottom right']], show: c => c.op === 'profile' && c.shape !== 'circle' && c.finish, hintFn: c => c.finCorner ? 'The finish leads in on that corner\'s arc and runs round and on back through the whole corner before leading off, so its start and end blend into the corner: no line on a flat side. A larger Finish overlap below runs further.' : 'Pick a corner to start (and finish) the finish pass there.' }),
     F('finOverlap', 'Finish overlap', 'in', 'The finish pass runs this far past its start before it leads off, blending the start mark away. 0 = none.', { show: c => c.finish && (c.op === 'profile' || (c.op === 'custom' && (c.cop === 'outside' || c.cop === 'pocket'))) }),
     F('passes', 'Passes', '', '', { kind: 'seg', opts: [['both', 'Rough + finish'], ['rough', 'Rough only'], ['finish', 'Finish only']], hintFn: c => ({ both: 'Roughing leaves the finish stock on the wall; the finish pass cuts it to size at full depth.', rough: 'Roughing cuts straight to size. No finish pass.', finish: 'Just the finish pass, for a part already roughed: the tool comes straight down in the cleared area and takes the finish stock off the wall.' })[c.passes] || '' }),
     { row: [F('finStock', 'Finish stock', 'in', '', { hintFn: c => c.passes === 'finish' ? 'What roughing left on the wall' : 'Left on the wall by roughing' }), F('leadR', 'Lead-in radius', 'in', 'Arc on and off the wall')], show: c => c.op !== 'cone' && (c.passes !== 'rough' || c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside')) },
@@ -427,6 +439,7 @@ function renderForm() {
     if (it.origin) return originHtml();
     if (it.feedsList) { const L = feedsTools(); return L.length ? `<label class="f"><span>From the Feeds and Speeds tool list</span><select id="feedsTool"><option value="">Pick a tool…</option>${L.map((t, i) => `<option value="${i}">${esc(t.name)}</option>`).join('')}</select><span class="hint">Takes its diameter, flutes, flute length, stick-out, material and coating.</span></label>` : ''; }
     if (it.cons) return consHtml();
+    if (it.avoidList) return avoidHtml();
     if (it.pick) return `<div class="btns"><button type="button" class="btn sm${ui.pickEntry ? ' on' : ''}" id="pickEntry">${ui.pickEntry ? 'Click the preview…' : 'Pick the start on the preview'}</button>${cfg.entryOn ? '<button type="button" class="btn sm" id="clearEntry">Automatic</button>' : ''}</div>`;
     if (it.note) { const t = it.note(cfg); return t ? `<p class="note">${esc(t)}</p>` : ''; }
     if (it.row) return `<div class="row">${it.row.map(field).join('')}</div>${it.hint ? `<p class="note">${esc(it.hint)}</p>` : ''}`;
@@ -434,7 +447,7 @@ function renderForm() {
   }).join('')}</section>`).join('');
   renderShapes();
 }
-const LAYOUT_KEYS = new Set(['blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+const LAYOUT_KEYS = new Set(['finCorner', 'blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
 function set(k, v) {
   const was = cfg[k];
   cfg[k] = v;
@@ -458,6 +471,21 @@ function findItem(k) {
   }
   return first;
 }
+$('form').addEventListener('input', e => {
+  const t = e.target, k = t.dataset && t.dataset.av; if (!k) return;
+  const [i, f] = k.split(':'); if (!cfg.avoid || !cfg.avoid[+i]) return;
+  cfg.avoid[+i][f] = t.value; save(); schedule();
+});
+$('form').addEventListener('click', e => {
+  const t = e.target;
+  if (t.id === 'avRect' || t.id === 'avCirc') {
+    const b = R && R.geo && R.geo.part ? R.geo.part : { cx: 0, cy: 0, A: 2, B: 1.5 }, top = (b.cy || 0) + (b.B || b.r || 1.5);
+    cfg.avoid = (cfg.avoid || []).concat([t.id === 'avRect' ? { t: 'rect', x1: f4((b.cx || 0) - 0.5), y1: f4(top - 0.2), x2: f4((b.cx || 0) + 0.5), y2: f4(top + 1) } : { t: 'circle', x: f4(b.cx || 0), y: f4(top + 0.5), d: '0.75' }]);
+    save(); renderForm(); schedule(); return;
+  }
+  if (t.dataset && t.dataset.avdel != null) { cfg.avoid.splice(+t.dataset.avdel, 1); save(); renderForm(); schedule(); return; }
+  if (t.id === 'avDraw') { ui.pickAvoid = !ui.pickAvoid; if (ui.pickAvoid) { ui.pickEntry = false; if (ui.cam !== 'top') setCam('top'); } renderForm(); renderTools(); return; }
+});
 $('form').addEventListener('input', e => { const t = e.target; if (t.closest('#shapes')) return; const k = t.dataset.k; if (!k) return; set(k, t.type === 'checkbox' ? t.checked : t.value); });
 $('form').addEventListener('change', e => { const t = e.target; if (t.closest('#shapes')) return; if (t.tagName === 'SELECT' && t.dataset.k) set(t.dataset.k, t.value); });
 $('form').addEventListener('click', e => {
@@ -635,6 +663,7 @@ function renderTools() {
     `<button type="button" class="btn sm" id="clearAll">Clear all</button>`;
   $('snap').value = ui.snap; renderSegEdit();
   if (ui.pickOrigin) { $('drawbar').hidden = false; if (!custom()) $('tools').innerHTML = ''; $('drawHint').textContent = 'Click the preview where the new X0 Y0 should be · Esc cancels'; $('plot').setAttribute('class', 'draw'); return; }
+  if (ui.pickAvoid) { $('drawbar').hidden = false; if (!custom()) $('tools').innerHTML = ''; $('drawHint').textContent = 'Drag a box on the preview over the clamp · Esc cancels'; $('plot').setAttribute('class', 'draw'); return; }
   if (ui.pickEntry) { $('drawbar').hidden = false; if (!custom()) $('tools').innerHTML = ''; $('drawHint').textContent = 'Click the preview where the passes should start · Esc cancels'; $('plot').setAttribute('class', 'draw'); return; }
   if (ui.tool === 'measure') { $('drawHint').textContent = ui.mB ? 'Click to measure again' : ui.mA ? 'Click the second point' : 'Click two points (they snap to points, crossings and construction)'; $('plot').setAttribute('class', 'draw'); return; }
   if (CTOOL[ui.tool]) { $('drawHint').textContent = CTOOL[ui.tool] + (ui.cpend ? ' (second click)' : '') + ' · Esc cancels'; $('plot').setAttribute('class', 'draw'); return; }
@@ -730,7 +759,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !$('ctx').hidden) { closeMenu(); return; }
   if (e.key === 'Escape' && document.activeElement && document.activeElement.closest && document.activeElement.closest('#segEdit')) { document.activeElement.blur(); SEGACT.done(); return; }
   if (e.key === 'Escape' && ui.cpend) { ui.cpend = null; renderTools(); drawPlot(); return; }
-  if (e.key === 'Escape' && (ui.pickEntry || ui.pickOrigin)) { ui.pickEntry = false; ui.pickOrigin = false; renderForm(); renderTools(); return; }
+  if (e.key === 'Escape' && (ui.pickEntry || ui.pickOrigin || ui.pickAvoid)) { ui.pickEntry = false; ui.pickOrigin = false; ui.pickAvoid = false; ui.avoidBand = null; renderForm(); renderTools(); drawPlot(); return; }
   if (!custom() || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
   if ((e.metaKey || e.ctrlKey) && (e.key === 'z' || e.key === 'Z' || e.key === 'y')) { e.preventDefault(); undo(e.key === 'y' || e.shiftKey); return; }
   if ((e.key === 'Delete' || e.key === 'Backspace') && ui.selCon != null && cfg.cons && cfg.cons[ui.selCon]) { e.preventDefault(); CONACT.del(ui.selCon); return; }
@@ -888,6 +917,10 @@ function draw3D(svg, W, H, moves, last) {
     outl(g.part, 0).concat(outl(g.part, -K.depth)).forEach(o => parts.push(`<path d="${path(o)}" ${ink}/>`));
     if (g.stock) outl(g.stock, 0).concat(outl(g.stock, -K.depth)).forEach(o => parts.push(`<path d="${path(o)}" ${stock}/>`));
   }
+  if (cfg.op === 'profile') (cfg.avoid || []).forEach(z => {
+    const sh = z.t === 'circle' ? { t: 'circle', cx: num(z.x), cy: num(z.y), r: Math.abs(num(z.d)) / 2 } : { t: 'rr', cx: (num(z.x1) + num(z.x2)) / 2, cy: (num(z.y1) + num(z.y2)) / 2, A: Math.abs(num(z.x2) - num(z.x1)) / 2, B: Math.abs(num(z.y2) - num(z.y1)) / 2, r: 0 };
+    outl(sh, 0).concat(outl(sh, 0.5)).forEach(o => parts.push(`<path d="${path(o)}" fill="none" stroke="var(--red)" stroke-width="1.4" stroke-dasharray="6 3"/>`));
+  });
   // the toolpath, by kind
   const d = {}; let from = null, sec = 'ROUGH', cur = null;
   if (ui.view !== 'none') for (let i = 0; i < last && i < moves.length; i++) {
@@ -1001,6 +1034,15 @@ function drawPlot() {
   const pocketish = geo.part && (geo.part.hole || geo.part.t === 'slot' || geo.part.pocket);
   parts.push(shapeSvg(geo.part, X, Y, s, pocketish ? 'fill="#fff" stroke="var(--ink)" stroke-width="1.5"' : 'fill="var(--part)" stroke="var(--ink)" stroke-width="1.5"'));
   if (geo.part2) parts.push(shapeSvg(geo.part2, X, Y, s, 'fill="none" stroke="var(--ink)" stroke-dasharray="5 4" stroke-width="1.2"'));
+  // keep-out areas (and the one being dragged out)
+  if (cfg.op === 'profile') {
+    const az = 'fill="url(#avHatch)" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="6 3"';
+    parts.push('<defs><pattern id="avHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="rgba(194,54,43,.08)"/><line x1="0" y1="0" x2="0" y2="8" stroke="rgba(194,54,43,.45)" stroke-width="2"/></pattern></defs>');
+    (cfg.avoid || []).concat(ui.avoidBand ? [{ t: 'rect', x1: ui.avoidBand[0][0], y1: ui.avoidBand[0][1], x2: ui.avoidBand[1][0], y2: ui.avoidBand[1][1] }] : []).forEach(z => {
+      if (z.t === 'circle') parts.push(`<circle cx="${X(num(z.x))}" cy="${Y(num(z.y))}" r="${Math.abs(num(z.d)) / 2 * s}" ${az}/>`);
+      else { const x1 = Math.min(num(z.x1), num(z.x2)), x2 = Math.max(num(z.x1), num(z.x2)), y1 = Math.min(num(z.y1), num(z.y2)), y2 = Math.max(num(z.y1), num(z.y2)); parts.push(`<rect x="${X(x1)}" y="${Y(y2)}" width="${(x2 - x1) * s}" height="${(y2 - y1) * s}" ${az}/>`); }
+    });
+  }
   parts.push(`<g stroke="var(--red)" stroke-width="1.5"><line x1="${X(0) - 10}" y1="${Y(0)}" x2="${X(0) + 10}" y2="${Y(0)}"/><line x1="${X(0)}" y1="${Y(0) - 10}" x2="${X(0)}" y2="${Y(0) + 10}"/></g><text x="${X(0) + 6}" y="${Y(0) + 16}" font-size="11" fill="var(--red)">X0 Y0</text>`);
   for (const k of ['air', 'rapid', 'link', 'entry', 'rough', 'finish']) if (d[k]) parts.push(`<path d="${d[k]}" fill="none" stroke="${COLORS[k]}" stroke-width="${k === 'rough' || k === 'finish' ? 1.3 : 1}" ${k === 'rapid' ? 'stroke-dasharray="5 4"' : k === 'air' ? 'stroke-dasharray="2 3"' : ''} stroke-linejoin="round" opacity="${custom() ? 0.8 : 1}"/>`);
   // your shapes: outline, points, the one being drawn
@@ -1202,6 +1244,7 @@ $('play').onclick = () => {
   };
   svg.addEventListener('pointerdown', e => {
     if (ui.cam !== 'top') { act = { orbit: !(e.shiftKey || e.button === 1 || e.button === 2), x: e.clientX, y: e.clientY, yaw: ui.yaw, pitch: ui.pitch, px: ui.panX3, py: ui.panY3 }; capture(e); return; }
+    if (ui.pickAvoid && e.button === 0) { act = { avoidFrom: snapPt(world(e)) }; capture(e); return; }
     if ((ui.pickEntry || ui.pickOrigin) && e.button === 0) { act = { pan: true, pick: true, click: true, x: e.clientX, y: e.clientY, px: ui.panX, py: ui.panY }; capture(e); return; }
     const menuBtn = e.button === 2 || (e.button === 0 && e.ctrlKey && custom());
     if (e.button === 1 || menuBtn || !custom()) { act = { pan: true, menu: menuBtn && custom(), click: true, x: e.clientX, y: e.clientY, px: ui.panX, py: ui.panY }; capture(e); return; }
@@ -1233,6 +1276,7 @@ $('play').onclick = () => {
       else { ui.panX3 = act.px + dx; ui.panY3 = act.py + dy; }
       drawPlot(); return;
     }
+    if (act && act.avoidFrom) { ui.avoidBand = [act.avoidFrom, snapPt(world(e))]; drawPlot(); return; }
     if (custom()) { const w = world(e); hover = lockPt(w, snapPt(w), e.shiftKey && !act); }
     if (act && act.bend) {
       const [i, j] = act.bend, sh = cfg.shapes[i]; if (!sh) return;
@@ -1260,6 +1304,11 @@ $('play').onclick = () => {
   svg.addEventListener('pointerup', e => {
     const a = act; act = null; ui.dragging = false;
     if (ui.cam !== 'top') return;
+    if (a && a.avoidFrom) {
+      const b = ui.avoidBand; ui.avoidBand = null; ui.pickAvoid = false;
+      if (b && Math.abs(b[1][0] - b[0][0]) > 0.01 && Math.abs(b[1][1] - b[0][1]) > 0.01) cfg.avoid = (cfg.avoid || []).concat([{ t: 'rect', x1: f4(Math.min(b[0][0], b[1][0])), y1: f4(Math.min(b[0][1], b[1][1])), x2: f4(Math.max(b[0][0], b[1][0])), y2: f4(Math.max(b[0][1], b[1][1])) }]);
+      save(); renderForm(); renderTools(); schedule(); drawPlot(); return;
+    }
     if (a && a.menu) { if (a.click) { const v = nearVertex(e, 8), ed = !v && nearEdge(e, 8), ci = !v && !ed ? consAt(e, 7) : null, w = world(e); plotMenu(e.clientX, e.clientY, v ? { pt: v } : ed ? { seg: ed } : ci != null ? { con: ci } : { shape: shapeAt(w) }, w); } return; }
     if (a && a.pick && ui.pickOrigin) { if (a.click) { const p = snapPt(world(e)); applyOrigin(p[0], p[1]); } return; }
     if (a && a.pick) {
