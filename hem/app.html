@@ -353,9 +353,11 @@ const SECTIONS = [
     F('lift', 'Lift', 'in', '', { show: c => c.passes !== 'finish' && c.link === 'lift' && (c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch')) }),
     F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: c => c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish'), hintFn: c => c.op === 'cone' ? 'The bore at the centre the roughing passes start from: it cuts Ø' + f4(num(c.helixD) + num(c.toolD)) + ', straight down at the helix ramp angle.' : 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
     { row: [F('ramp', 'Helix ramp angle', '°'), F('rampPct', 'Helix feed', '% of rough')], show: c => c.op === 'pocket' || c.slotEntry === 'helix' || c.op === 'custom' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish') },
-    F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk' }),
+    F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk', show: c => !c.oneFeed }),
     { note: () => 'Checked along the whole roughing toolpath by simulating the cut: where more of the cutter is in the material than the stepover gives (corners, narrow gaps, trochoid fronts), the feed drops to keep the chip the same.' },
-    F('retPct', 'Trochoid loop return feed', '% of rough', 'The back half of each trochoidal loop runs over ground just cut', { show: c => c.op === 'slot' || (c.op === 'custom' && (c.cop === 'path' || c.cop === 'pocket' || (c.cop === 'outside' && c.strategy === 'troch'))) }),
+    F('retPct', 'Trochoid loop return feed', '% of rough', 'The back half of each trochoidal loop runs over ground just cut', { show: c => !c.oneFeed && (c.op === 'slot' || (c.op === 'custom' && (c.cop === 'path' || c.cop === 'pocket' || (c.cop === 'outside' && c.strategy === 'troch')))) }),
+    F('retStraight', 'Slot loop return: straight across instead of a half circle', '', 'Shorter than the half circle (about a third less travel) in a wide slot; it runs over ground the loop just cut.', { kind: 'chk', show: c => c.op === 'slot' }),
+    F('oneFeed', 'One feed for the whole cut', '', 'Loop returns run at the roughing feed and nothing is lowered in corners, so the program has a single F for roughing.', { kind: 'chk', show: c => c.rough !== false }),
     F('airFeed', 'Feed in the clear', 'ipm', 'Coming down outside the stock or over ground already cut, and unit restarts'),
   ] },
   { h: 'Machine & G-code', items: [
@@ -458,7 +460,7 @@ function renderForm() {
   }).join('')}</section>`).join('');
   renderShapes();
 }
-const LAYOUT_KEYS = new Set(['finTool', 'coneStepBy', 'homeG30', 'finCorner', 'blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+const LAYOUT_KEYS = new Set(['finTool', 'coneStepBy', 'homeG30', 'finCorner', 'blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'oneFeed', 'retStraight', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
 function set(k, v) {
   const was = cfg[k];
   cfg[k] = v;

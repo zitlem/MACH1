@@ -12560,7 +12560,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     ae: '0.06', finish: true, finStock: '0.012', spring: false, dir: 'climb', leadR: '0.25',
     link: 'depth', lift: '0.02', rampPct: '50', airFeed: '50',
     // trochoidal loops: the back half of each loop runs through ground already cut, at this % of the roughing feed
-    retPct: '200',
+    retPct: '200', oneFeed: false, retStraight: false,
     // lower the feed where the cutter wraps more of the cut than the stepover intends (simulated)
     slowDown: true,
     // machine and output
@@ -12624,7 +12624,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
       mrrFin: fin * depth * f.feed,
       airFeed: Math.max(0.1, num(c.airFeed, 50)),
       helixFeed: Math.round(r.feed * Math.min(100, Math.max(5, num(c.rampPct, 50)))) / 100,
-      retFeed: Math.round(r.feed * Math.min(500, Math.max(100, num(c.retPct, 200))) / 10) / 10,
+      retFeed: c.oneFeed ? r.feed : Math.round(r.feed * Math.min(500, Math.max(100, num(c.retPct, 200))) / 10) / 10,
       safeZ: num(c.safeZ, 1), rapidZ: Math.min(num(c.rapidZ, 0.1), num(c.safeZ, 1)), rapid: Math.max(1, num(c.rapid, 1000)),
       retractZ: c.retract === 'clear' ? num(c.safeZ, 1) : Math.min(num(c.rapidZ, 0.1), num(c.safeZ, 1)),
       loc: Math.abs(num(c.loc, 0)), stick: Math.abs(num(c.stick, 0)), toolNo: Math.max(0, Math.round(num(c.toolNo, 1))),
@@ -13370,7 +13370,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
       for (let k = 0; k <= n; k++) {
         const ck = at(k, 0), Ak = at(k, r);
         B.arc(true, Ak[0], Ak[1], ck[0], ck[1], z, fr, 'rough');           // front half: the cut
-        if (k < n) { const Bn = at(k + 1, -r), m = at(k + 0.5, 0); B.arc(true, Bn[0], Bn[1], m[0], m[1], z, K.retFeed, 'link'); }   // back half: the return, over cut ground
+        if (k < n) { const Bn = at(k + 1, -r), m = at(k + 0.5, 0); if (c.retStraight) B.g1(Bn[0], Bn[1], z, K.retFeed, 'link'); else B.arc(true, Bn[0], Bn[1], m[0], m[1], z, K.retFeed, 'link'); }   // back half: the return (a straight line across, or the half circle), over cut ground
         else { const Bk = at(k, -r); B.arc(true, Bk[0], Bk[1], ck[0], ck[1], z, K.retFeed, 'link'); }
       }
       zTop = z;
@@ -14213,7 +14213,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     checks(c, K, W);
     let stats = measure(B.m, K);
     // cones are left as they are: the material changes with depth, which the engagement check (flat) does not see
-    if (c.slowDown !== false && c.rough && !G.cone) {
+    if (c.slowDown !== false && !c.oneFeed && c.rough && !G.cone) {
       const E = Engage(), mat = materialOf(G, K);
       if (E && mat && B.m.some(m => m.t === 'G1' || m.t === 'G2' || m.t === 'G3')) {
         const ang = E.angles(B.m, K.R, stats.box, mat);
@@ -15024,9 +15024,11 @@ const SECTIONS = [
     F('lift', 'Lift', 'in', '', { show: c => c.passes !== 'finish' && c.link === 'lift' && (c.op === 'profile' || (c.op === 'custom' && c.cop === 'outside' && c.strategy !== 'troch')) }),
     F('helixD', 'Helix diameter (tool centre)', 'in', '', { show: c => c.op === 'pocket' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish'), hintFn: c => c.op === 'cone' ? 'The bore at the centre the roughing passes start from: it cuts Ø' + f4(num(c.helixD) + num(c.toolD)) + ', straight down at the helix ramp angle.' : 'Bores Ø' + f4(num(c.helixD) + num(c.toolD)) + '. About 0.3–0.9× the tool.' }),
     { row: [F('ramp', 'Helix ramp angle', '°'), F('rampPct', 'Helix feed', '% of rough')], show: c => c.op === 'pocket' || c.slotEntry === 'helix' || c.op === 'custom' || (c.op === 'cone' && c.coneSide !== 'outside' && c.passes !== 'finish') },
-    F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk' }),
+    F('slowDown', 'Lower the feed where the cutter wraps more of the cut', '', '', { kind: 'chk', show: c => !c.oneFeed }),
     { note: () => 'Checked along the whole roughing toolpath by simulating the cut: where more of the cutter is in the material than the stepover gives (corners, narrow gaps, trochoid fronts), the feed drops to keep the chip the same.' },
-    F('retPct', 'Trochoid loop return feed', '% of rough', 'The back half of each trochoidal loop runs over ground just cut', { show: c => c.op === 'slot' || (c.op === 'custom' && (c.cop === 'path' || c.cop === 'pocket' || (c.cop === 'outside' && c.strategy === 'troch'))) }),
+    F('retPct', 'Trochoid loop return feed', '% of rough', 'The back half of each trochoidal loop runs over ground just cut', { show: c => !c.oneFeed && (c.op === 'slot' || (c.op === 'custom' && (c.cop === 'path' || c.cop === 'pocket' || (c.cop === 'outside' && c.strategy === 'troch')))) }),
+    F('retStraight', 'Slot loop return: straight across instead of a half circle', '', 'Shorter than the half circle (about a third less travel) in a wide slot; it runs over ground the loop just cut.', { kind: 'chk', show: c => c.op === 'slot' }),
+    F('oneFeed', 'One feed for the whole cut', '', 'Loop returns run at the roughing feed and nothing is lowered in corners, so the program has a single F for roughing.', { kind: 'chk', show: c => c.rough !== false }),
     F('airFeed', 'Feed in the clear', 'ipm', 'Coming down outside the stock or over ground already cut, and unit restarts'),
   ] },
   { h: 'Machine & G-code', items: [
@@ -15129,7 +15131,7 @@ function renderForm() {
   }).join('')}</section>`).join('');
   renderShapes();
 }
-const LAYOUT_KEYS = new Set(['finTool', 'coneStepBy', 'homeG30', 'finCorner', 'blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
+const LAYOUT_KEYS = new Set(['finTool', 'coneStepBy', 'homeG30', 'finCorner', 'blend', 'blendMode', 'blendMove', 'coneSide', 'coneBy', 'macroEnd', 'coating', 'slowDown', 'oneFeed', 'retStraight', 'entryOn', 'pieceDir', 'openSide', 'openDir', 'pocketStrategy', 'retract', 'passes', 'op', 'cop', 'strategy', 'shape', 'stockType', 'finish', 'link', 'slotEntry', 'dir', 'mazCtl', 'thin', 'spring', 'toolChange', 'home', 'lineNums', 'mat']);
 function set(k, v) {
   const was = cfg[k];
   cfg[k] = v;
