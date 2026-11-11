@@ -12530,7 +12530,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     // Mazatrol SUB PRO) or M30 (on its own)
     macroEnd: 'M99',
     // trochoidal slot
-    x1: '-3', y1: '0', x2: '3', y2: '0', slotW: '1', slotEntry: 'open', slotEnds: 'round',
+    x1: '-3', y1: '0', x2: '3', y2: '0', slotW: '1', slotEntry: 'open', slotEnds: 'round', slotOpenS: false, slotOpenE: false, slotOpenL: false, slotOpenR: false,
     // depth
     depth: '2.375', apMax: '0',
     // tool
@@ -13344,8 +13344,8 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     if (c.slotEnds === 'square') {                             // square ends: a rectangle pocket, as long as the round-ended slot is
       const h = Ws / 2, e = [P1[0] - h * u[0], P1[1] - h * u[1]], f = [P2[0] + h * u[0], P2[1] + h * u[1]];
       const rect = [[e[0] + h * nv[0], e[1] + h * nv[1]], [f[0] + h * nv[0], f[1] + h * nv[1]], [f[0] - h * nv[0], f[1] - h * nv[1]], [e[0] - h * nv[0], e[1] - h * nv[1]]];
-      G.info.push('Square ends: cut as a rectangle ' + fx(L + Ws) + ' × ' + fx(Ws));
-      return genCustom(Object.assign({}, c, { op: 'custom', cop: 'pocket', shapes: [{ closed: true, pts: rect.map(q => [q[0], q[1]]) }], pocketStrategy: c.pocketStrategy === 'troch' ? 'troch' : 'auto' }), K, B, W, G);
+      G.info.push('Square ends: cut as a rectangle ' + fx(L + Ws) + ' × ' + fx(Ws) + (c.slotOpenL || c.slotOpenE || c.slotOpenR || c.slotOpenS ? ', led in from the open side' : ''));
+      return genCustom(Object.assign({}, c, { op: 'custom', cop: 'pocket', shapes: [{ closed: true, pts: rect.map((q, i) => [q[0], q[1], 0, 0, [c.slotOpenL, c.slotOpenE, c.slotOpenR, c.slotOpenS][i] ? 1 : 0]) }], pocketStrategy: c.pocketStrategy === 'troch' ? 'troch' : 'auto' }), K, B, W, G);
     }
     G.part = { t: 'slot', p1: P1, p2: P2, w: Ws };
     const hw = Ws / 2 - R;
@@ -14937,6 +14937,9 @@ const SECTIONS = [
     F('pieceDir', 'Passes from the open side', '', '', { kind: 'seg', opts: [['zigzag', 'Zigzag (no lifts)'], ['oneway', 'One way (all climb)']], show: openPocket, hintFn: c => c.pieceDir === 'oneway' ? 'Every pass climbs; the tool lifts and goes back after each.' : 'Every other pass comes back conventional, stepping over without lifting.' }),
     { note: c => openPocket(c) ? 'Open edges (dashed orange) have air beyond them: passes start from that side and work in to the walls and round the islands; the tool comes down in the air, no helix. The finish pass follows the walls and islands only.' : '', show: openPocket },
     F('slotW', 'Groove width', 'in', '', { show: c => c.cop === 'path' }),
+    { note: c => 'Sides with stock outside them: the tool comes down in the air past an open side and cuts in from it, instead of plunging at the centre. Left and right are looking from the start to the end.', show: c => c.op === 'slot' && c.slotEnds === 'square' },
+    { row: [F('slotOpenS', 'Start end open', '', '', { kind: 'chk' }), F('slotOpenE', 'End end open', '', '', { kind: 'chk' })], show: c => c.op === 'slot' && c.slotEnds === 'square' },
+    { row: [F('slotOpenL', 'Left side open', '', '', { kind: 'chk' }), F('slotOpenR', 'Right side open', '', '', { kind: 'chk' })], show: c => c.op === 'slot' && c.slotEnds === 'square' },
     F('slotEntry', 'Entry', '', '', { kind: 'seg', opts: [['open', 'Open (start off the part)'], ['helix', 'Helix']], show: c => c.cop === 'path' }),
     { shapes: true, draw: true },
   ] },
