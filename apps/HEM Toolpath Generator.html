@@ -13335,6 +13335,94 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     B.g0(null, null, K.safeZ);
   }
 
+
+  // A square-cornered slot with open sides, cut as plain zigzag passes: each pass across the slot, then a step of
+  // one stepover: two lines per pass, so the Mazatrol program stays short (a Matrix unit holds about 250 lines).
+  // One open end (or side): the passes walk in from it. Both ends (or both sides): each half is cut from its own
+  // end, one after the other, and a Mazatrol unit is never split across the two halves. Other mixes of open
+  // sides go through the general open pocket.
+  function squareZig(c, K, B, W, G, P1, P2, Ws, L, u, nv) {
+    const oS = !!c.slotOpenS, oE = !!c.slotOpenE, oL = !!c.slotOpenL, oR = !!c.slotOpenR;
+    const R = K.R, a = K.finStock, h = Ws / 2, Lt = L + Ws, ae = K.ae, fr = K.rough.feed, air = K.airFeed;
+    const ends = oS || oE, sides = oL || oR;
+    if (ends === sides) return false;                                    // none, or a mix of an end and a side
+    const O0 = [P1[0] - h * u[0] - h * nv[0], P1[1] - h * u[1] - h * nv[1]];
+    const neg = v => [-v[0], -v[1]];
+    const at = (O, S, Q, s, q) => [O[0] + s * S[0] + q * Q[0], O[1] + s * S[1] + q * Q[1]];
+    const sh = (O, v, d) => [O[0] + d * v[0], O[1] + d * v[1]];
+    // frames: from the open edge in: origin O, step direction S, across direction Q, depth T, across size Wd, whether a far wall
+    const frames = [];
+    if (ends) {
+      const both = oS && oE, T = both ? Lt / 2 : Lt;
+      if (oS) frames.push({ O: O0, S: u, Q: nv, T, Wd: Ws, wall: !both });
+      if (oE) frames.push({ O: sh(O0, u, Lt), S: neg(u), Q: nv, T, Wd: Ws, wall: !both });
+    } else {
+      const both = oL && oR, T = both ? Ws / 2 : Ws;
+      if (oR) frames.push({ O: O0, S: nv, Q: u, T, Wd: Lt, wall: !both });
+      if (oL) frames.push({ O: sh(O0, nv, Ws), S: neg(nv), Q: u, T, Wd: Lt, wall: !both });
+    }
+    const Wd = frames[0].Wd;
+    const qlo = R + a, qhi = Wd - R - a;
+    if (!(qhi > qlo + 1e-6)) { W.push('The slot is not wider than the tool plus the finish stock.'); return true; }
+    G.part = { t: 'polys', loops: [[at(O0, u, nv, 0, 0), at(O0, u, nv, Lt, 0), at(O0, u, nv, Lt, Ws), at(O0, u, nv, 0, Ws)]], pocket: true };
+    const conv = c.dir === 'conv', zs = levelsZ(K);
+    const s1 = -R + ae;
+    let nPass = 0;
+    const plans = frames.map(f => {
+      const sEnd = f.T - R - (f.wall ? a : 0), n = sEnd > s1 + 1e-6 ? Math.ceil((sEnd - s1) / ae - 1e-6) : 0, st = n ? (sEnd - s1) / n : 0;
+      nPass += n + 1; return Object.assign({ n, st }, f);
+    });
+    G.info.push('Square ends, plain passes: ' + nPass + ' across the slot at ' + fx(ae) + ' stepover' + (frames.length > 1 ? ', cut from both open sides' : ', walking in from the open side') + ', zigzag (every other pass back conventional)');
+    const blocks = Math.max(...plans.map(f => 2 * f.n + 4));
+    if (c.mazCtl !== 'SmoothM' && frames.length === 1 && blocks > 250) G.info.push('Matrix holds about 250 lines in a manual unit and this needs ' + blocks + ', so it comes out as two units. Open the opposite end too (two units, one from each side), or a stepover of ' + fx(Math.ceil(1000 * ae * (blocks - 4) / 246) / 1000) + ' or more fits one.');
+    if (c.rough) {
+      B.sec('ROUGH', K.rough.rpm);
+      plans.forEach((f, fi) => {                                        // one open side finished, every level, then the other
+        zs.forEach((z, li) => {
+          B.note('LEVEL ' + (li + 1) + ' OF ' + zs.length + ' Z' + fx(z));
+          B.m.push({ t: 'C', s: 'FROM THE ' + (frames.length > 1 ? (fi ? 'SECOND' : 'FIRST') + ' OPEN SIDE' : 'OPEN SIDE'), brk: blocks });
+          const cr = f.Q[0] * f.S[1] - f.Q[1] * f.S[0], d0 = (cr > 0 ? 1 : -1) * (conv ? -1 : 1);
+          const ptA = at(f.O, f.S, f.Q, -R - 0.1, d0 > 0 ? qlo : qhi);
+          if (!li && !fi) start(B, K, ptA[0], ptA[1]); else hop(B, K, ptA[0], ptA[1]);
+          B.g1(null, null, z, air, 'air');
+          for (let j = 0; j <= f.n; j++) {
+            const sj = f.n ? s1 + j * f.st : Math.min(s1, f.T - R - (f.wall ? a : 0)), dir = d0 * (j % 2 ? -1 : 1);
+            const ps = at(f.O, f.S, f.Q, sj, dir > 0 ? qlo : qhi), pe = at(f.O, f.S, f.Q, sj, dir > 0 ? qhi : qlo);
+            B.g1(ps[0], ps[1], z, j ? fr : fr, j ? 'link' : 'entry');
+            B.g1(pe[0], pe[1], z, fr, 'rough');
+          }
+        });
+      });
+    }
+    if (c.finish) {
+      // the tool centre a radius inside the walls; only the sides that are walls, each run run on past the open edge
+      const C = [[R, R], [Lt - R, R], [Lt - R, Ws - R], [R, Ws - R]].map(q => at(O0, u, nv, q[0], q[1]));
+      const open = [oR, oE, oL, oS];                                    // edges 0..3 in order
+      const walls = [0, 1, 2, 3].filter(i => !open[i]);
+      const runs = []; let cur = null;
+      for (let k = 0; k < 4; k++) { const i = k; if (open[i]) { cur = null; continue; } if (!cur) { cur = [C[i]]; runs.push(cur); } cur.push(C[(i + 1) % 4]); }
+      if (walls.length && open[3] === false && open[0] === false && runs.length > 1) {   // a run that wraps past edge 3 to edge 0
+        const last = runs.pop(); runs[0] = last.concat(runs[0].slice(1));
+      }
+      B.sec('FINISH', K.fin.rpm);
+      const z = -K.depth, ext = R + 0.1;
+      runs.forEach(P => {
+        let Q = P.slice();
+        const d0 = [Q[1][0] - Q[0][0], Q[1][1] - Q[0][1]], l0 = Math.hypot(d0[0], d0[1]) || 1;
+        const d1 = [Q[Q.length - 1][0] - Q[Q.length - 2][0], Q[Q.length - 1][1] - Q[Q.length - 2][1]], l1 = Math.hypot(d1[0], d1[1]) || 1;
+        const first = open[(walls[0] + 3) % 4] || false;
+        Q = Q.slice(); Q[0] = [Q[0][0] - d0[0] / l0 * ext, Q[0][1] - d0[1] / l0 * ext]; Q[Q.length - 1] = [Q[Q.length - 1][0] + d1[0] / l1 * ext, Q[Q.length - 1][1] + d1[1] / l1 * ext];
+        if (!conv) Q.reverse();                                          // climb: clockwise, the wall on the left
+        const pass = () => { approach(B, K, Q[0], z, K.fin.feed); for (let i = 1; i < Q.length; i++) B.g1(Q[i][0], Q[i][1], z, K.fin.feed, 'finish'); };
+        if (isNaN(B.pos().x)) { start(B, K, Q[0][0], Q[0][1]); B.g1(null, null, z, air, 'air'); B.g1(Q[0][0], Q[0][1], z, K.fin.feed, 'finish'); for (let i = 1; i < Q.length; i++) B.g1(Q[i][0], Q[i][1], z, K.fin.feed, 'finish'); }
+        else { hop(B, K, Q[0][0], Q[0][1]); B.g1(null, null, z, air, 'air'); for (let i = 1; i < Q.length; i++) B.g1(Q[i][0], Q[i][1], z, K.fin.feed, 'finish'); }
+        if (c.spring) { hop(B, K, Q[0][0], Q[0][1]); B.g1(null, null, z, air, 'air'); for (let i = 1; i < Q.length; i++) B.g1(Q[i][0], Q[i][1], z, K.fin.feed, 'finish'); }
+      });
+    }
+    B.g0(null, null, K.safeZ);
+    return true;
+  }
+
   // ---------------------------------------------------------------- trochoidal slot
   function genSlot(c, K, B, W, G) {
     const P1 = [num(c.x1), num(c.y1)], P2 = [num(c.x2), num(c.y2)], R = K.R, a = K.finStock, Ws = Math.abs(num(c.slotW, 1));
@@ -13344,6 +13432,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     if (c.slotEnds === 'square') {                             // square ends: a rectangle pocket, as long as the round-ended slot is
       const h = Ws / 2, e = [P1[0] - h * u[0], P1[1] - h * u[1]], f = [P2[0] + h * u[0], P2[1] + h * u[1]];
       const rect = [[e[0] + h * nv[0], e[1] + h * nv[1]], [f[0] + h * nv[0], f[1] + h * nv[1]], [f[0] - h * nv[0], f[1] - h * nv[1]], [e[0] - h * nv[0], e[1] - h * nv[1]]];
+      if (squareZig(c, K, B, W, G, P1, P2, Ws, L, u, nv)) return;
       G.info.push('Square ends: cut as a rectangle ' + fx(L + Ws) + ' × ' + fx(Ws) + (c.slotOpenL || c.slotOpenE || c.slotOpenR || c.slotOpenS ? ', led in from the open side' : ''));
       return genCustom(Object.assign({}, c, { op: 'custom', cop: 'pocket', shapes: [{ closed: true, pts: rect.map((q, i) => [q[0], q[1], 0, 0, [c.slotOpenL, c.slotOpenE, c.slotOpenR, c.slotOpenS][i] ? 1 : 0]) }], pocketStrategy: c.pocketStrategy === 'troch' ? 'troch' : 'auto' }), K, B, W, G);
     }
@@ -14448,7 +14537,7 @@ root.Maz.useSchema({"prompts":["","WorkPiece Material","Initial Point Z (Clearan
     };
     const close = () => { if (u && !lastWasSafe) blk({ G: 0, Z: safe }); u = null; };
     for (const m of r.moves) {
-      if (m.t === 'C') continue;
+      if (m.t === 'C') { if (m.brk && u && count + m.brk > lim) close(); continue; }         // brk: lines about to follow; a unit never splits them
       if (m.t === 'SEC') {
         rpm = m.rpm; close();
         if (m.tool) {                                     // the finish tool: its own units, by its NOM-Ø and suffix
@@ -14961,7 +15050,7 @@ const SECTIONS = [
     { row: [F('x2', 'End X', 'in'), F('y2', 'End Y', 'in')], show: isOp('slot') },
     F('slotW', 'Slot width', 'in', 'Start and end are the centres of the slot\'s round ends. 1.3–2× the tool is ideal.', { show: isOp('slot') }),
     F('slotEnds', 'Ends', '', '', { kind: 'seg', opts: [['round', 'Round (tool radius loops)'], ['square', 'Square corners']], show: isOp('slot'), hintFn: c => c.slotEnds === 'square' ? 'Cut as a rectangle the same overall size (length + width). Corners are the tool radius; roughing and entry follow the pocket settings.' : '' }),
-    { note: c => 'Sides with stock outside them: the tool comes down in the air past an open side and cuts in from it, instead of plunging at the centre. Left and right are looking from the start to the end.', show: c => c.op === 'slot' && c.slotEnds === 'square' },
+    { note: c => 'An open side has no wall: the tool comes down in the air past it and cuts in from it, instead of plunging at the centre. One open end gives plain passes across the slot, two lines each. Open both ends (or both sides) to cut half from each, a Mazatrol unit per half. Left and right are looking from the start to the end.', show: c => c.op === 'slot' && c.slotEnds === 'square' },
     { row: [F('slotOpenS', 'Start end open', '', '', { kind: 'chk' }), F('slotOpenE', 'End end open', '', '', { kind: 'chk' })], show: c => c.op === 'slot' && c.slotEnds === 'square' },
     { row: [F('slotOpenL', 'Left side open', '', '', { kind: 'chk' }), F('slotOpenR', 'Right side open', '', '', { kind: 'chk' })], show: c => c.op === 'slot' && c.slotEnds === 'square' },
     F('slotEntry', 'Entry', '', '', { kind: 'seg', opts: [['open', 'Open end (start off the part)'], ['helix', 'Helix']], show: c => c.op === 'slot' && c.slotEnds !== 'square' }),

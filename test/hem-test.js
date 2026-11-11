@@ -703,6 +703,15 @@ ok('open profile: climb keeps the wall on the right', () => {
   });
   ok('slow-down: only roughing', () => { const b = HEM.generate({ op: 'slot' }); let sec = ''; b.moves.forEach(m => { if (m.t === 'SEC') sec = m.name; else if (m.slowed) assert.strictEqual(sec, 'ROUGH'); }); });
   ok('slow-down: reported', () => assert(HEM.generate({ op: 'slot' }).geo.info.some(t => /Feed lowered on \d+ move/.test(t))));
+  ok('square slot, open ends: plain passes, a unit per half', () => {
+    const o = { op: 'slot', x1: 0, y1: 2.5, x2: 0, y2: -2.5, slotW: 4, slotEnds: 'square', passes: 'rough', mazCtl: 'MatrixM' };
+    const one = HEM.generate({ ...o, slotOpenS: true }), two = HEM.generate({ ...o, slotOpenS: true, slotOpenE: true });
+    assert(!one.warn.length && !two.warn.length);
+    assert(one.moves.filter(m => m.k === 'rough').length === one.moves.filter(m => m.k === 'link').length + 1, 'two lines a pass');
+    const seq = []; two.moves.forEach(m => { if (m.k === 'rough') { const k = m.y > 0 ? 'S' : 'E'; if (seq[seq.length - 1] !== k) seq.push(k); } }); assert.strictEqual(seq.join(''), 'SE', 'one side, then the other');
+    const t = HEM.toMazatrol(two, MACH1); assert.strictEqual(t.units, 2); assert(t.seqs < 2 * 253);
+    assert.strictEqual(HEM.toMazatrol(HEM.generate({ ...o, slotOpenL: true }), MACH1).units, 1);
+  });
   ok('loop returns at the return feed', () => { const b = HEM.generate({ op: 'slot', slowDown: false, retPct: '250' }), K = b.K; assert(b.moves.some(m => m.k === 'link' && (m.t === 'G2' || m.t === 'G3') && Math.abs(m.f - Math.round(K.rough.feed * 25) / 10) < 0.11)); });
 }
 
