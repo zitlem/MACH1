@@ -720,6 +720,41 @@ ok('open profile: climb keeps the wall on the right', () => {
     const cv = HEM.generate({ ...o, pieceDir: 'onewayconv' }); assert.strictEqual(dirs(cv), 1); assert.notStrictEqual([...new Set(w.moves.filter(m => m.k === 'rough').map(m => Math.sign(m.x)))].join(), 'x'); const fx = g => g.moves.find(m => m.k === 'rough').x; assert(fx(w) * fx(cv) < 0, 'opposite directions');
     assert(w.moves.filter(m => m.t === 'G1').length > z.moves.filter(m => m.t === 'G1').length);
   });
+  ok('square slot, open end: lead arcs, same line count, valid arcs', () => {
+    const o = { op: 'slot', x1: 0, y1: 2.5, x2: 0, y2: -2.5, slotW: 4, slotEnds: 'square', passes: 'both', slotOpenS: true };
+    const on = HEM.generate(o), off = HEM.generate({ ...o, slotLead: false });
+    const arcs = g => g.moves.filter(m => m.t === 'G2' || m.t === 'G3');
+    assert(arcs(on).length > 80 && arcs(off).length === 0);
+    assert(on.moves.filter(m => m.t !== 'G0' && m.t !== 'C' && m.t !== 'SEC').length <= off.moves.filter(m => m.t !== 'G0' && m.t !== 'C' && m.t !== 'SEC').length + 2, 'arcs replace lines');
+    let p = null; on.moves.forEach(m => { if ((m.t === 'G2' || m.t === 'G3') && p) assert(Math.abs(Math.hypot(p.x - m.cx, p.y - m.cy) - Math.hypot(m.x - m.cx, m.y - m.cy)) < 1e-9, 'arc radius'); if (m.x !== undefined) p = m; });
+    assert.strictEqual(HEM.toMazatrol(HEM.generate({ ...o, y1: 6, slotOpenE: true, passes: 'rough', mazCtl: 'MatrixM' }), MACH1).units, 2);
+  });
+  ok('pocket entries: each way down ends at depth with valid arcs', () => {
+    for (const pocketEntry of ['helix', 'cone', 'invcone', 'ramp', 'plunge']) {
+      const r = HEM.generate({ op: 'pocket', cx: 0, cy: 0, pocketD: 3, pocketEntry, passes: 'rough' });
+      assert(!r.warn.length, pocketEntry); let p = null, zmin = 0;
+      r.moves.forEach(m => { if ((m.t === 'G2' || m.t === 'G3') && p) assert(Math.abs(Math.hypot(p.x - m.cx, p.y - m.cy) - Math.hypot(m.x - m.cx, m.y - m.cy)) < 1e-9, pocketEntry + ' arc'); if (m.x !== undefined) { p = m; if (!isNaN(m.z)) zmin = Math.min(zmin, m.z); } });
+      assert(Math.abs(zmin + r.K.depth) < 1e-9, pocketEntry + ' reaches depth');
+    }
+    const radii = e => HEM.generate({ op: 'pocket', cx: 0, cy: 0, pocketD: 3, pocketEntry: e, passes: 'rough' }).moves.filter(m => m.k === 'entry' && m.cx !== undefined && m.z < -0.05).map(m => Math.hypot(m.x - m.cx, m.y - m.cy));
+    const rc = radii('cone'), ri = radii('invcone'); assert(rc[rc.length - 1] > rc[0] + 0.05 && ri[ri.length - 1] < ri[0] - 0.05, 'cone widens, inverse narrows');
+    const sq = [[-2, -1.5], [2, -1.5], [2, 1.5], [-2, 1.5]].map(q => [...q, 0, 0, 0]);
+    for (const pocketEntry of ['cone', 'ramp']) assert(!HEM.generate({ op: 'custom', cop: 'pocket', shapes: [{ closed: true, pts: sq }], pocketEntry, passes: 'rough' }).warn.length);
+  });
+  ok('pocket entry slot: from the wall, or from a start point in the air', () => {
+    const sq = [[-3, -2], [3, -2], [3, 2], [-3, 2]].map(q => [...q, 0, 0, 0]);
+    const chk = r => { assert(!r.warn.length, r.warn.join()); let p = null; r.moves.forEach(m => { if ((m.t === 'G2' || m.t === 'G3') && p) assert(Math.abs(Math.hypot(p.x - m.cx, p.y - m.cy) - Math.hypot(m.x - m.cx, m.y - m.cy)) < 1e-9); if (m.x !== undefined) p = m; }); assert(r.geo.info.some(t => /Entry slot/.test(t))); };
+    chk(HEM.generate({ op: 'pocket', cx: 0, cy: 0, pocketD: 3, pocketEntry: 'slotramp', passes: 'rough' }));
+    const air = HEM.generate({ op: 'pocket', cx: 0, cy: 0, pocketD: 3, pocketEntry: 'slotair', entryOn: true, entryX: '3', entryY: '0', passes: 'rough' }); chk(air);
+    const dn = air.moves.find(m => m.k === 'air'); assert(Math.abs(dn.x - 3) < 1e-9, 'comes down at the chosen point');
+    for (const pocketStrategy of ['offset', 'troch']) chk(HEM.generate({ op: 'custom', cop: 'pocket', shapes: [{ closed: true, pts: sq }], pocketStrategy, pocketEntry: 'slotramp', passes: 'rough' }));
+    assert(HEM.generate({ op: 'pocket', cx: 0, cy: 0, pocketD: 3, pocketEntry: 'slotair', passes: 'rough' }).warn.length, 'slot from outside without a start point warns');
+  });
+  ok('a box blanked or zeroed while typing stays quick', () => {
+    for (const ae of ['', '0', '0.0001']) { const t = Date.now(); const r = HEM.generate({ op: 'slot', x1: 0, y1: 2.5, x2: 0, y2: -2.5, slotW: 4, slotEnds: 'square', slotOpenS: true, ae }); assert(r.K.ae >= 0.0075 && r.moves.length < 3000 && Date.now() - t < 3000, 'ae ' + ae); }
+    assert(HEM.generate({ op: 'pocket', pocketD: 3, apMax: '0.0001' }).K.levels <= 100);
+    assert(HEM.generate({ op: 'pocket', pocketD: 3, toolD: '0' }).K.D >= 0.01);
+  });
   ok('loop returns at the return feed', () => { const b = HEM.generate({ op: 'slot', slowDown: false, retPct: '250' }), K = b.K; assert(b.moves.some(m => m.k === 'link' && (m.t === 'G2' || m.t === 'G3') && Math.abs(m.f - Math.round(K.rough.feed * 25) / 10) < 0.11)); });
 }
 
