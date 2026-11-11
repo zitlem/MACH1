@@ -156,6 +156,8 @@ table.dims th:first-child,table.dims td:first-child{text-align:left}
           <span class="note" id="busy" hidden style="color:#b85c00;font-weight:600">Working…</span>
           <div class="seg" id="camSeg" title="Top, front, side or 3D: drag to turn, Shift-drag (or right-drag) to pan, wheel to zoom, double-click to fit"></div>
           <div class="seg" id="viewSeg"></div>
+          <button class="btn" id="gridBtn" title="Grid lines in the top view (every inch, finer when zoomed in)">Grid</button>
+          <button class="btn" id="axesBtn" title="The X and Y axes through X0 Y0, with the inch marks">Axes</button>
           <button class="btn" id="fit">Fit</button>
         </div>
         <div class="drawbar" id="drawbar" hidden>
@@ -14971,10 +14973,10 @@ const clone = o => JSON.parse(JSON.stringify(o));
 let cfg = (() => { let s = {}; try { s = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { } const c = Object.assign(clone(HEM.DEFAULTS), s); if (!Array.isArray(c.shapes)) c.shapes = [];
   if (s.passes === undefined && s.finish === false) c.passes = 'rough'; return c; })();
 const ui = Object.assign({ txt: {}, txtAll: false, bulk: new Set(), bk: { dx: '0', dy: '0', ang: '90', k: '1', fr: '0.125', off: '0.1' }, oX: '0', oY: '0', segMode: 'line', tab: 'g', view: 'all', zoom: 1, panX: 0, panY: 0, step: null, playing: false, tool: 'edit', snap: '0.0625', sel: null, selPt: null, selSeg: null, selCon: null, conAng: '45', segLen: '', segAng: '0', open: {} },
-  (() => { try { const u = JSON.parse(localStorage.getItem(UIKEY) || '{}'); return { snap: u.snap || '0.0625', tab: u.tab || 'g', drawOnly: !!u.drawOnly, showNums: !!u.showNums }; } catch (e) { return {}; } })());
+  (() => { try { const u = JSON.parse(localStorage.getItem(UIKEY) || '{}'); return { snap: u.snap || '0.0625', tab: u.tab || 'g', drawOnly: !!u.drawOnly, showNums: !!u.showNums, grid: !!u.grid, axes: !!u.axes }; } catch (e) { return {}; } })());
 let drawing = null;                  // the shape being drawn: {closed, pts}
 let hover = null;                    // cursor in work coordinates
-function save() { record(); try { localStorage.setItem(KEY, JSON.stringify(cfg)); localStorage.setItem(UIKEY, JSON.stringify({ snap: ui.snap, tab: ui.tab, drawOnly: ui.drawOnly, showNums: ui.showNums })); } catch (e) { } }
+function save() { record(); try { localStorage.setItem(KEY, JSON.stringify(cfg)); localStorage.setItem(UIKEY, JSON.stringify({ snap: ui.snap, tab: ui.tab, drawOnly: ui.drawOnly, showNums: ui.showNums, grid: ui.grid, axes: ui.axes })); } catch (e) { } }
 const custom = () => cfg.op === 'custom';
 
 // ---------------------------------------------------------------- the form
@@ -15749,6 +15751,10 @@ function contentBox() {
 }
 function fitView() { ui.zoom = 1; ui.panX = 0; ui.panY = 0; BASE = null; }
 $('fit').onclick = () => { fitView(); drawPlot(); };
+const syncViewBtns = () => { $('gridBtn').classList.toggle('on', !!ui.grid); $('axesBtn').classList.toggle('on', !!ui.axes); };
+$('gridBtn').onclick = () => { ui.grid = !ui.grid; syncViewBtns(); save(); drawPlot(); };
+$('axesBtn').onclick = () => { ui.axes = !ui.axes; syncViewBtns(); save(); drawPlot(); };
+syncViewBtns();
 function arcPts(from, m, out) {
   const r = Math.hypot(from.x - m.cx, from.y - m.cy), a0 = Math.atan2(from.y - m.cy, from.x - m.cx), sw = HEM.arcSweep(m, from) * (m.t === 'G3' ? 1 : -1);
   const n = Math.max(2, Math.ceil(Math.abs(sw) / (Math.PI / 36)));
@@ -15806,14 +15812,21 @@ function drawPlot() {
   tpCache = { r: R, key: tpKey, d, cur };
   }
   const parts = [];
-  // grid when drawing
-  if (custom()) {
+  // grid: always while drawing, or when switched on
+  if (custom() || ui.grid) {
     const g = num(ui.snap, 0) || 0.25, step = g * s < 8 ? g * Math.ceil(8 / (g * s)) : g, maj = [];
     const x0 = mx + (-W / 2 - ui.panX) / s, x1 = mx + (W / 2 - ui.panX) / s, y0 = my - (H / 2 - ui.panY) / s, y1 = my + (H / 2 + ui.panY) / s;
     let gd = '', gm = '';
     if ((x1 - x0) / step < 400) for (let x = Math.ceil(x0 / step) * step; x <= x1; x += step) { const major = Math.abs(x - Math.round(x)) < 1e-9; (major ? (gm += `M${X(x)} 0V${H}`) : (gd += `M${X(x)} 0V${H}`)); }
     if ((y1 - y0) / step < 400) for (let y = Math.ceil(y0 / step) * step; y <= y1; y += step) { const major = Math.abs(y - Math.round(y)) < 1e-9; (major ? (gm += `M0 ${Y(y)}H${W}`) : (gd += `M0 ${Y(y)}H${W}`)); }
     parts.push(`<path d="${gd}" stroke="#eef1f3" stroke-width="1"/><path d="${gm}" stroke="#dfe5e9" stroke-width="1"/>`);
+  }
+  if (ui.axes) {
+    const xl = mx + (-W / 2 - ui.panX) / s, xr = mx + (W / 2 - ui.panX) / s, yb = my - (H / 2 - ui.panY) / s, yt = my + (H / 2 + ui.panY) / s;
+    const tick = Math.max(1, Math.ceil(40 / s)), ticks = [];
+    for (let x = Math.ceil(xl / tick) * tick; x <= xr; x += tick) if (Math.abs(x) > 1e-9 && ticks.length < 80) ticks.push(`<text x="${X(x)}" y="${Y(0) + 13}" text-anchor="middle">${+x.toFixed(3)}</text>`);
+    for (let y = Math.ceil(yb / tick) * tick; y <= yt; y += tick) if (Math.abs(y) > 1e-9 && ticks.length < 160) ticks.push(`<text x="${X(0) + 4}" y="${Y(y) + 4}">${+y.toFixed(3)}</text>`);
+    parts.push(`<g stroke="#8a97a0" stroke-width="1"><line x1="0" y1="${Y(0)}" x2="${W}" y2="${Y(0)}"/><line x1="${X(0)}" y1="0" x2="${X(0)}" y2="${H}"/></g><g font-size="10" fill="#6b7a85" stroke="none">${ticks.join('')}<text x="${W - 14}" y="${Y(0) - 5}" font-weight="700">X</text><text x="${X(0) + 6}" y="12" font-weight="700">Y</text></g>`);
   }
   if (geo.air) parts.push(shapeSvg(geo.air, X, Y, s, 'fill="rgba(184,92,0,.07)" stroke="none"'));
   parts.push(shapeSvg(geo.stock, X, Y, s, geo.part && geo.part.t === 'lines' ? 'fill="rgba(154,166,174,.18)" stroke="var(--stock)" stroke-dasharray="6 4" stroke-width="1.2"' : 'fill="none" stroke="var(--stock)" stroke-dasharray="6 4" stroke-width="1.2"'));
