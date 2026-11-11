@@ -8989,7 +8989,7 @@
     // Mazatrol SUB PRO) or M30 (on its own)
     macroEnd: 'M99',
     // trochoidal slot
-    x1: '-3', y1: '0', x2: '3', y2: '0', slotW: '1', slotEntry: 'open',
+    x1: '-3', y1: '0', x2: '3', y2: '0', slotW: '1', slotEntry: 'open', slotEnds: 'round',
     // depth
     depth: '2.375', apMax: '0',
     // tool
@@ -9800,6 +9800,12 @@
     let L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
     const u = L > 1e-9 ? [(P2[0] - P1[0]) / L, (P2[1] - P1[1]) / L] : [1, 0], nv = [-u[1], u[0]];
     if (L <= 1e-9) L = 0;
+    if (c.slotEnds === 'square') {                             // square ends: a rectangle pocket, as long as the round-ended slot is
+      const h = Ws / 2, e = [P1[0] - h * u[0], P1[1] - h * u[1]], f = [P2[0] + h * u[0], P2[1] + h * u[1]];
+      const rect = [[e[0] + h * nv[0], e[1] + h * nv[1]], [f[0] + h * nv[0], f[1] + h * nv[1]], [f[0] - h * nv[0], f[1] - h * nv[1]], [e[0] - h * nv[0], e[1] - h * nv[1]]];
+      G.info.push('Square ends: cut as a rectangle ' + fx(L + Ws) + ' × ' + fx(Ws));
+      return genCustom(Object.assign({}, c, { op: 'custom', cop: 'pocket', shapes: [{ closed: true, pts: rect.map(q => [q[0], q[1]]) }], pocketStrategy: c.pocketStrategy === 'troch' ? 'troch' : 'auto' }), K, B, W, G);
+    }
     G.part = { t: 'slot', p1: P1, p2: P2, w: Ws };
     const hw = Ws / 2 - R;
     let r = hw - a;
@@ -11216,7 +11222,7 @@
   //  - exact: JSON, UTF-8, base32 in (CFG ...) lines after a (HEM SETTINGS DATA V2 <bytes> BYTES CHECK <fnv-1a>) line.
   // Open reads the exact copy; if an editor or control has damaged it (upper-cased text, cut lines), it falls
   // back to the readable one. Settings saved as (SETTINGS DATA V1 ...) before are read too.
-  const ENUMS = { coneStepBy: ['step', 'ridge'], blendMode: ['step', 'shift', 'random'], blendMove: ['clear', 'rapid', 'down'], op: ['profile', 'pocket', 'slot', 'cone', 'custom'], coneSide: ['inside', 'outside'], coneBy: ['dia', 'angle'], macroEnd: ['M99', 'M30'], shape: ['rect', 'circle'], stockType: ['rect', 'even'], cop: ['outside', 'pocket', 'path'],
+  const ENUMS = { coneStepBy: ['step', 'ridge'], slotEnds: ['round', 'square'], blendMode: ['step', 'shift', 'random'], blendMove: ['clear', 'rapid', 'down'], op: ['profile', 'pocket', 'slot', 'cone', 'custom'], coneSide: ['inside', 'outside'], coneBy: ['dia', 'angle'], macroEnd: ['M99', 'M30'], shape: ['rect', 'circle'], stockType: ['rect', 'even'], cop: ['outside', 'pocket', 'path'],
     strategy: ['offset', 'troch'], slotEntry: ['open', 'helix'], dir: ['climb', 'conv'], link: ['depth', 'lift'], passes: ['both', 'rough', 'finish'],
     mat: Object.keys(MATERIALS).concat(['custom']), dxfUnits: ['auto', 'in', 'mm'], mazCtl: ['MatrixM', 'SmoothM'], coating: Object.keys(COATINGS), retract: ['rapid', 'clear'], openSide: ['left', 'right'], openDir: ['oneway', 'zigzag'], pieceDir: ['zigzag', 'oneway'], pocketStrategy: ['auto', 'offset', 'troch'] };
   const cmt = v => String(v).replace(/[()]/g, '').replace(/[^\x20-\x7E]/g, '?');
