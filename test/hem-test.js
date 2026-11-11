@@ -712,6 +712,13 @@ ok('open profile: climb keeps the wall on the right', () => {
     const t = HEM.toMazatrol(two, MACH1); assert.strictEqual(t.units, 2); assert(t.seqs < 2 * 253);
     assert.strictEqual(HEM.toMazatrol(HEM.generate({ ...o, slotOpenL: true }), MACH1).units, 1);
   });
+  ok('square slot open end: one way passes all climb', () => {
+    const o = { op: 'slot', x1: 0, y1: 2.5, x2: 0, y2: -2.5, slotW: 4, slotEnds: 'square', passes: 'rough', slotOpenS: true };
+    const z = HEM.generate(o), w = HEM.generate({ ...o, pieceDir: 'oneway' });
+    const dirs = g => { const d = new Set(); let p = null; g.moves.forEach(m => { if (m.k === 'rough') d.add(Math.sign(m.x - p.x)); if (m.t === 'G1') p = m; }); return d.size; };
+    assert.strictEqual(dirs(z), 2); assert.strictEqual(dirs(w), 1);
+    assert(w.moves.filter(m => m.t === 'G1').length > z.moves.filter(m => m.t === 'G1').length);
+  });
   ok('loop returns at the return feed', () => { const b = HEM.generate({ op: 'slot', slowDown: false, retPct: '250' }), K = b.K; assert(b.moves.some(m => m.k === 'link' && (m.t === 'G2' || m.t === 'G3') && Math.abs(m.f - Math.round(K.rough.feed * 25) / 10) < 0.11)); });
 }
 

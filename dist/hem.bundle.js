@@ -9831,8 +9831,8 @@
       const sEnd = f.T - R - (f.wall ? a : 0), n = sEnd > s1 + 1e-6 ? Math.ceil((sEnd - s1) / ae - 1e-6) : 0, st = n ? (sEnd - s1) / n : 0;
       nPass += n + 1; return Object.assign({ n, st }, f);
     });
-    G.info.push('Square ends, plain passes: ' + nPass + ' across the slot at ' + fx(ae) + ' stepover' + (frames.length > 1 ? ', cut from both open sides' : ', walking in from the open side') + ', zigzag (every other pass back conventional)');
-    const blocks = Math.max(...plans.map(f => 2 * f.n + 4));
+    G.info.push('Square ends, plain passes: ' + nPass + ' across the slot at ' + fx(ae) + ' stepover' + (frames.length > 1 ? ', cut from both open sides' : ', walking in from the open side') + ', ' + (c.pieceDir === 'oneway' ? 'one way (every pass climb, back over the cut ground between)' : 'zigzag (every other pass back conventional)'));
+    const zig = c.pieceDir !== 'oneway', blocks = Math.max(...plans.map(f => (zig ? 2 : 3) * f.n + 4));
     if (c.mazCtl !== 'SmoothM' && frames.length === 1 && blocks > 250) G.info.push('Matrix holds about 250 lines in a manual unit and this needs ' + blocks + ', so it comes out as two units. Open the opposite end too (two units, one from each side), or a stepover of ' + fx(Math.ceil(1000 * ae * (blocks - 4) / 246) / 1000) + ' or more fits one.');
     if (c.rough) {
       B.sec('ROUGH', K.rough.rpm);
@@ -9845,10 +9845,11 @@
           if (!li && !fi) start(B, K, ptA[0], ptA[1]); else hop(B, K, ptA[0], ptA[1]);
           B.g1(null, null, z, air, 'air');
           for (let j = 0; j <= f.n; j++) {
-            const sj = f.n ? s1 + j * f.st : Math.min(s1, f.T - R - (f.wall ? a : 0)), dir = d0 * (j % 2 ? -1 : 1);
+            const sj = f.n ? s1 + j * f.st : Math.min(s1, f.T - R - (f.wall ? a : 0)), dir = zig ? d0 * (j % 2 ? -1 : 1) : d0;
             const ps = at(f.O, f.S, f.Q, sj, dir > 0 ? qlo : qhi), pe = at(f.O, f.S, f.Q, sj, dir > 0 ? qhi : qlo);
             B.g1(ps[0], ps[1], z, j ? fr : fr, j ? 'link' : 'entry');
             B.g1(pe[0], pe[1], z, fr, 'rough');
+            if (!zig && j < f.n) B.g1(ps[0], ps[1], z, K.retFeed, 'link');     // one way: back along the line just cut
           }
         });
       });
