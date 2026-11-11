@@ -9078,7 +9078,7 @@
     const unitHp = Math.max(0, over(c.unitHp) || auto.hp);
     const mrr = ae * ap * r.feed, hpNeed = mrr * unitHp;
     return {
-      D, R, Z, depth, levels, ap, ae, thin, maxRpm, rough: r, fin: f, auto, ft, finStock: c.finish || c.op === 'cone' ? fin : 0,     // a cone roughed only still leaves its allowance
+      D, R, Z, depth, levels, ap, ae, thin, maxRpm, rough: r, fin: f, auto, ft, finStock: fin,     // roughing only still leaves its allowance for a finish later (0 roughs to size)
       mrr, hpNeed, hpMachine: Math.max(0, num(c.hp, 0)), unitHp,
       mrrFin: fin * depth * f.feed,
       airFeed: Math.max(0.1, num(c.airFeed, 50)),
