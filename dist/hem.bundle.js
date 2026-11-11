@@ -9802,10 +9802,10 @@
   // sides go through the general open pocket.
   function squareZig(c, K, B, W, G, P1, P2, Ws, L, u, nv) {
     const oS = !!c.slotOpenS, oE = !!c.slotOpenE, oL = !!c.slotOpenL, oR = !!c.slotOpenR;
-    const R = K.R, a = K.finStock, h = Ws / 2, Lt = L + Ws, ae = K.ae, fr = K.rough.feed, air = K.airFeed;
+    const R = K.R, a = K.finStock, h = Ws / 2, Lt = L, ae = K.ae, fr = K.rough.feed, air = K.airFeed;
     const ends = oS || oE, sides = oL || oR;
     if (ends === sides) return false;                                    // none, or a mix of an end and a side
-    const O0 = [P1[0] - h * u[0] - h * nv[0], P1[1] - h * u[1] - h * nv[1]];
+    const O0 = [P1[0] - h * nv[0], P1[1] - h * nv[1]];
     const neg = v => [-v[0], -v[1]];
     const at = (O, S, Q, s, q) => [O[0] + s * S[0] + q * Q[0], O[1] + s * S[1] + q * Q[1]];
     const sh = (O, v, d) => [O[0] + d * v[0], O[1] + d * v[1]];
@@ -9831,8 +9831,8 @@
       const sEnd = f.T - R - (f.wall ? a : 0), n = sEnd > s1 + 1e-6 ? Math.ceil((sEnd - s1) / ae - 1e-6) : 0, st = n ? (sEnd - s1) / n : 0;
       nPass += n + 1; return Object.assign({ n, st }, f);
     });
-    G.info.push('Square ends, plain passes: ' + nPass + ' across the slot at ' + fx(ae) + ' stepover' + (frames.length > 1 ? ', cut from both open sides' : ', walking in from the open side') + ', ' + (c.pieceDir === 'oneway' ? 'one way (every pass climb, back over the cut ground between)' : 'zigzag (every other pass back conventional)'));
-    const zig = c.pieceDir !== 'oneway', blocks = Math.max(...plans.map(f => (zig ? 2 : 3) * f.n + 4));
+    G.info.push('Square ends, plain passes: ' + nPass + ' across the slot at ' + fx(ae) + ' stepover' + (frames.length > 1 ? ', cut from both open sides' : ', walking in from the open side') + ', ' + (c.pieceDir === 'onewayconv' ? 'one way (every pass conventional, back over the cut ground between)' : c.pieceDir === 'oneway' ? 'one way (every pass climb, back over the cut ground between)' : 'zigzag (every other pass back conventional)'));
+    const zig = !/^oneway/.test(c.pieceDir || ''), blocks = Math.max(...plans.map(f => (zig ? 2 : 3) * f.n + 4));
     if (c.mazCtl !== 'SmoothM' && frames.length === 1 && blocks > 250) G.info.push('Matrix holds about 250 lines in a manual unit and this needs ' + blocks + ', so it comes out as two units. Open the opposite end too (two units, one from each side), or a stepover of ' + fx(Math.ceil(1000 * ae * (blocks - 4) / 246) / 1000) + ' or more fits one.');
     if (c.rough) {
       B.sec('ROUGH', K.rough.rpm);
@@ -9840,7 +9840,7 @@
         zs.forEach((z, li) => {
           B.note('LEVEL ' + (li + 1) + ' OF ' + zs.length + ' Z' + fx(z));
           B.m.push({ t: 'C', s: 'FROM THE ' + (frames.length > 1 ? (fi ? 'SECOND' : 'FIRST') + ' OPEN SIDE' : 'OPEN SIDE'), brk: blocks });
-          const cr = f.Q[0] * f.S[1] - f.Q[1] * f.S[0], d0 = (cr > 0 ? 1 : -1) * (conv ? -1 : 1);
+          const cr = f.Q[0] * f.S[1] - f.Q[1] * f.S[0], d0 = (cr > 0 ? 1 : -1) * (conv !== (c.pieceDir === 'onewayconv') ? -1 : 1);
           const ptA = at(f.O, f.S, f.Q, -R - 0.1, d0 > 0 ? qlo : qhi);
           if (!li && !fi) start(B, K, ptA[0], ptA[1]); else hop(B, K, ptA[0], ptA[1]);
           B.g1(null, null, z, air, 'air');
@@ -9889,11 +9889,12 @@
     let L = Math.hypot(P2[0] - P1[0], P2[1] - P1[1]);
     const u = L > 1e-9 ? [(P2[0] - P1[0]) / L, (P2[1] - P1[1]) / L] : [1, 0], nv = [-u[1], u[0]];
     if (L <= 1e-9) L = 0;
-    if (c.slotEnds === 'square') {                             // square ends: a rectangle pocket, as long as the round-ended slot is
-      const h = Ws / 2, e = [P1[0] - h * u[0], P1[1] - h * u[1]], f = [P2[0] + h * u[0], P2[1] + h * u[1]];
+    if (c.slotEnds === 'square' && !(L > 0)) { W.push('Square ends need a start and an end that are apart.'); return; }
+    if (c.slotEnds === 'square') {                             // square ends: a rectangle pocket from the start to the end, the slot width across
+      const h = Ws / 2, e = P1, f = P2;
       const rect = [[e[0] + h * nv[0], e[1] + h * nv[1]], [f[0] + h * nv[0], f[1] + h * nv[1]], [f[0] - h * nv[0], f[1] - h * nv[1]], [e[0] - h * nv[0], e[1] - h * nv[1]]];
       if (squareZig(c, K, B, W, G, P1, P2, Ws, L, u, nv)) return;
-      G.info.push('Square ends: cut as a rectangle ' + fx(L + Ws) + ' × ' + fx(Ws) + (c.slotOpenL || c.slotOpenE || c.slotOpenR || c.slotOpenS ? ', led in from the open side' : ''));
+      G.info.push('Square ends: cut as a rectangle ' + fx(L) + ' × ' + fx(Ws) + (c.slotOpenL || c.slotOpenE || c.slotOpenR || c.slotOpenS ? ', led in from the open side' : ''));
       return genCustom(Object.assign({}, c, { op: 'custom', cop: 'pocket', shapes: [{ closed: true, pts: rect.map((q, i) => [q[0], q[1], 0, 0, [c.slotOpenL, c.slotOpenE, c.slotOpenR, c.slotOpenS][i] ? 1 : 0]) }], pocketStrategy: c.pocketStrategy === 'troch' ? 'troch' : 'auto' }), K, B, W, G);
     }
     G.part = { t: 'slot', p1: P1, p2: P2, w: Ws };

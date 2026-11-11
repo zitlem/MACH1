@@ -717,6 +717,7 @@ ok('open profile: climb keeps the wall on the right', () => {
     const z = HEM.generate(o), w = HEM.generate({ ...o, pieceDir: 'oneway' });
     const dirs = g => { const d = new Set(); let p = null; g.moves.forEach(m => { if (m.k === 'rough') d.add(Math.sign(m.x - p.x)); if (m.t === 'G1') p = m; }); return d.size; };
     assert.strictEqual(dirs(z), 2); assert.strictEqual(dirs(w), 1);
+    const cv = HEM.generate({ ...o, pieceDir: 'onewayconv' }); assert.strictEqual(dirs(cv), 1); assert.notStrictEqual([...new Set(w.moves.filter(m => m.k === 'rough').map(m => Math.sign(m.x)))].join(), 'x'); const fx = g => g.moves.find(m => m.k === 'rough').x; assert(fx(w) * fx(cv) < 0, 'opposite directions');
     assert(w.moves.filter(m => m.t === 'G1').length > z.moves.filter(m => m.t === 'G1').length);
   });
   ok('loop returns at the return feed', () => { const b = HEM.generate({ op: 'slot', slowDown: false, retPct: '250' }), K = b.K; assert(b.moves.some(m => m.k === 'link' && (m.t === 'G2' || m.t === 'G3') && Math.abs(m.f - Math.round(K.rough.feed * 25) / 10) < 0.11)); });
