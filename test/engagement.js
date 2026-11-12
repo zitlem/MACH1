@@ -15,7 +15,7 @@ function simulate(r, opts) {
   const angle = (x, y) => { const ci = Math.floor((x - x0) / res), cj = Math.floor((y - y0) / res); let n = 0; for (const [di, dj] of ring) { const i = ci + di, j = cj + dj; if (i >= 0 && j >= 0 && i < nx && j < ny && mat[j * nx + i]) n++; } return 360 * n / ring.length; };
   const cut = (x, y) => { const ci = Math.floor((x - x0) / res), cj = Math.floor((y - y0) / res); let n = 0; for (const [di, dj] of disk) { const i = ci + di, j = cj + dj; if (i < 0 || j < 0 || i >= nx || j >= ny) continue; const k = j * nx + i; if (mat[k]) { mat[k] = 0; n++; } } return n * res * res; };
   // walk the moves at full depth (single level programs), step 0.005
-  let p = null, sec = '', out = { total: 0, len: 0, hist: {}, worst: [], plunges: 0, lifts: 0, helixTurns: 0 };
+  let p = null, sec = '', out = { total: 0, len: 0, hist: {}, worst: [], plunges: 0, lifts: 0, helixTurns: 0, peak: 0 };
   const step = 0.005, ae = K.ae;
   for (const m of r.moves) {
     if (m.t === 'SEC') { sec = m.name; continue; }
@@ -38,6 +38,7 @@ function simulate(r, opts) {
             out.len += d;
             const b = th < 5 ? 'air' : th <= 45 ? '5-45' : th <= 70 ? '45-70' : th <= 100 ? '70-100' : th <= 150 ? '100-150' : '>150';
             out.hist[b] = (out.hist[b] || 0) + d;
+            if (th > out.peak) out.peak = th;
             if (th > 70) out.worst.push({ w: th, at: q, k: m.k, sec, mi: r.moves.indexOf(m) });
           }
           prev = q;
@@ -62,6 +63,7 @@ function report(label, r, opts) {
   console.log('  down to depth ' + s.plunges + ' · lifts ' + s.lifts + ' · helix turns ' + s.helixTurns.toFixed(1) + ' · warnings ' + r.warn.length + (r.warn.length ? ': ' + r.warn.join(' | ') : ''));
   const target = Math.acos(1 - K.ae / K.R) * 180 / Math.PI;
   console.log('  travel at depth ' + s.len.toFixed(1) + ' in, engagement angle (target ' + target.toFixed(0) + '°): air ' + pct('air') + ' · 5-45° ' + pct('5-45') + ' · 45-70° ' + pct('45-70') + ' · 70-100° ' + pct('70-100') + ' · 100-150° ' + pct('100-150') + ' · >150° ' + pct('>150'));
+  console.log('  peak engagement ' + s.peak.toFixed(0) + '°');
   console.log('  worst spots: ' + s.spots.map(w => w.w.toFixed(0) + '° ' + w.k + '/' + w.sec + ' @' + w.at.map(v => v.toFixed(2)).join(',')).join('  ·  '));
   console.log('  material left in the wall zone: ' + s.leftArea.toFixed(4) + ' in²   info: ' + r.geo.info.join(' | '));
   return s;

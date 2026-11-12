@@ -755,6 +755,25 @@ ok('open profile: climb keeps the wall on the right', () => {
     assert(HEM.generate({ op: 'pocket', pocketD: 3, apMax: '0.0001' }).K.levels <= 100);
     assert(HEM.generate({ op: 'pocket', pocketD: 3, toolD: '0' }).K.D >= 0.01);
   });
+  // one-way passes in a square open slot: both walls get the same stock (the arcs reach the wall line and never pass it)
+  {
+    const oneWay = { op: 'slot', x1: '0', y1: '-2.5', x2: '0', y2: '2.55', slotW: '4.0', slotEnds: 'square', slotOpenS: true, depth: '1', toolD: '0.75', flutes: '4', loc: '1.5', mat: 'a36', passes: 'rough', ae: '0.06' };
+    const xRange = r => { let lo = 1e9, hi = -1e9, p = null; for (const m of r.moves) { if (m.x === undefined || isNaN(m.x)) continue; if (m.k === 'rough' || m.k === 'link' || m.k === 'entry') { if (p && (m.t === 'G2' || m.t === 'G3')) { const rad = Math.hypot(p.x - m.cx, p.y - m.cy), a0 = Math.atan2(p.y - m.cy, p.x - m.cx); let sw = Math.atan2(m.y - m.cy, m.x - m.cx) - a0; if (m.t === 'G3') { while (sw <= 0) sw += TAUX; } else { while (sw >= 0) sw -= TAUX; } for (let i = 0; i <= 180; i++) { const x = m.cx + rad * Math.cos(a0 + sw * i / 180); lo = Math.min(lo, x); hi = Math.max(hi, x); } } else { lo = Math.min(lo, m.x); hi = Math.max(hi, m.x); } } p = m; } return [lo, hi]; };
+    const TAUX = 2 * Math.PI;
+    for (const pieceDir of ['oneway', 'onewayconv']) for (const finStock of ['0', '0.125']) ok('square slot ' + pieceDir + ' finStock ' + finStock + ': the tool reaches both walls and no further', () => {
+      const r = HEM.generate({ ...oneWay, pieceDir, finStock }), lim = 2 - r.K.R - +finStock, [lo, hi] = xRange(r);
+      assert(!r.warn.length, r.warn.join());
+      assert(Math.abs(lo + lim) < 0.0005 && Math.abs(hi - lim) < 0.0005, 'X ' + lo.toFixed(4) + '..' + hi.toFixed(4) + ' vs ±' + lim.toFixed(4));
+      const arcs = r.moves.filter(m => (m.t === 'G2' || m.t === 'G3') && m.k === 'link'); assert(arcs.length > 150, 'turns are arcs');
+      assert(r.moves.filter(m => m.k === 'link' && m.t === 'G1' && m.f === r.K.retFeed).length > 70, 'returns at the return feed');
+    });
+    if (!QUICK) for (const pieceDir of ['oneway', 'onewayconv']) for (const finStock of ['0', '0.125']) ok('square slot ' + pieceDir + ' finStock ' + finStock + ': engagement stays low and the wall is cleaned', () => {
+      const r = HEM.generate({ ...oneWay, pieceDir, finStock }), a = +finStock;
+      const s = require('./engagement.js').simulate(r, { material: p => Math.abs(p[0]) <= 2 && p[1] <= 2.55 && p[1] >= -2.5, mustCut: p => Math.abs(p[0]) > 1.7 && Math.abs(p[0]) < 2 - a && p[1] > -2.2 && p[1] < 2.3 });
+      assert(s.peak <= 65, 'peak ' + s.peak.toFixed(0) + '°');
+      assert(s.leftArea < 0.03, 'left in the wall zone ' + s.leftArea.toFixed(4));
+    });
+  }
   ok('loop returns at the return feed', () => { const b = HEM.generate({ op: 'slot', slowDown: false, retPct: '250' }), K = b.K; assert(b.moves.some(m => m.k === 'link' && (m.t === 'G2' || m.t === 'G3') && Math.abs(m.f - Math.round(K.rough.feed * 25) / 10) < 0.11)); });
 }
 

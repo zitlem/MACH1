@@ -14,6 +14,17 @@ It is one offline file; open it in Chrome or Edge. Inch.
   that grows by the stepover each turn (half circles about two centres, so it stays in arcs).
 - **Trochoidal slot**: loops advancing along the slot from start to end, cutting on the front half and
   returning on the back half. Open-ended (start off the part) or started with a helix.
+  - **Ends: Square corners** cuts the slot as a rectangle from Start to End, Slot width across, with tool-radius
+    corners. **Open sides** (start end, end end, left side, right side) have no wall: the tool comes down in the air
+    past an open side and cuts in from it, so nothing plunges. One open end (or one open side), or both ends (or
+    both sides, each half cut and finished from its own side in turn), gives plain passes across the slot, a
+    stepover apart. Other mixes go through the open pocket. **Passes across the slot**: **Zigzag** (every other
+    pass back conventional, no returns; two lines a pass, the shortest program), **One way, climb** or **One way,
+    conventional**. One way turns off the end of each pass on an arc of half a step radius, back toward the cut
+    side, returns at the loop return feed on a line a step behind the pass (over cleared ground), and comes up
+    into the next pass on a larger arc (the first plus half a step) at half the roughing feed. The pass ends are
+    set back so the arcs reach, and never pass, the wall line: both walls get the same stock. **Lead-in / lead-out
+    arcs** (on by default) also round the zigzag pass ends and arc the finish onto and off the walls.
 - **Cone**: **inside** (a tapered hole, smaller toward the bottom) or **outside** (a tapered boss on a floor,
   bigger toward the bottom, from round stock the stock per side bigger than its base). Size it by the diameters
   at Z0 and at the depth, or by the top diameter and the included angle; the hint gives the angle a side.
